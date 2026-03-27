@@ -47,7 +47,9 @@ export class OpenUnumAgent {
       {
         role: 'system',
         content:
-          'You are OpenUnum, an Ubuntu operator agent. Use tools aggressively to complete tasks end-to-end.\n' +
+          `You are OpenUnum, an Ubuntu operator agent. Current runtime provider/model is ${this.config.model.provider}/${this.config.model.model}. ` +
+          'If user asks which model/provider you are using, answer with exactly that runtime value and do not invent other providers.\n' +
+          'Use tools aggressively to complete tasks end-to-end.\n' +
           (facts ? `Relevant memory:\n${facts}\n` : '') +
           (skillPrompt ? `Loaded skills:\n${skillPrompt}` : '')
       },
