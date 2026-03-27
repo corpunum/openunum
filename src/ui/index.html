@@ -10,15 +10,19 @@
     .wrap { max-width: 900px; margin: 24px auto; padding: 0 16px; }
     .card { background:var(--panel); border-radius:16px; box-shadow: 0 8px 30px rgba(15,23,42,.08); padding:16px; }
     h1 { margin:0 0 12px; font-size:1.4rem; }
+    h2 { margin: 14px 0 8px; font-size: 1rem; color: #0f172a; }
     .row { display:flex; gap:8px; }
     input, button, select { border:1px solid #dbe2ea; border-radius:10px; padding:10px; font-size:14px; }
     input, select { flex:1; }
     button { background:var(--accent); color:white; border:none; cursor:pointer; }
     #chat { max-height: 55vh; overflow:auto; margin-top:12px; padding:8px; background:#f8fafc; border-radius:10px; }
-    .msg { margin:8px 0; }
+    .msg { margin:8px 0; line-height: 1.5; }
     .u { color:#0b3b67; }
-    .a { color:#14532d; }
+    .a { color:#14532d; background:#f0fdf4; padding:8px; border-radius:8px; }
     .muted { color:var(--muted); font-size:12px; }
+    .subtle { font-size: 12px; color: #334155; }
+    .msg pre { background: #0f172a; color: #e2e8f0; padding: 8px; border-radius: 8px; overflow: auto; }
+    .actions { display:flex; gap:8px; margin-top:8px; }
     @media (max-width: 640px) {
       .wrap { margin: 12px auto; }
       .row { flex-direction: column; }
@@ -44,6 +48,17 @@
         <input id="message" placeholder="Message OpenUnum" />
         <button id="send">Send</button>
       </div>
+      <h2>Telegram</h2>
+      <div class="row">
+        <input id="tgToken" placeholder="Telegram Bot Token" />
+        <button id="tgSave">Save Token</button>
+      </div>
+      <div class="actions">
+        <button id="tgStart">Start Telegram</button>
+        <button id="tgStop">Stop Telegram</button>
+        <button id="browserStatus">Browser Status</button>
+      </div>
+      <div class="subtle" id="tgStatus"></div>
       <div class="muted" id="status"></div>
       <div id="chat"></div>
     </div>
@@ -54,10 +69,14 @@
     const chat = document.getElementById('chat');
     const status = document.getElementById('status');
 
-    function add(role, text) {
+    function add(role, text, html) {
       const div = document.createElement('div');
       div.className = 'msg ' + (role === 'user' ? 'u' : 'a');
-      div.textContent = (role === 'user' ? 'You: ' : 'OpenUnum: ') + text;
+      if (role === 'assistant' && html) {
+        div.innerHTML = '<strong>OpenUnum:</strong><br/>' + html;
+      } else {
+        div.textContent = (role === 'user' ? 'You: ' : 'OpenUnum: ') + text;
+      }
       chat.appendChild(div);
       chat.scrollTop = chat.scrollHeight;
     }
@@ -78,11 +97,54 @@
       add('user', message);
       const res = await fetch('/api/chat', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({sessionId, message}) });
       const json = await res.json();
-      add('assistant', json.reply || '(no reply)');
+      add('assistant', json.reply || '(no reply)', json.replyHtml || '');
       status.textContent = `Model: ${json.model.provider}/${json.model.model}`;
     };
 
+    document.getElementById('message').addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') document.getElementById('send').click();
+    });
+
+    async function refreshTelegramStatus() {
+      const [cfgRes, runRes] = await Promise.all([
+        fetch('/api/telegram/config').then(r => r.json()),
+        fetch('/api/telegram/status').then(r => r.json())
+      ]);
+      document.getElementById('tgStatus').textContent = `token: ${cfgRes.hasToken ? 'set' : 'missing'} | enabled: ${cfgRes.enabled} | running: ${runRes.running}`;
+    }
+
+    document.getElementById('tgSave').onclick = async () => {
+      const botToken = document.getElementById('tgToken').value.trim();
+      await fetch('/api/telegram/config', {
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({ botToken, enabled: true })
+      });
+      await refreshTelegramStatus();
+    };
+
+    document.getElementById('tgStart').onclick = async () => {
+      const res = await fetch('/api/telegram/start', { method: 'POST' });
+      const json = await res.json();
+      document.getElementById('tgStatus').textContent = `running: ${json.running}`;
+      await refreshTelegramStatus();
+    };
+
+    document.getElementById('tgStop').onclick = async () => {
+      const res = await fetch('/api/telegram/stop', { method: 'POST' });
+      const json = await res.json();
+      document.getElementById('tgStatus').textContent = `running: ${json.running}`;
+      await refreshTelegramStatus();
+    };
+
+    document.getElementById('browserStatus').onclick = async () => {
+      const res = await fetch('/api/browser/status');
+      const json = await res.json();
+      document.getElementById('tgStatus').textContent = json.ok ? 'browser: connected' : `browser: ${json.error}`;
+    };
+
     fetch('/api/model/current').then(r=>r.json()).then(m=>{ status.textContent = `Model: ${m.provider}/${m.model}`; document.getElementById('provider').value=m.provider; document.getElementById('model').value=m.model; });
+    refreshTelegramStatus();
   </script>
 </body>
 </html>
