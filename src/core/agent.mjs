@@ -3,6 +3,23 @@ import { buildProvider } from '../providers/index.mjs';
 import { ToolRuntime } from '../tools/runtime.mjs';
 import { loadSkills } from '../skills/loader.mjs';
 
+function inferParamsB(modelId) {
+  const m = String(modelId || '').toLowerCase().match(/(\d+(?:\.\d+)?)b/);
+  return m ? Number(m[1]) : null;
+}
+
+function isModelInfoQuestion(text) {
+  const t = String(text || '').toLowerCase();
+  return (
+    t.includes('which llm') ||
+    t.includes('what model') ||
+    t.includes('what llm') ||
+    t.includes('context window') ||
+    t.includes('parameter') ||
+    t.includes('billion')
+  );
+}
+
 export class OpenUnumAgent {
   constructor({ config, memoryStore }) {
     this.config = config;
@@ -29,6 +46,18 @@ export class OpenUnumAgent {
   }
 
   async chat({ message, sessionId = crypto.randomUUID() }) {
+    if (isModelInfoQuestion(message)) {
+      const paramsB = inferParamsB(this.config.model.model);
+      const reply = [
+        `Runtime provider/model: ${this.config.model.provider}/${this.config.model.model}`,
+        paramsB ? `Estimated parameter size: ~${paramsB}B (parsed from model id)` : 'Estimated parameter size: unknown from id',
+        'Context window: not guaranteed from runtime config; provider metadata endpoint is the source of truth.'
+      ].join('\n');
+      this.memoryStore.addMessage(sessionId, 'user', message);
+      this.memoryStore.addMessage(sessionId, 'assistant', reply);
+      return { sessionId, reply, model: this.getCurrentModel() };
+    }
+
     const provider = buildProvider(this.config);
     const skills = loadSkills();
 
