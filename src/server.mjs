@@ -1,6 +1,7 @@
 import http from 'node:http';
 import fs from 'node:fs';
 import path from 'node:path';
+import { spawn } from 'node:child_process';
 import { marked } from 'marked';
 import sanitizeHtml from 'sanitize-html';
 import { loadConfig, saveConfig } from './config.mjs';
@@ -13,7 +14,7 @@ import { logInfo, logError } from './logger.mjs';
 const config = loadConfig();
 const memory = new MemoryStore();
 const agent = new OpenUnumAgent({ config, memoryStore: memory });
-const browser = new CDPBrowser(config.browser?.cdpUrl);
+let browser = new CDPBrowser(config.browser?.cdpUrl);
 let telegramLoopRunning = false;
 let telegramLoopStopRequested = false;
 let telegramLoopPromise = null;
@@ -60,6 +61,41 @@ async function stopTelegramLoop() {
     await Promise.race([telegramLoopPromise, new Promise((r) => setTimeout(r, 3000))]);
   }
   telegramLoopRunning = false;
+}
+
+function resolveChromeBin() {
+  const candidates = ['/snap/bin/chromium', '/usr/bin/chromium', '/usr/bin/google-chrome', '/usr/bin/chromium-browser'];
+  for (const c of candidates) {
+    if (fs.existsSync(c)) return c;
+  }
+  return null;
+}
+
+async function launchDebugBrowser() {
+  const chromeBin = resolveChromeBin();
+  if (!chromeBin) {
+    throw new Error('No Chromium/Chrome executable found on host');
+  }
+  const port = 9333;
+  const args = [
+    `--remote-debugging-port=${port}`,
+    '--user-data-dir=/tmp/openunum-chrome-debug',
+    '--no-first-run',
+    '--no-default-browser-check',
+    '--disable-gpu',
+    '--headless=new',
+    'about:blank'
+  ];
+  const child = spawn(chromeBin, args, {
+    detached: true,
+    stdio: 'ignore'
+  });
+  child.unref();
+
+  config.browser.cdpUrl = `http://127.0.0.1:${port}`;
+  saveConfig(config);
+  browser = new CDPBrowser(config.browser.cdpUrl);
+  return { ok: true, cdpUrl: config.browser.cdpUrl, pid: child.pid };
 }
 
 function sendJson(res, code, obj) {
@@ -130,7 +166,13 @@ const server = http.createServer(async (req, res) => {
         config.browser.cdpUrl = body.cdpUrl.trim();
       }
       saveConfig(config);
+      browser = new CDPBrowser(config.browser.cdpUrl);
       return sendJson(res, 200, { ok: true, cdpUrl: config.browser.cdpUrl });
+    }
+
+    if (req.method === 'POST' && url.pathname === '/api/browser/launch') {
+      const out = await launchDebugBrowser();
+      return sendJson(res, 200, out);
     }
 
     if (req.method === 'GET' && url.pathname === '/api/telegram/config') {

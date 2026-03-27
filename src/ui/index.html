@@ -57,6 +57,7 @@
         <button id="tgStart">Start Telegram</button>
         <button id="tgStop">Stop Telegram</button>
         <button id="browserStatus">Browser Status</button>
+        <button id="launchBrowser">Launch Debug Browser</button>
       </div>
       <h2>Browser</h2>
       <div class="row">
@@ -148,6 +149,17 @@
       document.getElementById('tgStatus').textContent = json.ok
         ? 'browser: connected'
         : `browser: ${json.error}${json.hint ? ` | ${json.hint}` : ''}`;
+    };
+
+    document.getElementById('launchBrowser').onclick = async () => {
+      const res = await fetch('/api/browser/launch', { method: 'POST' });
+      const json = await res.json();
+      if (!json.ok) {
+        document.getElementById('tgStatus').textContent = `browser launch failed: ${json.error || 'unknown error'}`;
+        return;
+      }
+      document.getElementById('cdpUrl').value = json.cdpUrl;
+      document.getElementById('tgStatus').textContent = `browser launched (pid ${json.pid}) at ${json.cdpUrl}`;
     };
 
     document.getElementById('saveCdp').onclick = async () => {
