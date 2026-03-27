@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>OpenUnum</title>
+  <style>
+    :root { --bg:#f3f6f9; --panel:#ffffff; --fg:#0f172a; --muted:#475569; --accent:#0ea5a4; }
+    body { margin:0; font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, sans-serif; background: linear-gradient(160deg,#e6fffb,#eef2ff); color:var(--fg); }
+    .wrap { max-width: 900px; margin: 24px auto; padding: 0 16px; }
+    .card { background:var(--panel); border-radius:16px; box-shadow: 0 8px 30px rgba(15,23,42,.08); padding:16px; }
+    h1 { margin:0 0 12px; font-size:1.4rem; }
+    .row { display:flex; gap:8px; }
+    input, button, select { border:1px solid #dbe2ea; border-radius:10px; padding:10px; font-size:14px; }
+    input, select { flex:1; }
+    button { background:var(--accent); color:white; border:none; cursor:pointer; }
+    #chat { max-height: 55vh; overflow:auto; margin-top:12px; padding:8px; background:#f8fafc; border-radius:10px; }
+    .msg { margin:8px 0; }
+    .u { color:#0b3b67; }
+    .a { color:#14532d; }
+    .muted { color:var(--muted); font-size:12px; }
+    @media (max-width: 640px) {
+      .wrap { margin: 12px auto; }
+      .row { flex-direction: column; }
+      h1 { font-size:1.2rem; }
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="card">
+      <h1>OpenUnum</h1>
+      <div class="row">
+        <select id="provider">
+          <option value="ollama">ollama</option>
+          <option value="openrouter">openrouter</option>
+          <option value="nvidia">nvidia</option>
+          <option value="generic">generic</option>
+        </select>
+        <input id="model" placeholder="model id" />
+        <button id="switch">Switch</button>
+      </div>
+      <div class="row" style="margin-top:8px;">
+        <input id="message" placeholder="Message OpenUnum" />
+        <button id="send">Send</button>
+      </div>
+      <div class="muted" id="status"></div>
+      <div id="chat"></div>
+    </div>
+  </div>
+  <script>
+    let sessionId = localStorage.getItem('openunum_session') || crypto.randomUUID();
+    localStorage.setItem('openunum_session', sessionId);
+    const chat = document.getElementById('chat');
+    const status = document.getElementById('status');
+
+    function add(role, text) {
+      const div = document.createElement('div');
+      div.className = 'msg ' + (role === 'user' ? 'u' : 'a');
+      div.textContent = (role === 'user' ? 'You: ' : 'OpenUnum: ') + text;
+      chat.appendChild(div);
+      chat.scrollTop = chat.scrollHeight;
+    }
+
+    document.getElementById('switch').onclick = async () => {
+      const provider = document.getElementById('provider').value;
+      const model = document.getElementById('model').value;
+      const res = await fetch('/api/model/switch', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({provider, model}) });
+      const json = await res.json();
+      status.textContent = `Model: ${json.provider}/${json.model}`;
+    };
+
+    document.getElementById('send').onclick = async () => {
+      const input = document.getElementById('message');
+      const message = input.value.trim();
+      if (!message) return;
+      input.value = '';
+      add('user', message);
+      const res = await fetch('/api/chat', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({sessionId, message}) });
+      const json = await res.json();
+      add('assistant', json.reply || '(no reply)');
+      status.textContent = `Model: ${json.model.provider}/${json.model.model}`;
+    };
+
+    fetch('/api/model/current').then(r=>r.json()).then(m=>{ status.textContent = `Model: ${m.provider}/${m.model}`; document.getElementById('provider').value=m.provider; document.getElementById('model').value=m.model; });
+  </script>
+</body>
+</html>

@@ -1,0 +1,105 @@
+import http from 'node:http';
+import fs from 'node:fs';
+import path from 'node:path';
+import { loadConfig, saveConfig } from './config.mjs';
+import { MemoryStore } from './memory/store.mjs';
+import { OpenUnumAgent } from './core/agent.mjs';
+import { CDPBrowser } from './browser/cdp.mjs';
+import { WhatsAppTwilioChannel } from './channels/whatsapp-twilio.mjs';
+import { logInfo, logError } from './logger.mjs';
+
+const config = loadConfig();
+const memory = new MemoryStore();
+const agent = new OpenUnumAgent({ config, memoryStore: memory });
+const browser = new CDPBrowser(config.browser?.cdpUrl);
+const twilio = new WhatsAppTwilioChannel(config.channels.whatsapp || {}, async (msg, sid) => {
+  const out = await agent.chat({ message: msg, sessionId: sid });
+  return out.reply;
+});
+
+function sendJson(res, code, obj) {
+  res.writeHead(code, { 'Content-Type': 'application/json' });
+  res.end(JSON.stringify(obj));
+}
+
+async function parseBody(req) {
+  return new Promise((resolve, reject) => {
+    const chunks = [];
+    req.on('data', (c) => chunks.push(c));
+    req.on('end', () => {
+      try {
+        const raw = Buffer.concat(chunks).toString('utf8');
+        resolve(raw ? JSON.parse(raw) : {});
+      } catch (e) {
+        reject(e);
+      }
+    });
+    req.on('error', reject);
+  });
+}
+
+const server = http.createServer(async (req, res) => {
+  try {
+    const url = new URL(req.url || '/', `http://${req.headers.host || '127.0.0.1'}`);
+
+    if (req.method === 'GET' && (url.pathname === '/health' || url.pathname === '/api/health')) {
+      return sendJson(res, 200, { ok: true, service: 'openunum' });
+    }
+
+    if (req.method === 'GET' && url.pathname === '/api/model/current') {
+      return sendJson(res, 200, agent.getCurrentModel());
+    }
+
+    if (req.method === 'POST' && url.pathname === '/api/model/switch') {
+      const body = await parseBody(req);
+      const out = agent.switchModel(body.provider, body.model);
+      saveConfig(config);
+      return sendJson(res, 200, out);
+    }
+
+    if (req.method === 'POST' && url.pathname === '/api/chat') {
+      const body = await parseBody(req);
+      const out = await agent.chat({ message: body.message, sessionId: body.sessionId });
+      return sendJson(res, 200, out);
+    }
+
+    if (req.method === 'GET' && url.pathname.startsWith('/api/sessions/')) {
+      const sessionId = url.pathname.split('/').pop();
+      const msgs = memory.getMessages(sessionId || '', 100);
+      return sendJson(res, 200, { sessionId, messages: msgs });
+    }
+
+    if (req.method === 'GET' && url.pathname === '/api/browser/status') {
+      const out = await browser.status();
+      return sendJson(res, 200, out);
+    }
+
+    if (req.method === 'POST' && url.pathname === '/webhooks/whatsapp') {
+      const formChunks = [];
+      for await (const chunk of req) formChunks.push(chunk);
+      const formBody = Buffer.concat(formChunks).toString('utf8');
+      const params = new URLSearchParams(formBody);
+      const from = params.get('From') || '';
+      const body = params.get('Body') || '';
+      const reply = await twilio.onMessage(body, `whatsapp:${from}`);
+      res.writeHead(200, { 'Content-Type': 'text/xml' });
+      return res.end(`<Response><Message>${reply.replace(/[<&>]/g, '')}</Message></Response>`);
+    }
+
+    if (req.method === 'GET' && (url.pathname === '/' || url.pathname === '/index.html')) {
+      const html = fs.readFileSync(path.join(process.cwd(), 'src/ui/index.html'), 'utf8');
+      res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+      return res.end(html);
+    }
+
+    res.writeHead(404, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ error: 'not_found' }));
+  } catch (error) {
+    logError('request_failed', { error: String(error.message || error) });
+    sendJson(res, 500, { error: String(error.message || error) });
+  }
+});
+
+server.listen(config.server.port, config.server.host, () => {
+  logInfo('openunum_server_started', { host: config.server.host, port: config.server.port });
+});

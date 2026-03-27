@@ -1,0 +1,14 @@
+[Unit]
+Description=OpenUnum Assistant Service
+After=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=%h/openunum
+Environment=NODE_ENV=production
+ExecStart=/usr/bin/env node %h/openunum/src/server.mjs
+Restart=always
+RestartSec=2
+
+[Install]
+WantedBy=default.target
