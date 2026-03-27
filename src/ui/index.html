@@ -95,6 +95,8 @@
     }
     .chat-title { font-size: 14px; font-weight: 600; }
     .chat-sub { font-size: 12px; color: var(--muted); }
+    .chat-actions { display:flex; align-items:center; gap:8px; }
+    .chat-actions button { padding: 6px 10px; border-radius: 999px; font-size: 12px; }
     .messages {
       overflow: auto;
       padding: 16px;
@@ -254,7 +256,10 @@
           <div class="chat-title">Agent Chat</div>
           <div class="chat-sub">Messaging-style timeline</div>
         </div>
-        <div class="chat-sub" id="chatMeta">session</div>
+        <div class="chat-actions">
+          <button id="newChat">New Chat</button>
+          <div class="chat-sub" id="chatMeta">session</div>
+        </div>
       </header>
 
       <div class="messages" id="chat"></div>
@@ -288,6 +293,13 @@
       wrap.appendChild(bubble);
       chat.appendChild(wrap);
       chat.scrollTop = chat.scrollHeight;
+    }
+
+    function resetSession() {
+      sessionId = crypto.randomUUID();
+      localStorage.setItem('openunum_session', sessionId);
+      q('chatMeta').textContent = sessionId;
+      chat.innerHTML = '';
     }
 
     async function refreshModel() {
@@ -365,6 +377,7 @@
       topStatus.textContent = `model=${out.model.provider}/${out.model.model}`;
     };
     q('message').addEventListener('keydown', (e) => { if (e.key === 'Enter') q('send').click(); });
+    q('newChat').onclick = resetSession;
 
     q('saveToken').onclick = async () => {
       await jpost('/api/telegram/config', { botToken: q('tgToken').value.trim(), enabled: true });
@@ -433,4 +446,3 @@
   </script>
 </body>
 </html>
-
