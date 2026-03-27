@@ -26,7 +26,7 @@ export function defaultConfig() {
   return {
     server: { host: '127.0.0.1', port: Number.isFinite(envPort) ? envPort : 18880 },
     browser: { cdpUrl: 'http://127.0.0.1:9222', fallbackEnabled: true },
-    runtime: { maxToolIterations: 4, shellEnabled: false },
+    runtime: { maxToolIterations: 8, shellEnabled: true },
     model: {
       provider: 'ollama',
       model: 'ollama/minimax-m2.7:cloud',

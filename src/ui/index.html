@@ -3,179 +3,315 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>OpenUnum</title>
+  <title>OpenUnum Console</title>
   <style>
-    :root { --bg:#f3f6f9; --panel:#ffffff; --fg:#0f172a; --muted:#475569; --accent:#0ea5a4; }
-    body { margin:0; font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, sans-serif; background: linear-gradient(160deg,#e6fffb,#eef2ff); color:var(--fg); }
-    .wrap { max-width: 900px; margin: 24px auto; padding: 0 16px; }
-    .card { background:var(--panel); border-radius:16px; box-shadow: 0 8px 30px rgba(15,23,42,.08); padding:16px; }
-    h1 { margin:0 0 12px; font-size:1.4rem; }
-    h2 { margin: 14px 0 8px; font-size: 1rem; color: #0f172a; }
-    .row { display:flex; gap:8px; }
-    input, button, select { border:1px solid #dbe2ea; border-radius:10px; padding:10px; font-size:14px; }
-    input, select { flex:1; }
-    button { background:var(--accent); color:white; border:none; cursor:pointer; }
-    #chat { max-height: 55vh; overflow:auto; margin-top:12px; padding:8px; background:#f8fafc; border-radius:10px; }
-    .msg { margin:8px 0; line-height: 1.5; }
-    .u { color:#0b3b67; }
-    .a { color:#14532d; background:#f0fdf4; padding:8px; border-radius:8px; }
-    .muted { color:var(--muted); font-size:12px; }
-    .subtle { font-size: 12px; color: #334155; }
-    .msg pre { background: #0f172a; color: #e2e8f0; padding: 8px; border-radius: 8px; overflow: auto; }
-    .actions { display:flex; gap:8px; margin-top:8px; }
-    @media (max-width: 640px) {
-      .wrap { margin: 12px auto; }
-      .row { flex-direction: column; }
-      h1 { font-size:1.2rem; }
+    :root {
+      --bg: #0b1220;
+      --bg2: #0f172a;
+      --panel: #111a2e;
+      --panel2: #15213a;
+      --text: #e6edf8;
+      --muted: #90a0bd;
+      --ok: #22c55e;
+      --accent: #22d3ee;
+      --danger: #ef4444;
+      --border: #223052;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      color: var(--text);
+      font-family: "IBM Plex Sans", ui-sans-serif, system-ui, -apple-system, Segoe UI, sans-serif;
+      background:
+        radial-gradient(1200px 600px at 90% -10%, #102745 0%, transparent 50%),
+        radial-gradient(900px 500px at -10% 0%, #1f1240 0%, transparent 45%),
+        linear-gradient(165deg, var(--bg), var(--bg2));
+      min-height: 100vh;
+    }
+    .shell { max-width: 1300px; margin: 24px auto; padding: 0 14px; }
+    .head {
+      display:flex; justify-content:space-between; align-items:center; margin-bottom:14px;
+      gap: 12px;
+    }
+    .title { font-size: 1.15rem; font-weight: 700; letter-spacing: .4px; }
+    .status { font-size: 12px; color: var(--muted); }
+    .grid {
+      display:grid;
+      grid-template-columns: 1.6fr 1fr;
+      gap: 12px;
+    }
+    .col { display:flex; flex-direction:column; gap:12px; }
+    .card {
+      background: linear-gradient(180deg, var(--panel), var(--panel2));
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 12px;
+      box-shadow: 0 18px 40px rgba(0, 0, 0, .24);
+    }
+    .card h2 {
+      margin: 0 0 10px;
+      font-size: .95rem;
+      color: #d7e3ff;
+      letter-spacing: .3px;
+      text-transform: uppercase;
+    }
+    .row { display:flex; gap:8px; margin-bottom:8px; }
+    input, select, textarea, button {
+      border-radius: 10px;
+      border: 1px solid #2a395f;
+      background: #0c1427;
+      color: var(--text);
+      padding: 10px 11px;
+      font-size: 13px;
+    }
+    textarea { width: 100%; min-height: 88px; resize: vertical; }
+    input, select { flex: 1; min-width: 0; }
+    button {
+      background: linear-gradient(180deg, #1e335d, #172b50);
+      cursor: pointer;
+      white-space: nowrap;
+    }
+    button.primary { background: linear-gradient(180deg, #0891b2, #0e7490); border-color: #0ea5b7; }
+    button.good { background: linear-gradient(180deg, #15803d, #166534); border-color: #22c55e; }
+    button.warn { background: linear-gradient(180deg, #7f1d1d, #991b1b); border-color: #ef4444; }
+    .hint { color: var(--muted); font-size: 12px; margin-top: 4px; }
+    #chat { max-height: 56vh; overflow: auto; padding-right: 4px; }
+    .msg { margin: 8px 0; padding: 10px; border-radius: 10px; border: 1px solid #22345f; }
+    .msg.user { background: #0f2747; }
+    .msg.ai { background: #102f26; }
+    .msg .role { font-size: 11px; color: #9fb2d9; margin-bottom: 6px; text-transform: uppercase; }
+    .msg pre { background: #0a0f1d; color: #d8e2ff; padding: 8px; border-radius: 8px; overflow: auto; }
+    .mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; }
+    @media (max-width: 980px) {
+      .grid { grid-template-columns: 1fr; }
+      #chat { max-height: 40vh; }
     }
   </style>
 </head>
 <body>
-  <div class="wrap">
-    <div class="card">
-      <h1>OpenUnum</h1>
-      <div class="row">
-        <select id="provider">
-          <option value="ollama">ollama</option>
-          <option value="openrouter">openrouter</option>
-          <option value="nvidia">nvidia</option>
-          <option value="generic">generic</option>
-        </select>
-        <input id="model" placeholder="model id" />
-        <button id="switch">Switch</button>
+  <div class="shell">
+    <div class="head">
+      <div class="title">OpenUnum Operator Console</div>
+      <div class="status" id="topStatus">booting...</div>
+    </div>
+    <div class="grid">
+      <div class="col">
+        <section class="card">
+          <h2>Agent Chat</h2>
+          <div class="row">
+            <select id="provider">
+              <option value="ollama">ollama</option>
+              <option value="openrouter">openrouter</option>
+              <option value="nvidia">nvidia</option>
+              <option value="generic">generic</option>
+            </select>
+            <input id="model" placeholder="model id" />
+            <button id="switchModel">Switch Model</button>
+          </div>
+          <div class="row">
+            <input id="message" placeholder="Tell the agent what to do..." />
+            <button class="primary" id="send">Run</button>
+          </div>
+          <div id="chat"></div>
+        </section>
+
+        <section class="card">
+          <h2>Browser Ops</h2>
+          <div class="row">
+            <input id="cdpUrl" placeholder="http://127.0.0.1:9222" />
+            <button id="saveCdp">Save</button>
+            <button id="launchBrowser">Launch Debug Browser</button>
+          </div>
+          <div class="row">
+            <input id="navUrl" placeholder="https://example.com" />
+            <button id="navBtn">Navigate</button>
+          </div>
+          <div class="row">
+            <input id="searchQ" placeholder="Search query" />
+            <button id="searchBtn">Search</button>
+            <button id="extractBtn">Extract Text</button>
+          </div>
+          <div class="hint" id="browserStatusLine"></div>
+          <textarea id="browserOutput" class="mono" placeholder="Browser output..." readonly></textarea>
+        </section>
       </div>
-      <div class="row" style="margin-top:8px;">
-        <input id="message" placeholder="Message OpenUnum" />
-        <button id="send">Send</button>
+
+      <div class="col">
+        <section class="card">
+          <h2>PC Control</h2>
+          <div class="row">
+            <input id="shellCmd" placeholder="Command, e.g. ls -la ~" />
+            <button class="warn" id="runShell">Run Shell</button>
+          </div>
+          <div class="row">
+            <input id="openTarget" placeholder="Open target, e.g. https://news.ycombinator.com" />
+            <button id="openTargetBtn">Open Target</button>
+          </div>
+          <div class="row">
+            <input id="xdotoolCmd" placeholder="xdotool command, e.g. key ctrl+l" />
+            <button id="runXdotool">Run xdotool</button>
+          </div>
+          <textarea id="pcOutput" class="mono" placeholder="PC/tool output..." readonly></textarea>
+        </section>
+
+        <section class="card">
+          <h2>Telegram</h2>
+          <div class="row">
+            <input id="tgToken" placeholder="Telegram Bot Token" />
+            <button id="saveToken">Save Token</button>
+          </div>
+          <div class="row">
+            <button class="good" id="startTg">Start Telegram</button>
+            <button class="warn" id="stopTg">Stop Telegram</button>
+            <button id="tgRefresh">Refresh</button>
+          </div>
+          <div class="hint" id="tgStatus"></div>
+        </section>
+
+        <section class="card">
+          <h2>Runtime</h2>
+          <div class="row">
+            <label class="hint" style="display:flex;align-items:center;gap:8px;">
+              <input type="checkbox" id="shellEnabled" />
+              shell enabled
+            </label>
+            <input id="maxIters" type="number" min="1" max="20" placeholder="max tool iterations" />
+            <button id="saveRuntime">Save Runtime</button>
+          </div>
+          <div class="hint" id="runtimeStatus"></div>
+        </section>
       </div>
-      <h2>Telegram</h2>
-      <div class="row">
-        <input id="tgToken" placeholder="Telegram Bot Token" />
-        <button id="tgSave">Save Token</button>
-      </div>
-      <div class="actions">
-        <button id="tgStart">Start Telegram</button>
-        <button id="tgStop">Stop Telegram</button>
-        <button id="browserStatus">Browser Status</button>
-        <button id="launchBrowser">Launch Debug Browser</button>
-      </div>
-      <h2>Browser</h2>
-      <div class="row">
-        <input id="cdpUrl" placeholder="CDP URL (e.g. http://127.0.0.1:9222)" />
-        <button id="saveCdp">Save CDP URL</button>
-      </div>
-      <div class="subtle" id="tgStatus"></div>
-      <div class="muted" id="status"></div>
-      <div id="chat"></div>
     </div>
   </div>
+
   <script>
     let sessionId = localStorage.getItem('openunum_session') || crypto.randomUUID();
     localStorage.setItem('openunum_session', sessionId);
-    const chat = document.getElementById('chat');
-    const status = document.getElementById('status');
 
-    function add(role, text, html) {
+    const q = (id) => document.getElementById(id);
+    const topStatus = q('topStatus');
+    const chat = q('chat');
+
+    const jget = async (path) => (await fetch(path)).json();
+    const jpost = async (path, body) =>
+      (await fetch(path, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body || {}) })).json();
+
+    function pushMsg(role, text, html) {
       const div = document.createElement('div');
-      div.className = 'msg ' + (role === 'user' ? 'u' : 'a');
-      if (role === 'assistant' && html) {
-        div.innerHTML = '<strong>OpenUnum:</strong><br/>' + html;
-      } else {
-        div.textContent = (role === 'user' ? 'You: ' : 'OpenUnum: ') + text;
-      }
+      div.className = `msg ${role === 'user' ? 'user' : 'ai'}`;
+      div.innerHTML = `<div class="role">${role}</div>` + (html || text);
       chat.appendChild(div);
       chat.scrollTop = chat.scrollHeight;
     }
 
-    document.getElementById('switch').onclick = async () => {
-      const provider = document.getElementById('provider').value;
-      const model = document.getElementById('model').value;
-      const res = await fetch('/api/model/switch', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({provider, model}) });
-      const json = await res.json();
-      status.textContent = `Model: ${json.provider}/${json.model}`;
-    };
-
-    document.getElementById('send').onclick = async () => {
-      const input = document.getElementById('message');
-      const message = input.value.trim();
-      if (!message) return;
-      input.value = '';
-      add('user', message);
-      const res = await fetch('/api/chat', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({sessionId, message}) });
-      const json = await res.json();
-      add('assistant', json.reply || '(no reply)', json.replyHtml || '');
-      status.textContent = `Model: ${json.model.provider}/${json.model.model}`;
-    };
-
-    document.getElementById('message').addEventListener('keydown', (e) => {
-      if (e.key === 'Enter') document.getElementById('send').click();
-    });
-
-    async function refreshTelegramStatus() {
-      const [cfgRes, runRes] = await Promise.all([
-        fetch('/api/telegram/config').then(r => r.json()),
-        fetch('/api/telegram/status').then(r => r.json())
-      ]);
-      document.getElementById('tgStatus').textContent = `token: ${cfgRes.hasToken ? 'set' : 'missing'} | enabled: ${cfgRes.enabled} | running: ${runRes.running}`;
+    async function refreshModel() {
+      const m = await jget('/api/model/current');
+      q('provider').value = m.provider;
+      q('model').value = m.model;
+      topStatus.textContent = `model=${m.provider}/${m.model}`;
     }
 
-    document.getElementById('tgSave').onclick = async () => {
-      const botToken = document.getElementById('tgToken').value.trim();
-      await fetch('/api/telegram/config', {
-        method:'POST',
-        headers:{'Content-Type':'application/json'},
-        body: JSON.stringify({ botToken, enabled: true })
+    async function refreshRuntime() {
+      const c = await jget('/api/config');
+      q('shellEnabled').checked = Boolean(c.runtime?.shellEnabled);
+      q('maxIters').value = c.runtime?.maxToolIterations ?? 8;
+      q('runtimeStatus').textContent = `shell=${c.runtime?.shellEnabled} maxIters=${c.runtime?.maxToolIterations}`;
+    }
+
+    async function refreshTelegram() {
+      const [cfg, st] = await Promise.all([jget('/api/telegram/config'), jget('/api/telegram/status')]);
+      q('tgStatus').textContent = `token=${cfg.hasToken ? 'set' : 'missing'} enabled=${cfg.enabled} running=${st.running}`;
+    }
+
+    async function refreshBrowserConfig() {
+      const c = await jget('/api/browser/config');
+      q('cdpUrl').value = c.cdpUrl || 'http://127.0.0.1:9222';
+      const st = await jget('/api/browser/status');
+      q('browserStatusLine').textContent = st.ok ? 'connected' : `${st.error}${st.hint ? ' | ' + st.hint : ''}`;
+    }
+
+    q('switchModel').onclick = async () => {
+      const out = await jpost('/api/model/switch', { provider: q('provider').value, model: q('model').value });
+      topStatus.textContent = `model=${out.provider}/${out.model}`;
+    };
+
+    q('send').onclick = async () => {
+      const message = q('message').value.trim();
+      if (!message) return;
+      q('message').value = '';
+      pushMsg('user', message);
+      const out = await jpost('/api/chat', { sessionId, message });
+      pushMsg('assistant', out.reply, out.replyHtml ? `<div>${out.replyHtml}</div>` : out.reply);
+      topStatus.textContent = `model=${out.model.provider}/${out.model.model}`;
+    };
+    q('message').addEventListener('keydown', (e) => { if (e.key === 'Enter') q('send').click(); });
+
+    q('saveToken').onclick = async () => {
+      await jpost('/api/telegram/config', { botToken: q('tgToken').value.trim(), enabled: true });
+      await refreshTelegram();
+    };
+    q('startTg').onclick = async () => { await jpost('/api/telegram/start'); await refreshTelegram(); };
+    q('stopTg').onclick = async () => { await jpost('/api/telegram/stop'); await refreshTelegram(); };
+    q('tgRefresh').onclick = refreshTelegram;
+
+    q('saveRuntime').onclick = async () => {
+      const out = await jpost('/api/config', {
+        runtime: { shellEnabled: q('shellEnabled').checked, maxToolIterations: Number(q('maxIters').value || 8) }
       });
-      await refreshTelegramStatus();
+      q('runtimeStatus').textContent = `saved shell=${out.runtime.shellEnabled} maxIters=${out.runtime.maxToolIterations}`;
     };
 
-    document.getElementById('tgStart').onclick = async () => {
-      const res = await fetch('/api/telegram/start', { method: 'POST' });
-      const json = await res.json();
-      document.getElementById('tgStatus').textContent = `running: ${json.running}`;
-      await refreshTelegramStatus();
+    q('saveCdp').onclick = async () => {
+      const out = await jpost('/api/browser/config', { cdpUrl: q('cdpUrl').value.trim() });
+      q('browserStatusLine').textContent = `saved cdpUrl=${out.cdpUrl}`;
+      await refreshBrowserConfig();
     };
 
-    document.getElementById('tgStop').onclick = async () => {
-      const res = await fetch('/api/telegram/stop', { method: 'POST' });
-      const json = await res.json();
-      document.getElementById('tgStatus').textContent = `running: ${json.running}`;
-      await refreshTelegramStatus();
+    q('launchBrowser').onclick = async () => {
+      const out = await jpost('/api/browser/launch', {});
+      q('browserStatusLine').textContent = out.ok ? `launched pid=${out.pid} at ${out.cdpUrl}` : `launch failed: ${out.error || 'unknown'}`;
+      if (out.cdpUrl) q('cdpUrl').value = out.cdpUrl;
+      await refreshBrowserConfig();
     };
 
-    document.getElementById('browserStatus').onclick = async () => {
-      const res = await fetch('/api/browser/status');
-      const json = await res.json();
-      document.getElementById('tgStatus').textContent = json.ok
-        ? 'browser: connected'
-        : `browser: ${json.error}${json.hint ? ` | ${json.hint}` : ''}`;
+    q('navBtn').onclick = async () => {
+      const out = await jpost('/api/browser/navigate', { url: q('navUrl').value.trim() });
+      q('browserOutput').value = JSON.stringify(out, null, 2);
+      await refreshBrowserConfig();
     };
 
-    document.getElementById('launchBrowser').onclick = async () => {
-      const res = await fetch('/api/browser/launch', { method: 'POST' });
-      const json = await res.json();
-      if (!json.ok) {
-        document.getElementById('tgStatus').textContent = `browser launch failed: ${json.error || 'unknown error'}`;
-        return;
-      }
-      document.getElementById('cdpUrl').value = json.cdpUrl;
-      document.getElementById('tgStatus').textContent = `browser launched (pid ${json.pid}) at ${json.cdpUrl}`;
+    q('searchBtn').onclick = async () => {
+      const out = await jpost('/api/browser/search', { query: q('searchQ').value.trim() });
+      q('browserOutput').value = JSON.stringify(out, null, 2);
     };
 
-    document.getElementById('saveCdp').onclick = async () => {
-      const cdpUrl = document.getElementById('cdpUrl').value.trim();
-      const res = await fetch('/api/browser/config', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ cdpUrl })
-      });
-      const json = await res.json();
-      document.getElementById('tgStatus').textContent = `browser cdpUrl saved: ${json.cdpUrl}`;
+    q('extractBtn').onclick = async () => {
+      const out = await jpost('/api/browser/extract', { selector: 'body' });
+      q('browserOutput').value = (out && out.text) ? out.text : JSON.stringify(out, null, 2);
     };
 
-    fetch('/api/model/current').then(r=>r.json()).then(m=>{ status.textContent = `Model: ${m.provider}/${m.model}`; document.getElementById('provider').value=m.provider; document.getElementById('model').value=m.model; });
-    fetch('/api/browser/config').then(r=>r.json()).then(b=>{ document.getElementById('cdpUrl').value = b.cdpUrl || 'http://127.0.0.1:9222'; });
-    refreshTelegramStatus();
+    q('runShell').onclick = async () => {
+      const out = await jpost('/api/tool/run', { name: 'shell_run', args: { cmd: q('shellCmd').value } });
+      q('pcOutput').value = JSON.stringify(out.result, null, 2);
+    };
+
+    q('openTargetBtn').onclick = async () => {
+      const out = await jpost('/api/tool/run', { name: 'desktop_open', args: { target: q('openTarget').value } });
+      q('pcOutput').value = JSON.stringify(out.result, null, 2);
+    };
+
+    q('runXdotool').onclick = async () => {
+      const out = await jpost('/api/tool/run', { name: 'desktop_xdotool', args: { cmd: q('xdotoolCmd').value } });
+      q('pcOutput').value = JSON.stringify(out.result, null, 2);
+    };
+
+    (async () => {
+      await refreshModel();
+      await refreshRuntime();
+      await refreshTelegram();
+      await refreshBrowserConfig();
+    })();
   </script>
 </body>
 </html>
+

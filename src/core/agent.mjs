@@ -20,6 +20,14 @@ export class OpenUnumAgent {
     return this.getCurrentModel();
   }
 
+  async runTool(name, args) {
+    return this.toolRuntime.run(name, args || {});
+  }
+
+  reloadTools() {
+    this.toolRuntime = new ToolRuntime(this.config);
+  }
+
   async chat({ message, sessionId = crypto.randomUUID() }) {
     const provider = buildProvider(this.config);
     const skills = loadSkills();
@@ -39,7 +47,7 @@ export class OpenUnumAgent {
       {
         role: 'system',
         content:
-          'You are OpenUnum, a lightweight Ubuntu assistant. Use tools when needed. Be concise and safe.\n' +
+          'You are OpenUnum, an Ubuntu operator agent. Use tools aggressively to complete tasks end-to-end.\n' +
           (facts ? `Relevant memory:\n${facts}\n` : '') +
           (skillPrompt ? `Loaded skills:\n${skillPrompt}` : '')
       },

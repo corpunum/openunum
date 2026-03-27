@@ -1,5 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import { exec } from 'node:child_process';
 import { CDPBrowser } from '../browser/cdp.mjs';
 
 function safePath(inputPath) {
@@ -61,7 +62,7 @@ export class ToolRuntime {
         type: 'function',
         function: {
           name: 'shell_run',
-          description: 'Run a shell command (disabled unless explicitly enabled)',
+          description: 'Run a shell command',
           parameters: { type: 'object', properties: { cmd: { type: 'string' } }, required: ['cmd'] }
         }
       },
@@ -76,9 +77,49 @@ export class ToolRuntime {
       {
         type: 'function',
         function: {
-          name: 'browser_open',
-          description: 'Open URL in CDP browser',
+          name: 'browser_navigate',
+          description: 'Navigate browser to URL',
           parameters: { type: 'object', properties: { url: { type: 'string' } }, required: ['url'] }
+        }
+      },
+      {
+        type: 'function',
+        function: {
+          name: 'browser_search',
+          description: 'Search the web from browser',
+          parameters: { type: 'object', properties: { query: { type: 'string' } }, required: ['query'] }
+        }
+      },
+      {
+        type: 'function',
+        function: {
+          name: 'browser_type',
+          description: 'Type text in element selector',
+          parameters: {
+            type: 'object',
+            properties: {
+              selector: { type: 'string' },
+              text: { type: 'string' },
+              submit: { type: 'boolean' }
+            },
+            required: ['selector', 'text']
+          }
+        }
+      },
+      {
+        type: 'function',
+        function: {
+          name: 'browser_click',
+          description: 'Click element selector',
+          parameters: { type: 'object', properties: { selector: { type: 'string' } }, required: ['selector'] }
+        }
+      },
+      {
+        type: 'function',
+        function: {
+          name: 'browser_extract',
+          description: 'Extract visible text from selector',
+          parameters: { type: 'object', properties: { selector: { type: 'string' } }, required: [] }
         }
       },
       {
@@ -87,6 +128,22 @@ export class ToolRuntime {
           name: 'browser_snapshot',
           description: 'List tabs and active tab metadata',
           parameters: { type: 'object', properties: {}, additionalProperties: false }
+        }
+      },
+      {
+        type: 'function',
+        function: {
+          name: 'desktop_open',
+          description: 'Open app/file/url via xdg-open',
+          parameters: { type: 'object', properties: { target: { type: 'string' } }, required: ['target'] }
+        }
+      },
+      {
+        type: 'function',
+        function: {
+          name: 'desktop_xdotool',
+          description: 'Run xdotool command for desktop control',
+          parameters: { type: 'object', properties: { cmd: { type: 'string' } }, required: ['cmd'] }
         }
       }
     ];
@@ -112,10 +169,6 @@ export class ToolRuntime {
       return { ok: true, path: p };
     }
     if (name === 'shell_run') {
-      if (!this.config.runtime?.shellEnabled && process.env.OPENUNUM_SHELL_ENABLED !== '1') {
-        throw new Error('shell_run disabled. Set runtime.shellEnabled=true or OPENUNUM_SHELL_ENABLED=1');
-      }
-      const { exec } = await import('node:child_process');
       return new Promise((resolve) => {
         exec(args.cmd, { timeout: 20000 }, (error, stdout, stderr) => {
           resolve({ ok: !error, code: error?.code ?? 0, stdout, stderr, error: error?.message || null });
@@ -123,8 +176,26 @@ export class ToolRuntime {
       });
     }
     if (name === 'browser_status') return this.browser.status();
-    if (name === 'browser_open') return this.browser.open(args.url);
+    if (name === 'browser_navigate') return this.browser.navigate(args.url);
+    if (name === 'browser_search') return this.browser.search(args.query);
+    if (name === 'browser_type') return this.browser.type(args.selector, args.text, Boolean(args.submit));
+    if (name === 'browser_click') return this.browser.click(args.selector);
+    if (name === 'browser_extract') return this.browser.extractText(args.selector || 'body');
     if (name === 'browser_snapshot') return this.browser.snapshot();
+    if (name === 'desktop_open') {
+      return new Promise((resolve) => {
+        exec(`xdg-open ${JSON.stringify(args.target)}`, { timeout: 15000 }, (error, stdout, stderr) => {
+          resolve({ ok: !error, code: error?.code ?? 0, stdout, stderr, error: error?.message || null });
+        });
+      });
+    }
+    if (name === 'desktop_xdotool') {
+      return new Promise((resolve) => {
+        exec(`xdotool ${args.cmd}`, { timeout: 15000 }, (error, stdout, stderr) => {
+          resolve({ ok: !error, code: error?.code ?? 0, stdout, stderr, error: error?.message || null });
+        });
+      });
+    }
 
     throw new Error(`Unknown tool: ${name}`);
   }

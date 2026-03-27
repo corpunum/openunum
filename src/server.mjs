@@ -95,6 +95,7 @@ async function launchDebugBrowser() {
   config.browser.cdpUrl = `http://127.0.0.1:${port}`;
   saveConfig(config);
   browser = new CDPBrowser(config.browser.cdpUrl);
+  agent.reloadTools();
   return { ok: true, cdpUrl: config.browser.cdpUrl, pid: child.pid };
 }
 
@@ -127,6 +128,28 @@ const server = http.createServer(async (req, res) => {
       return sendJson(res, 200, { ok: true, service: 'openunum' });
     }
 
+    if (req.method === 'GET' && url.pathname === '/api/config') {
+      return sendJson(res, 200, {
+        model: config.model,
+        runtime: config.runtime,
+        browser: config.browser,
+        channels: { telegram: { enabled: Boolean(config.channels?.telegram?.enabled), hasToken: Boolean(config.channels?.telegram?.botToken) } }
+      });
+    }
+
+    if (req.method === 'POST' && url.pathname === '/api/config') {
+      const body = await parseBody(req);
+      if (body.runtime && typeof body.runtime.shellEnabled === 'boolean') {
+        config.runtime.shellEnabled = body.runtime.shellEnabled;
+      }
+      if (body.runtime && Number.isFinite(body.runtime.maxToolIterations)) {
+        config.runtime.maxToolIterations = Number(body.runtime.maxToolIterations);
+      }
+      saveConfig(config);
+      agent.reloadTools();
+      return sendJson(res, 200, { ok: true, runtime: config.runtime });
+    }
+
     if (req.method === 'GET' && url.pathname === '/api/model/current') {
       return sendJson(res, 200, agent.getCurrentModel());
     }
@@ -144,6 +167,12 @@ const server = http.createServer(async (req, res) => {
       return sendJson(res, 200, { ...out, replyHtml: renderReplyHtml(out.reply) });
     }
 
+    if (req.method === 'POST' && url.pathname === '/api/tool/run') {
+      const body = await parseBody(req);
+      const out = await agent.runTool(body.name, body.args || {});
+      return sendJson(res, 200, { ok: true, result: out });
+    }
+
     if (req.method === 'GET' && url.pathname.startsWith('/api/sessions/')) {
       const sessionId = url.pathname.split('/').pop();
       const msgs = memory.getMessages(sessionId || '', 100);
@@ -153,6 +182,21 @@ const server = http.createServer(async (req, res) => {
     if (req.method === 'GET' && url.pathname === '/api/browser/status') {
       const out = await browser.status();
       return sendJson(res, 200, out);
+    }
+
+    if (req.method === 'POST' && url.pathname === '/api/browser/navigate') {
+      const body = await parseBody(req);
+      return sendJson(res, 200, await browser.navigate(body.url));
+    }
+
+    if (req.method === 'POST' && url.pathname === '/api/browser/search') {
+      const body = await parseBody(req);
+      return sendJson(res, 200, await browser.search(body.query));
+    }
+
+    if (req.method === 'POST' && url.pathname === '/api/browser/extract') {
+      const body = await parseBody(req);
+      return sendJson(res, 200, await browser.extractText(body.selector || 'body'));
     }
 
     if (req.method === 'GET' && url.pathname === '/api/browser/config') {
@@ -167,6 +211,7 @@ const server = http.createServer(async (req, res) => {
       }
       saveConfig(config);
       browser = new CDPBrowser(config.browser.cdpUrl);
+      agent.reloadTools();
       return sendJson(res, 200, { ok: true, cdpUrl: config.browser.cdpUrl });
     }
 
