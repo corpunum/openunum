@@ -119,6 +119,20 @@ const server = http.createServer(async (req, res) => {
       return sendJson(res, 200, out);
     }
 
+    if (req.method === 'GET' && url.pathname === '/api/browser/config') {
+      return sendJson(res, 200, { cdpUrl: config.browser?.cdpUrl || 'http://127.0.0.1:9222' });
+    }
+
+    if (req.method === 'POST' && url.pathname === '/api/browser/config') {
+      const body = await parseBody(req);
+      if (!config.browser) config.browser = {};
+      if (typeof body.cdpUrl === 'string' && body.cdpUrl.trim()) {
+        config.browser.cdpUrl = body.cdpUrl.trim();
+      }
+      saveConfig(config);
+      return sendJson(res, 200, { ok: true, cdpUrl: config.browser.cdpUrl });
+    }
+
     if (req.method === 'GET' && url.pathname === '/api/telegram/config') {
       const tg = config.channels.telegram || { botToken: '', enabled: false };
       return sendJson(res, 200, { enabled: Boolean(tg.enabled), hasToken: Boolean(tg.botToken) });

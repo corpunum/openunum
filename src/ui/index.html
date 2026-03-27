@@ -58,6 +58,11 @@
         <button id="tgStop">Stop Telegram</button>
         <button id="browserStatus">Browser Status</button>
       </div>
+      <h2>Browser</h2>
+      <div class="row">
+        <input id="cdpUrl" placeholder="CDP URL (e.g. http://127.0.0.1:9222)" />
+        <button id="saveCdp">Save CDP URL</button>
+      </div>
       <div class="subtle" id="tgStatus"></div>
       <div class="muted" id="status"></div>
       <div id="chat"></div>
@@ -140,10 +145,24 @@
     document.getElementById('browserStatus').onclick = async () => {
       const res = await fetch('/api/browser/status');
       const json = await res.json();
-      document.getElementById('tgStatus').textContent = json.ok ? 'browser: connected' : `browser: ${json.error}`;
+      document.getElementById('tgStatus').textContent = json.ok
+        ? 'browser: connected'
+        : `browser: ${json.error}${json.hint ? ` | ${json.hint}` : ''}`;
+    };
+
+    document.getElementById('saveCdp').onclick = async () => {
+      const cdpUrl = document.getElementById('cdpUrl').value.trim();
+      const res = await fetch('/api/browser/config', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ cdpUrl })
+      });
+      const json = await res.json();
+      document.getElementById('tgStatus').textContent = `browser cdpUrl saved: ${json.cdpUrl}`;
     };
 
     fetch('/api/model/current').then(r=>r.json()).then(m=>{ status.textContent = `Model: ${m.provider}/${m.model}`; document.getElementById('provider').value=m.provider; document.getElementById('model').value=m.model; });
+    fetch('/api/browser/config').then(r=>r.json()).then(b=>{ document.getElementById('cdpUrl').value = b.cdpUrl || 'http://127.0.0.1:9222'; });
     refreshTelegramStatus();
   </script>
 </body>

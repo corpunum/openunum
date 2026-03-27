@@ -6,7 +6,18 @@ export class CDPBrowser {
   async status() {
     try {
       const res = await fetch(`${this.cdpUrl}/json/version`);
-      if (!res.ok) return { ok: false, error: `status ${res.status}` };
+      if (!res.ok) {
+        if (res.status === 404) {
+          return {
+            ok: false,
+            error: 'CDP endpoint returned 404',
+            hint:
+              'Port is reachable but not exposing the classic DevTools JSON API. ' +
+              'Launch Chrome/Chromium with --remote-debugging-port=9222 (or update cdpUrl in WebUI).'
+          };
+        }
+        return { ok: false, error: `status ${res.status}` };
+      }
       const json = await res.json();
       return { ok: true, data: json };
     } catch (error) {
