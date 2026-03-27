@@ -1,9 +1,19 @@
 import { spawn } from 'node:child_process';
+import os from 'node:os';
+import path from 'node:path';
+
+const TEST_PORT = 18881;
+const TEST_HOME = path.join(os.tmpdir(), 'openunum-test-home');
 
 export async function startServer() {
   const proc = spawn('node', ['src/server.mjs'], {
     cwd: process.cwd(),
-    stdio: ['ignore', 'pipe', 'pipe']
+    stdio: ['ignore', 'pipe', 'pipe'],
+    env: {
+      ...process.env,
+      OPENUNUM_PORT: String(TEST_PORT),
+      OPENUNUM_HOME: TEST_HOME
+    }
   });
 
   await new Promise((resolve, reject) => {
@@ -35,12 +45,12 @@ export async function stopServer(proc) {
 }
 
 export async function jget(path) {
-  const res = await fetch(`http://127.0.0.1:18880${path}`);
+  const res = await fetch(`http://127.0.0.1:${TEST_PORT}${path}`);
   return { status: res.status, json: await res.json() };
 }
 
 export async function jpost(path, body) {
-  const res = await fetch(`http://127.0.0.1:18880${path}`, {
+  const res = await fetch(`http://127.0.0.1:${TEST_PORT}${path}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body)

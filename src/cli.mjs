@@ -4,7 +4,6 @@ import { MemoryStore } from './memory/store.mjs';
 import { OpenUnumAgent } from './core/agent.mjs';
 import { CDPBrowser } from './browser/cdp.mjs';
 import { TelegramChannel } from './channels/telegram.mjs';
-import { WhatsAppTwilioChannel } from './channels/whatsapp-twilio.mjs';
 
 const args = process.argv.slice(2);
 const cmd = args[0] || 'help';
@@ -64,17 +63,32 @@ async function main() {
     return;
   }
 
-  if (cmd === 'whatsapp' && args[1] === 'send') {
-    const to = getArg('--to');
-    const message = getArg('--message', 'hello');
-    if (!to) throw new Error('Missing --to');
-    const wa = new WhatsAppTwilioChannel(config.channels.whatsapp, async () => '');
-    const out = await wa.send(to, message);
+  if (cmd === 'telegram' && args[1] === 'run') {
+    if (!config.channels.telegram?.botToken) throw new Error('Missing Telegram bot token');
+    const tg = new TelegramChannel(config.channels.telegram, async (text, sessionId) => {
+      const out = await agent.chat({ message: text, sessionId });
+      return out.reply;
+    });
+    // Long-poll loop for production use.
+    while (true) {
+      try {
+        await tg.pollOnce();
+      } catch (error) {
+        console.error(`telegram_poll_error: ${error.message || error}`);
+        await new Promise((r) => setTimeout(r, 2000));
+      }
+    }
+  }
+
+  if (cmd === 'ollama' && args[1] === 'use') {
+    const model = getArg('--model', 'minimax-m2.7:cloud');
+    const out = agent.switchModel('ollama', `ollama/${model}`);
+    saveConfig(config);
     console.log(JSON.stringify(out));
     return;
   }
 
-  console.log(`openunum commands:\n  health\n  serve\n  chat --message <text> [--session <id>]\n  model switch --provider <p> --model <m>\n  browser status\n  telegram poll-once\n  whatsapp send --to <whatsapp:+...> --message <text>`);
+  console.log(`openunum commands:\n  health\n  serve\n  chat --message <text> [--session <id>]\n  model switch --provider <p> --model <m>\n  ollama use --model <id>\n  browser status\n  telegram poll-once\n  telegram run`);
 }
 
 main().catch((error) => {

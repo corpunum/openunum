@@ -1,63 +1,66 @@
-import fs from 'node:fs';
 import path from 'node:path';
+import { DatabaseSync } from 'node:sqlite';
 import { getHomeDir, ensureHome } from '../config.mjs';
 
 export class MemoryStore {
   constructor() {
     ensureHome();
-    this.filePath = path.join(getHomeDir(), 'openunum-memory.json');
-    this.state = this.load();
+    this.dbPath = path.join(getHomeDir(), 'openunum.db');
+    this.db = new DatabaseSync(this.dbPath);
+    this.init();
   }
 
-  load() {
-    if (!fs.existsSync(this.filePath)) {
-      return { sessions: {}, facts: [] };
-    }
-    try {
-      return JSON.parse(fs.readFileSync(this.filePath, 'utf8'));
-    } catch {
-      return { sessions: {}, facts: [] };
-    }
-  }
-
-  persist() {
-    fs.writeFileSync(this.filePath, JSON.stringify(this.state, null, 2), 'utf8');
+  init() {
+    this.db.exec(`
+      CREATE TABLE IF NOT EXISTS sessions (
+        id TEXT PRIMARY KEY,
+        created_at TEXT NOT NULL
+      );
+      CREATE TABLE IF NOT EXISTS messages (
+        id INTEGER PRIMARY KEY,
+        session_id TEXT NOT NULL,
+        role TEXT NOT NULL,
+        content TEXT NOT NULL,
+        created_at TEXT NOT NULL
+      );
+      CREATE TABLE IF NOT EXISTS facts (
+        id INTEGER PRIMARY KEY,
+        key TEXT NOT NULL,
+        value TEXT NOT NULL,
+        created_at TEXT NOT NULL
+      );
+    `);
   }
 
   ensureSession(sessionId) {
-    if (!this.state.sessions[sessionId]) {
-      this.state.sessions[sessionId] = { created_at: new Date().toISOString(), messages: [] };
-      this.persist();
-    }
+    this.db
+      .prepare('INSERT OR IGNORE INTO sessions (id, created_at) VALUES (?, ?)')
+      .run(sessionId, new Date().toISOString());
   }
 
   addMessage(sessionId, role, content) {
     this.ensureSession(sessionId);
-    this.state.sessions[sessionId].messages.push({
-      role,
-      content,
-      created_at: new Date().toISOString()
-    });
-    this.persist();
+    this.db
+      .prepare('INSERT INTO messages (session_id, role, content, created_at) VALUES (?, ?, ?, ?)')
+      .run(sessionId, role, content, new Date().toISOString());
   }
 
   getMessages(sessionId, limit = 50) {
-    const s = this.state.sessions[sessionId];
-    if (!s) return [];
-    return s.messages.slice(-limit);
+    return this.db
+      .prepare('SELECT role, content, created_at FROM messages WHERE session_id = ? ORDER BY id DESC LIMIT ?')
+      .all(sessionId, limit)
+      .reverse();
   }
 
   rememberFact(key, value) {
-    this.state.facts.push({ key, value, created_at: new Date().toISOString() });
-    this.persist();
+    this.db
+      .prepare('INSERT INTO facts (key, value, created_at) VALUES (?, ?, ?)')
+      .run(key, value, new Date().toISOString());
   }
 
   retrieveFacts(query, limit = 5) {
-    const q = query.toLowerCase();
-    return this.state.facts
-      .filter((f) => f.key.toLowerCase().includes(q) || f.value.toLowerCase().includes(q))
-      .slice(-limit)
-      .reverse();
+    return this.db
+      .prepare('SELECT key, value, created_at FROM facts WHERE key LIKE ? OR value LIKE ? ORDER BY id DESC LIMIT ?')
+      .all(`%${query}%`, `%${query}%`, limit);
   }
 }
-

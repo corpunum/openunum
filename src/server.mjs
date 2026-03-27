@@ -5,17 +5,12 @@ import { loadConfig, saveConfig } from './config.mjs';
 import { MemoryStore } from './memory/store.mjs';
 import { OpenUnumAgent } from './core/agent.mjs';
 import { CDPBrowser } from './browser/cdp.mjs';
-import { WhatsAppTwilioChannel } from './channels/whatsapp-twilio.mjs';
 import { logInfo, logError } from './logger.mjs';
 
 const config = loadConfig();
 const memory = new MemoryStore();
 const agent = new OpenUnumAgent({ config, memoryStore: memory });
 const browser = new CDPBrowser(config.browser?.cdpUrl);
-const twilio = new WhatsAppTwilioChannel(config.channels.whatsapp || {}, async (msg, sid) => {
-  const out = await agent.chat({ message: msg, sessionId: sid });
-  return out.reply;
-});
 
 function sendJson(res, code, obj) {
   res.writeHead(code, { 'Content-Type': 'application/json' });
@@ -72,18 +67,6 @@ const server = http.createServer(async (req, res) => {
     if (req.method === 'GET' && url.pathname === '/api/browser/status') {
       const out = await browser.status();
       return sendJson(res, 200, out);
-    }
-
-    if (req.method === 'POST' && url.pathname === '/webhooks/whatsapp') {
-      const formChunks = [];
-      for await (const chunk of req) formChunks.push(chunk);
-      const formBody = Buffer.concat(formChunks).toString('utf8');
-      const params = new URLSearchParams(formBody);
-      const from = params.get('From') || '';
-      const body = params.get('Body') || '';
-      const reply = await twilio.onMessage(body, `whatsapp:${from}`);
-      res.writeHead(200, { 'Content-Type': 'text/xml' });
-      return res.end(`<Response><Message>${reply.replace(/[<&>]/g, '')}</Message></Response>`);
     }
 
     if (req.method === 'GET' && (url.pathname === '/' || url.pathname === '/index.html')) {

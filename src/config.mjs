@@ -22,8 +22,9 @@ export function getConfigPath() {
 }
 
 export function defaultConfig() {
+  const envPort = Number(process.env.OPENUNUM_PORT || 18880);
   return {
-    server: { host: '127.0.0.1', port: 18880 },
+    server: { host: '127.0.0.1', port: Number.isFinite(envPort) ? envPort : 18880 },
     browser: { cdpUrl: 'http://127.0.0.1:9222', fallbackEnabled: true },
     runtime: { maxToolIterations: 4, shellEnabled: false },
     model: {
@@ -38,13 +39,7 @@ export function defaultConfig() {
       genericApiKey: process.env.GENERIC_API_KEY || ''
     },
     channels: {
-      telegram: { botToken: process.env.TELEGRAM_BOT_TOKEN || '', enabled: false },
-      whatsapp: {
-        twilioAccountSid: process.env.TWILIO_ACCOUNT_SID || '',
-        twilioAuthToken: process.env.TWILIO_AUTH_TOKEN || '',
-        twilioFrom: process.env.TWILIO_WHATSAPP_FROM || '',
-        enabled: false
-      }
+      telegram: { botToken: process.env.TELEGRAM_BOT_TOKEN || '', enabled: false }
     }
   };
 }
