@@ -109,6 +109,15 @@
             <button id="switchModel">Switch Model</button>
           </div>
           <div class="row">
+            <button id="importOpenclaw">Import OpenClaw Keys</button>
+            <button id="loadModels">Load Ranked Models</button>
+          </div>
+          <div class="row">
+            <select id="modelList"></select>
+            <button id="useListedModel">Use Selected</button>
+          </div>
+          <div class="hint" id="modelCatalogStatus"></div>
+          <div class="row">
             <input id="message" placeholder="Tell the agent what to do..." />
             <button class="primary" id="send">Run</button>
           </div>
@@ -235,6 +244,39 @@
       topStatus.textContent = `model=${out.provider}/${out.model}`;
     };
 
+    q('importOpenclaw').onclick = async () => {
+      const out = await jpost('/api/providers/import-openclaw', {});
+      q('modelCatalogStatus').textContent =
+        `imported keys: openrouter=${out.imported?.openrouterApiKey} nvidia=${out.imported?.nvidiaApiKey}`;
+    };
+
+    q('loadModels').onclick = async () => {
+      const provider = q('provider').value;
+      const out = await jget(`/api/models?provider=${encodeURIComponent(provider)}`);
+      const list = q('modelList');
+      list.innerHTML = '';
+      const models = out.models || [];
+      for (const m of models) {
+        const opt = document.createElement('option');
+        opt.value = m.id;
+        const params = (m.paramsB || m.paramsB === 0) ? `${m.paramsB.toFixed(1)}B` : '?';
+        const ctx = m.contextWindow || '?';
+        opt.textContent = `${m.id}  | score=${m.score?.toFixed?.(1) ?? '?'} | params=${params} | ctx=${ctx}`;
+        list.appendChild(opt);
+      }
+      q('modelCatalogStatus').textContent = `loaded ${models.length} ${provider} models (best -> worst)`;
+      if (models[0]) q('model').value = models[0].id;
+    };
+
+    q('useListedModel').onclick = async () => {
+      const selected = q('modelList').value;
+      if (!selected) return;
+      q('model').value = selected;
+      const provider = q('provider').value;
+      const out = await jpost('/api/model/switch', { provider, model: selected });
+      topStatus.textContent = `model=${out.provider}/${out.model}`;
+    };
+
     q('send').onclick = async () => {
       const message = q('message').value.trim();
       if (!message) return;
@@ -314,4 +356,3 @@
   </script>
 </body>
 </html>
-

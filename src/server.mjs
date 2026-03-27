@@ -10,6 +10,12 @@ import { OpenUnumAgent } from './core/agent.mjs';
 import { CDPBrowser } from './browser/cdp.mjs';
 import { TelegramChannel } from './channels/telegram.mjs';
 import { logInfo, logError } from './logger.mjs';
+import {
+  fetchNvidiaModels,
+  fetchOllamaModels,
+  fetchOpenRouterModels,
+  importProviderSecretsFromOpenClaw
+} from './models/catalog.mjs';
 
 const config = loadConfig();
 const memory = new MemoryStore();
@@ -148,6 +154,41 @@ const server = http.createServer(async (req, res) => {
       saveConfig(config);
       agent.reloadTools();
       return sendJson(res, 200, { ok: true, runtime: config.runtime });
+    }
+
+    if (req.method === 'POST' && url.pathname === '/api/providers/import-openclaw') {
+      const imported = importProviderSecretsFromOpenClaw();
+      if (imported.openrouterApiKey) config.model.openrouterApiKey = imported.openrouterApiKey;
+      if (imported.nvidiaApiKey) config.model.nvidiaApiKey = imported.nvidiaApiKey;
+      if (imported.openrouterBaseUrl) config.model.openrouterBaseUrl = imported.openrouterBaseUrl;
+      if (imported.nvidiaBaseUrl) config.model.nvidiaBaseUrl = imported.nvidiaBaseUrl;
+      saveConfig(config);
+      return sendJson(res, 200, {
+        ok: true,
+        imported: {
+          openrouterApiKey: Boolean(imported.openrouterApiKey),
+          nvidiaApiKey: Boolean(imported.nvidiaApiKey),
+          openrouterBaseUrl: imported.openrouterBaseUrl || config.model.openrouterBaseUrl,
+          nvidiaBaseUrl: imported.nvidiaBaseUrl || config.model.nvidiaBaseUrl
+        }
+      });
+    }
+
+    if (req.method === 'GET' && url.pathname === '/api/models') {
+      const provider = (url.searchParams.get('provider') || config.model.provider || 'ollama').toLowerCase();
+      if (provider === 'ollama') {
+        const models = await fetchOllamaModels(config.model.ollamaBaseUrl);
+        return sendJson(res, 200, { provider, models });
+      }
+      if (provider === 'openrouter') {
+        const models = await fetchOpenRouterModels(config.model.openrouterBaseUrl, config.model.openrouterApiKey);
+        return sendJson(res, 200, { provider, models });
+      }
+      if (provider === 'nvidia') {
+        const models = await fetchNvidiaModels(config.model.nvidiaBaseUrl, config.model.nvidiaApiKey);
+        return sendJson(res, 200, { provider, models });
+      }
+      return sendJson(res, 400, { error: `unsupported_provider:${provider}` });
     }
 
     if (req.method === 'GET' && url.pathname === '/api/model/current') {
