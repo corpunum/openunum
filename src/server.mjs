@@ -7,6 +7,7 @@ import sanitizeHtml from 'sanitize-html';
 import { loadConfig, saveConfig } from './config.mjs';
 import { MemoryStore } from './memory/store.mjs';
 import { OpenUnumAgent } from './core/agent.mjs';
+import { MissionRunner } from './core/missions.mjs';
 import { CDPBrowser } from './browser/cdp.mjs';
 import { TelegramChannel } from './channels/telegram.mjs';
 import { logInfo, logError } from './logger.mjs';
@@ -20,10 +21,43 @@ import {
 const config = loadConfig();
 const memory = new MemoryStore();
 const agent = new OpenUnumAgent({ config, memoryStore: memory });
+const missions = new MissionRunner({ agent, memoryStore: memory });
 let browser = new CDPBrowser(config.browser?.cdpUrl);
 let telegramLoopRunning = false;
 let telegramLoopStopRequested = false;
 let telegramLoopPromise = null;
+
+function applyAutonomyMode(mode) {
+  const m = String(mode || 'standard').toLowerCase();
+  if (m === 'relentless') {
+    config.runtime.autonomyMode = 'relentless';
+    config.runtime.shellEnabled = true;
+    config.runtime.maxToolIterations = 20;
+    config.runtime.executorRetryAttempts = 6;
+    config.runtime.executorRetryBackoffMs = 900;
+    config.runtime.missionDefaultContinueUntilDone = true;
+    config.runtime.missionDefaultHardStepCap = 300;
+    config.runtime.missionDefaultMaxRetries = 8;
+    config.runtime.missionDefaultIntervalMs = 250;
+    config.model.routing.forcePrimaryProvider = true;
+    config.model.routing.fallbackEnabled = false;
+    config.model.routing.fallbackProviders = [config.model.provider];
+    return 'relentless';
+  }
+
+  config.runtime.autonomyMode = 'standard';
+  config.runtime.maxToolIterations = 8;
+  config.runtime.executorRetryAttempts = 3;
+  config.runtime.executorRetryBackoffMs = 700;
+  config.runtime.missionDefaultContinueUntilDone = true;
+  config.runtime.missionDefaultHardStepCap = 120;
+  config.runtime.missionDefaultMaxRetries = 3;
+  config.runtime.missionDefaultIntervalMs = 400;
+  if (!config.model.routing.fallbackProviders?.length) {
+    config.model.routing.fallbackProviders = [config.model.provider];
+  }
+  return 'standard';
+}
 
 function renderReplyHtml(text) {
   const raw = marked.parse(text || '');
@@ -83,13 +117,20 @@ async function launchDebugBrowser() {
     throw new Error('No Chromium/Chrome executable found on host');
   }
   const port = 9333;
+  // Kill stale debug instances so a new visible window can be created reliably.
+  try {
+    spawn('pkill', ['-f', 'openunum-chrome-debug'], { stdio: 'ignore' });
+  } catch {
+    // ignore best-effort cleanup errors
+  }
+
   const args = [
     `--remote-debugging-port=${port}`,
     '--user-data-dir=/tmp/openunum-chrome-debug',
     '--no-first-run',
     '--no-default-browser-check',
     '--disable-gpu',
-    '--headless=new',
+    '--new-window',
     'about:blank'
   ];
   const child = spawn(chromeBin, args, {
@@ -97,6 +138,29 @@ async function launchDebugBrowser() {
     stdio: 'ignore'
   });
   child.unref();
+
+  // Verify endpoint is actually up before reporting success.
+  let ready = false;
+  for (let i = 0; i < 20; i += 1) {
+    try {
+      const res = await fetch(`http://127.0.0.1:${port}/json/version`);
+      if (res.ok) {
+        ready = true;
+        break;
+      }
+    } catch {
+      // keep waiting
+    }
+    await new Promise((r) => setTimeout(r, 200));
+  }
+
+  if (!ready) {
+    return {
+      ok: false,
+      error: 'debug_browser_not_ready',
+      hint: 'Chromium did not expose CDP on port 9333 after launch.'
+    };
+  }
 
   config.browser.cdpUrl = `http://127.0.0.1:${port}`;
   saveConfig(config);
@@ -151,9 +215,80 @@ const server = http.createServer(async (req, res) => {
       if (body.runtime && Number.isFinite(body.runtime.maxToolIterations)) {
         config.runtime.maxToolIterations = Number(body.runtime.maxToolIterations);
       }
+      if (body.runtime && Number.isFinite(body.runtime.executorRetryAttempts)) {
+        config.runtime.executorRetryAttempts = Number(body.runtime.executorRetryAttempts);
+      }
+      if (body.runtime && Number.isFinite(body.runtime.executorRetryBackoffMs)) {
+        config.runtime.executorRetryBackoffMs = Number(body.runtime.executorRetryBackoffMs);
+      }
+      if (body.runtime && typeof body.runtime.autonomyMode === 'string') {
+        config.runtime.autonomyMode = body.runtime.autonomyMode;
+      }
+      if (body.runtime && typeof body.runtime.missionDefaultContinueUntilDone === 'boolean') {
+        config.runtime.missionDefaultContinueUntilDone = body.runtime.missionDefaultContinueUntilDone;
+      }
+      if (body.runtime && Number.isFinite(body.runtime.missionDefaultHardStepCap)) {
+        config.runtime.missionDefaultHardStepCap = Number(body.runtime.missionDefaultHardStepCap);
+      }
+      if (body.runtime && Number.isFinite(body.runtime.missionDefaultMaxRetries)) {
+        config.runtime.missionDefaultMaxRetries = Number(body.runtime.missionDefaultMaxRetries);
+      }
+      if (body.runtime && Number.isFinite(body.runtime.missionDefaultIntervalMs)) {
+        config.runtime.missionDefaultIntervalMs = Number(body.runtime.missionDefaultIntervalMs);
+      }
+      if (body.model && body.model.routing) {
+        config.model.routing = { ...config.model.routing, ...body.model.routing };
+      }
       saveConfig(config);
       agent.reloadTools();
       return sendJson(res, 200, { ok: true, runtime: config.runtime });
+    }
+
+    if (req.method === 'GET' && url.pathname === '/api/autonomy/mode') {
+      return sendJson(res, 200, {
+        mode: config.runtime.autonomyMode || 'standard',
+        runtime: config.runtime,
+        routing: config.model.routing
+      });
+    }
+
+    if (req.method === 'POST' && url.pathname === '/api/autonomy/mode') {
+      const body = await parseBody(req);
+      const mode = applyAutonomyMode(body.mode);
+      saveConfig(config);
+      agent.reloadTools();
+      return sendJson(res, 200, {
+        ok: true,
+        mode,
+        runtime: config.runtime,
+        routing: config.model.routing
+      });
+    }
+
+    if (req.method === 'GET' && url.pathname === '/api/providers/config') {
+      return sendJson(res, 200, {
+        ollamaBaseUrl: config.model.ollamaBaseUrl,
+        openrouterBaseUrl: config.model.openrouterBaseUrl,
+        nvidiaBaseUrl: config.model.nvidiaBaseUrl,
+        genericBaseUrl: config.model.genericBaseUrl,
+        hasOpenrouterApiKey: Boolean(config.model.openrouterApiKey),
+        hasNvidiaApiKey: Boolean(config.model.nvidiaApiKey),
+        hasGenericApiKey: Boolean(config.model.genericApiKey)
+      });
+    }
+
+    if (req.method === 'POST' && url.pathname === '/api/providers/config') {
+      const body = await parseBody(req);
+      const up = body || {};
+      if (typeof up.ollamaBaseUrl === 'string') config.model.ollamaBaseUrl = up.ollamaBaseUrl.trim();
+      if (typeof up.openrouterBaseUrl === 'string') config.model.openrouterBaseUrl = up.openrouterBaseUrl.trim();
+      if (typeof up.nvidiaBaseUrl === 'string') config.model.nvidiaBaseUrl = up.nvidiaBaseUrl.trim();
+      if (typeof up.genericBaseUrl === 'string') config.model.genericBaseUrl = up.genericBaseUrl.trim();
+      if (typeof up.openrouterApiKey === 'string') config.model.openrouterApiKey = up.openrouterApiKey.trim();
+      if (typeof up.nvidiaApiKey === 'string') config.model.nvidiaApiKey = up.nvidiaApiKey.trim();
+      if (typeof up.genericApiKey === 'string') config.model.genericApiKey = up.genericApiKey.trim();
+      saveConfig(config);
+      return sendJson(res, 200, { ok: true });
     }
 
     if (req.method === 'POST' && url.pathname === '/api/providers/import-openclaw') {
@@ -205,6 +340,7 @@ const server = http.createServer(async (req, res) => {
     if (req.method === 'POST' && url.pathname === '/api/chat') {
       const body = await parseBody(req);
       const out = await agent.chat({ message: body.message, sessionId: body.sessionId });
+      saveConfig(config);
       return sendJson(res, 200, { ...out, replyHtml: renderReplyHtml(out.reply) });
     }
 
@@ -218,6 +354,35 @@ const server = http.createServer(async (req, res) => {
       const sessionId = url.pathname.split('/').pop();
       const msgs = memory.getMessages(sessionId || '', 100);
       return sendJson(res, 200, { sessionId, messages: msgs });
+    }
+
+    if (req.method === 'GET' && url.pathname === '/api/missions') {
+      return sendJson(res, 200, { missions: missions.list() });
+    }
+
+    if (req.method === 'GET' && url.pathname === '/api/missions/status') {
+      const id = url.searchParams.get('id') || '';
+      const mission = missions.get(id);
+      if (!mission) return sendJson(res, 404, { error: 'mission_not_found' });
+      return sendJson(res, 200, { mission });
+    }
+
+    if (req.method === 'POST' && url.pathname === '/api/missions/start') {
+      const body = await parseBody(req);
+      const out = missions.start({
+        goal: body.goal,
+        maxSteps: body.maxSteps,
+        intervalMs: body.intervalMs ?? config.runtime.missionDefaultIntervalMs,
+        maxRetries: body.maxRetries ?? config.runtime.missionDefaultMaxRetries,
+        continueUntilDone: body.continueUntilDone ?? config.runtime.missionDefaultContinueUntilDone,
+        hardStepCap: body.hardStepCap ?? config.runtime.missionDefaultHardStepCap
+      });
+      return sendJson(res, 200, out);
+    }
+
+    if (req.method === 'POST' && url.pathname === '/api/missions/stop') {
+      const body = await parseBody(req);
+      return sendJson(res, 200, missions.stop(body.id));
     }
 
     if (req.method === 'GET' && url.pathname === '/api/browser/status') {

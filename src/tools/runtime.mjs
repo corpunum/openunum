@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { exec } from 'node:child_process';
 import { CDPBrowser } from '../browser/cdp.mjs';
+import { ExecutorDaemon } from './executor-daemon.mjs';
 
 function safePath(inputPath) {
   return path.resolve(process.cwd(), inputPath);
@@ -15,9 +15,14 @@ function applySimplePatch(original, find, replace) {
 }
 
 export class ToolRuntime {
-  constructor(config) {
+  constructor(config, memoryStore = null) {
     this.config = config;
+    this.memoryStore = memoryStore;
     this.browser = new CDPBrowser(config.browser?.cdpUrl || 'http://127.0.0.1:9222');
+    this.executor = new ExecutorDaemon({
+      retryAttempts: config.runtime?.executorRetryAttempts ?? 3,
+      retryBackoffMs: config.runtime?.executorRetryBackoffMs ?? 700
+    });
   }
 
   toolSchemas() {
@@ -133,6 +138,21 @@ export class ToolRuntime {
       {
         type: 'function',
         function: {
+          name: 'http_download',
+          description: 'Download a URL to a local path via curl',
+          parameters: {
+            type: 'object',
+            properties: {
+              url: { type: 'string' },
+              outPath: { type: 'string' }
+            },
+            required: ['url', 'outPath']
+          }
+        }
+      },
+      {
+        type: 'function',
+        function: {
           name: 'desktop_open',
           description: 'Open app/file/url via xdg-open',
           parameters: { type: 'object', properties: { target: { type: 'string' } }, required: ['target'] }
@@ -149,52 +169,103 @@ export class ToolRuntime {
     ];
   }
 
-  async run(name, args) {
+  logRun(context, toolName, args, result) {
+    const sessionId = context?.sessionId;
+    if (!sessionId || !this.memoryStore?.recordToolRun) return;
+    this.memoryStore.recordToolRun({
+      sessionId,
+      toolName,
+      args,
+      result
+    });
+  }
+
+  async run(name, args, context = {}) {
     if (name === 'file_read') {
       const p = safePath(args.path);
       const content = fs.readFileSync(p, 'utf8');
-      return { ok: true, path: p, content };
+      const out = { ok: true, path: p, content };
+      this.logRun(context, name, args, out);
+      return out;
     }
     if (name === 'file_write') {
       const p = safePath(args.path);
       fs.mkdirSync(path.dirname(p), { recursive: true });
       fs.writeFileSync(p, args.content, 'utf8');
-      return { ok: true, path: p, bytes: Buffer.byteLength(args.content, 'utf8') };
+      const out = { ok: true, path: p, bytes: Buffer.byteLength(args.content, 'utf8') };
+      this.logRun(context, name, args, out);
+      return out;
     }
     if (name === 'file_patch') {
       const p = safePath(args.path);
       const original = fs.readFileSync(p, 'utf8');
       const patched = applySimplePatch(original, args.find, args.replace);
       fs.writeFileSync(p, patched, 'utf8');
-      return { ok: true, path: p };
+      const out = { ok: true, path: p };
+      this.logRun(context, name, args, out);
+      return out;
     }
     if (name === 'shell_run') {
-      return new Promise((resolve) => {
-        exec(args.cmd, { timeout: 20000 }, (error, stdout, stderr) => {
-          resolve({ ok: !error, code: error?.code ?? 0, stdout, stderr, error: error?.message || null });
-        });
-      });
+      const out = await this.executor.runShell(args.cmd, 120000);
+      this.logRun(context, name, args, out);
+      return out;
     }
-    if (name === 'browser_status') return this.browser.status();
-    if (name === 'browser_navigate') return this.browser.navigate(args.url);
-    if (name === 'browser_search') return this.browser.search(args.query);
-    if (name === 'browser_type') return this.browser.type(args.selector, args.text, Boolean(args.submit));
-    if (name === 'browser_click') return this.browser.click(args.selector);
-    if (name === 'browser_extract') return this.browser.extractText(args.selector || 'body');
-    if (name === 'browser_snapshot') return this.browser.snapshot();
+    if (name === 'browser_status') {
+      const out = await this.executor.runWithRetry(name, args, () => this.browser.status());
+      this.logRun(context, name, args, out);
+      return out;
+    }
+    if (name === 'browser_navigate') {
+      const out = await this.executor.runWithRetry(name, args, () => this.browser.navigate(args.url));
+      this.logRun(context, name, args, out);
+      return out;
+    }
+    if (name === 'browser_search') {
+      const out = await this.executor.runWithRetry(name, args, () => this.browser.search(args.query));
+      this.logRun(context, name, args, out);
+      return out;
+    }
+    if (name === 'browser_type') {
+      const out = await this.executor.runWithRetry(name, args, () => this.browser.type(args.selector, args.text, Boolean(args.submit)));
+      this.logRun(context, name, args, out);
+      return out;
+    }
+    if (name === 'browser_click') {
+      const out = await this.executor.runWithRetry(name, args, () => this.browser.click(args.selector));
+      this.logRun(context, name, args, out);
+      return out;
+    }
+    if (name === 'browser_extract') {
+      const out = await this.executor.runWithRetry(name, args, () => this.browser.extractText(args.selector || 'body'));
+      this.logRun(context, name, args, out);
+      return out;
+    }
+    if (name === 'browser_snapshot') {
+      const out = await this.executor.runWithRetry(name, args, () => this.browser.snapshot());
+      this.logRun(context, name, args, out);
+      return out;
+    }
+    if (name === 'http_download') {
+      const outPath = safePath(args.outPath);
+      fs.mkdirSync(path.dirname(outPath), { recursive: true });
+      const out = await this.executor.runShell(`curl -fL ${JSON.stringify(args.url)} -o ${JSON.stringify(outPath)}`, 600000);
+      const result = {
+        ...out,
+        url: args.url,
+        outPath
+      };
+      this.logRun(context, name, args, result);
+      return result;
+    }
     if (name === 'desktop_open') {
-      return new Promise((resolve) => {
-        exec(`xdg-open ${JSON.stringify(args.target)}`, { timeout: 15000 }, (error, stdout, stderr) => {
-          resolve({ ok: !error, code: error?.code ?? 0, stdout, stderr, error: error?.message || null });
-        });
-      });
+      const out = await this.executor.runShell(`xdg-open ${JSON.stringify(args.target)}`, 15000);
+      this.logRun(context, name, args, out);
+      return out;
     }
     if (name === 'desktop_xdotool') {
-      return new Promise((resolve) => {
-        exec(`xdotool ${args.cmd}`, { timeout: 15000 }, (error, stdout, stderr) => {
-          resolve({ ok: !error, code: error?.code ?? 0, stdout, stderr, error: error?.message || null });
-        });
-      });
+      const out = await this.executor.runShell(`xdotool ${args.cmd}`, 15000);
+      this.logRun(context, name, args, out);
+      return out;
     }
 
     throw new Error(`Unknown tool: ${name}`);

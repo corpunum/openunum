@@ -26,10 +26,31 @@ export function defaultConfig() {
   return {
     server: { host: '127.0.0.1', port: Number.isFinite(envPort) ? envPort : 18880 },
     browser: { cdpUrl: 'http://127.0.0.1:9222', fallbackEnabled: true },
-    runtime: { maxToolIterations: 8, shellEnabled: true },
+    runtime: {
+      maxToolIterations: 8,
+      shellEnabled: true,
+      executorRetryAttempts: 3,
+      executorRetryBackoffMs: 700,
+      autonomyMode: 'standard',
+      missionDefaultContinueUntilDone: true,
+      missionDefaultHardStepCap: 120,
+      missionDefaultMaxRetries: 3,
+      missionDefaultIntervalMs: 400
+    },
     model: {
       provider: 'ollama',
       model: 'ollama/minimax-m2.7:cloud',
+      providerModels: {
+        ollama: 'ollama/minimax-m2.7:cloud',
+        openrouter: 'openrouter/openai/gpt-4o-mini',
+        nvidia: 'nvidia/qwen/qwen3-coder-480b-a35b-instruct',
+        generic: 'generic/gpt-4o-mini'
+      },
+      routing: {
+        fallbackEnabled: true,
+        fallbackProviders: ['ollama', 'nvidia', 'openrouter', 'generic'],
+        forcePrimaryProvider: false
+      },
       ollamaBaseUrl: process.env.OLLAMA_BASE_URL || 'http://127.0.0.1:11434',
       openrouterBaseUrl: process.env.OPENROUTER_BASE_URL || 'https://openrouter.ai/api/v1',
       nvidiaBaseUrl: process.env.NVIDIA_BASE_URL || 'https://integrate.api.nvidia.com/v1',
@@ -44,6 +65,28 @@ export function defaultConfig() {
   };
 }
 
+function withDefaults(config) {
+  const d = defaultConfig();
+  return {
+    ...d,
+    ...config,
+    server: { ...d.server, ...(config.server || {}) },
+    browser: { ...d.browser, ...(config.browser || {}) },
+    runtime: { ...d.runtime, ...(config.runtime || {}) },
+    channels: {
+      ...d.channels,
+      ...(config.channels || {}),
+      telegram: { ...d.channels.telegram, ...(config.channels?.telegram || {}) }
+    },
+    model: {
+      ...d.model,
+      ...(config.model || {}),
+      providerModels: { ...d.model.providerModels, ...(config.model?.providerModels || {}) },
+      routing: { ...d.model.routing, ...(config.model?.routing || {}) }
+    }
+  };
+}
+
 export function loadConfig() {
   ensureHome();
   const configPath = getConfigPath();
@@ -53,7 +96,7 @@ export function loadConfig() {
     return cfg;
   }
   const raw = fs.readFileSync(configPath, 'utf8');
-  return JSON.parse(raw);
+  return withDefaults(JSON.parse(raw));
 }
 
 export function saveConfig(config) {

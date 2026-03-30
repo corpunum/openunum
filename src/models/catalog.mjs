@@ -36,8 +36,14 @@ function sortModels(models) {
     .sort((a, b) => b.score - a.score);
 }
 
+function resolveOllamaApiBase(configuredBaseUrl) {
+  const trimmed = String(configuredBaseUrl || '').replace(/\/+$/, '');
+  return trimmed.replace(/\/v1$/i, '');
+}
+
 export async function fetchOllamaModels(baseUrl) {
-  const res = await fetch(`${baseUrl.replace(/\/$/, '')}/api/tags`);
+  const apiBase = resolveOllamaApiBase(baseUrl);
+  const res = await fetch(`${apiBase}/api/tags`, { signal: AbortSignal.timeout(5000) });
   if (!res.ok) throw new Error(`Ollama tags failed: ${res.status}`);
   const data = await res.json();
   const models = (data.models || []).map((m) => ({
@@ -136,4 +142,3 @@ export function importProviderSecretsFromOpenClaw() {
 
   return out;
 }
-

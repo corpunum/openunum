@@ -26,13 +26,25 @@ export class OpenAICompatibleProvider {
     }
     const json = await res.json();
     const msg = json?.choices?.[0]?.message || {};
+    let content = msg.content || '';
+    if (Array.isArray(content)) {
+      content = content
+        .map((p) => {
+          if (typeof p === 'string') return p;
+          if (p?.type === 'text') return p.text || '';
+          return '';
+        })
+        .join('\n')
+        .trim();
+    }
+    const toolCalls = (msg.tool_calls || []).map((tc) => ({
+      id: tc.id,
+      name: tc.function?.name,
+      arguments: tc.function?.arguments ?? '{}'
+    }));
     return {
-      content: msg.content || '',
-      toolCalls: (msg.tool_calls || []).map((tc) => ({
-        id: tc.id,
-        name: tc.function?.name,
-        arguments: tc.function?.arguments || '{}'
-      }))
+      content,
+      toolCalls
     };
   }
 }

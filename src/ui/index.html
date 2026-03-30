@@ -6,100 +6,150 @@
   <title>OpenUnum Console</title>
   <style>
     :root {
-      --bg: #0b1220;
-      --bg2: #0f172a;
-      --panel: #111a2e;
-      --panel2: #15213a;
-      --text: #e6edf8;
-      --muted: #90a0bd;
-      --accent: #22d3ee;
-      --border: #223052;
-      --bubble-user: #1e3a8a;
-      --bubble-ai: #1f2937;
+      --bg: #0a1020;
+      --bg2: #101b35;
+      --panel: #121f3c;
+      --panel2: #17284d;
+      --text: #eaf1ff;
+      --muted: #92a5c9;
+      --line: #2a4070;
+      --accent: #16b9d4;
+      --good: #22c55e;
+      --warn: #eab308;
+      --bad: #ef4444;
     }
     * { box-sizing: border-box; }
     body {
       margin: 0;
       color: var(--text);
-      font-family: "IBM Plex Sans", ui-sans-serif, system-ui, -apple-system, Segoe UI, sans-serif;
+      font-family: "IBM Plex Sans", "Manrope", system-ui, sans-serif;
       background:
-        radial-gradient(1200px 600px at 90% -10%, #102745 0%, transparent 50%),
-        radial-gradient(900px 500px at -10% 0%, #1f1240 0%, transparent 45%),
-        linear-gradient(165deg, var(--bg), var(--bg2));
+        radial-gradient(900px 520px at 92% -5%, #173565 0%, transparent 58%),
+        radial-gradient(760px 460px at -12% 8%, #2d164e 0%, transparent 52%),
+        linear-gradient(162deg, var(--bg), var(--bg2));
       min-height: 100vh;
     }
-    .app {
-      height: 100vh;
+    .layout {
+      min-height: 100vh;
       display: grid;
-      grid-template-columns: 360px 1fr;
-      gap: 0;
+      grid-template-columns: 320px 1fr;
     }
-    .sidebar {
-      border-right: 1px solid var(--border);
-      background: linear-gradient(180deg, #0e172b, #0b1426);
+    .menu {
+      position: sticky;
+      top: 0;
+      height: 100vh;
       overflow: auto;
+      border-right: 1px solid var(--line);
+      background: linear-gradient(180deg, #0f1b34, #0c162b);
       padding: 12px;
     }
-    .brand {
-      font-weight: 700;
-      letter-spacing: .4px;
-      margin-bottom: 10px;
-      font-size: 1.05rem;
-    }
+    .brand { font-weight: 700; letter-spacing: .2px; margin-bottom: 4px; }
     .status { color: var(--muted); font-size: 12px; margin-bottom: 12px; }
-    .card {
-      background: linear-gradient(180deg, var(--panel), var(--panel2));
-      border: 1px solid var(--border);
+    details {
+      border: 1px solid var(--line);
       border-radius: 12px;
-      padding: 10px;
       margin-bottom: 10px;
+      background: linear-gradient(180deg, #111f3c, #0f1a32);
+      overflow: hidden;
     }
-    .card h3 {
-      margin: 0 0 8px;
+    summary {
+      list-style: none;
+      cursor: pointer;
+      padding: 10px 12px;
       font-size: 12px;
       text-transform: uppercase;
       letter-spacing: .6px;
-      color: #d7e3ff;
+      color: #d8e7ff;
+      border-bottom: 1px solid rgba(42,64,112,.45);
     }
-    .row { display: flex; gap: 8px; margin-bottom: 8px; }
-    input, select, textarea, button {
-      border-radius: 10px;
-      border: 1px solid #2a395f;
-      background: #0c1427;
+    summary::-webkit-details-marker { display: none; }
+    .submenu { display: grid; padding: 8px; gap: 6px; }
+    .menu-btn {
+      border: 1px solid #2f4a80;
+      background: linear-gradient(180deg, #172848, #14233f);
       color: var(--text);
-      padding: 9px 10px;
+      border-radius: 10px;
+      padding: 8px 10px;
+      text-align: left;
+      cursor: pointer;
       font-size: 13px;
     }
-    input, select { flex: 1; min-width: 0; }
-    textarea { width: 100%; min-height: 86px; resize: vertical; }
-    button {
-      cursor: pointer;
-      white-space: nowrap;
-      background: linear-gradient(180deg, #1e335d, #172b50);
+    .menu-btn.active {
+      border-color: #3dd4ee;
+      background: linear-gradient(180deg, #11687a, #0f5263);
     }
-    button.primary { background: linear-gradient(180deg, #0891b2, #0e7490); border-color: #0ea5b7; }
-    .hint { color: var(--muted); font-size: 12px; }
     .main {
+      height: 100vh;
       display: grid;
-      grid-template-rows: 56px 1fr 80px;
+      grid-template-rows: 56px 1fr;
       min-width: 0;
     }
-    .chat-header {
+    .header {
+      border-bottom: 1px solid var(--line);
       display: flex;
       align-items: center;
       justify-content: space-between;
-      padding: 0 16px;
-      border-bottom: 1px solid var(--border);
-      background: rgba(10, 15, 30, .65);
+      padding: 0 14px;
+      background: rgba(10,16,31,.74);
       backdrop-filter: blur(6px);
     }
-    .chat-title { font-size: 14px; font-weight: 600; }
-    .chat-sub { font-size: 12px; color: var(--muted); }
-    .chat-actions { display:flex; align-items:center; gap:8px; }
-    .chat-actions button { padding: 6px 10px; border-radius: 999px; font-size: 12px; }
+    .title { font-weight: 600; font-size: 14px; }
+    .subtitle { color: var(--muted); font-size: 12px; }
+    .center {
+      padding: 14px;
+      overflow: auto;
+    }
+    .view {
+      display: none;
+      background: linear-gradient(180deg, var(--panel), var(--panel2));
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      min-height: calc(100vh - 98px);
+      padding: 12px;
+    }
+    .view.active { display: block; }
+    .section-title {
+      margin: 0 0 10px;
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: .6px;
+      color: #d8e7ff;
+    }
+    .grid { display: grid; gap: 10px; }
+    .grid.two { grid-template-columns: repeat(2, minmax(220px, 1fr)); }
+    .grid.three { grid-template-columns: repeat(3, minmax(180px, 1fr)); }
+    .field { display: grid; gap: 6px; }
+    .field label { color: var(--muted); font-size: 12px; }
+    input, select, textarea, button {
+      border-radius: 10px;
+      border: 1px solid #2f4a80;
+      background: #0d1a31;
+      color: var(--text);
+      font-size: 13px;
+      padding: 9px 10px;
+    }
+    button {
+      cursor: pointer;
+      background: linear-gradient(180deg, #284981, #1f3a67);
+      white-space: nowrap;
+    }
+    button.primary {
+      background: linear-gradient(180deg, #0ea7bc, #0f7e92);
+      border-color: #29cbe0;
+    }
+    .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+    .pill { font-size: 12px; color: var(--muted); }
+    .hint { color: var(--muted); font-size: 12px; }
+
+    .chat-wrap {
+      height: calc(100vh - 126px);
+      display: grid;
+      grid-template-rows: 1fr auto;
+      gap: 10px;
+    }
     .messages {
       overflow: auto;
-      padding: 16px;
+      padding: 8px;
       display: flex;
       flex-direction: column;
       gap: 10px;
@@ -108,181 +158,468 @@
     .bubble-wrap.user { justify-content: flex-end; }
     .bubble-wrap.ai { justify-content: flex-start; }
     .bubble {
-      max-width: min(78%, 860px);
+      max-width: min(82%, 960px);
       border-radius: 16px;
+      border: 1px solid #37558f;
       padding: 10px 12px;
       line-height: 1.45;
-      border: 1px solid #2a395f;
-      box-shadow: 0 8px 18px rgba(0,0,0,.2);
+      box-shadow: 0 8px 18px rgba(0,0,0,.24);
     }
     .bubble.user {
-      background: linear-gradient(180deg, #1d4ed8, #1e40af);
-      border-color: #3b82f6;
+      background: linear-gradient(180deg, #2058dd, #1e46b1);
+      border-color: #588dff;
       border-bottom-right-radius: 6px;
     }
     .bubble.ai {
-      background: linear-gradient(180deg, #1f2937, #111827);
-      border-color: #374151;
+      background: linear-gradient(180deg, #25344d, #172238);
+      border-color: #456186;
       border-bottom-left-radius: 6px;
     }
     .bubble pre {
-      background: #0a0f1d;
-      color: #d8e2ff;
-      padding: 8px;
+      background: #0a1322;
       border-radius: 8px;
+      padding: 8px;
       overflow: auto;
     }
+    .trace {
+      margin-top: 8px;
+      border: 1px solid #37558f;
+      border-radius: 10px;
+      background: rgba(8, 20, 38, .65);
+      overflow: hidden;
+    }
+    .trace summary {
+      list-style: none;
+      cursor: pointer;
+      padding: 8px 10px;
+      font-size: 12px;
+      color: #b8c8e8;
+      border-bottom: 1px solid rgba(55, 85, 143, .6);
+    }
+    .trace summary::-webkit-details-marker { display: none; }
+    .trace-body {
+      padding: 8px 10px;
+      display: grid;
+      gap: 8px;
+    }
+    .trace-step {
+      border: 1px solid rgba(55, 85, 143, .7);
+      border-radius: 8px;
+      padding: 8px;
+      background: rgba(8, 18, 34, .75);
+    }
+    .trace-step h5 {
+      margin: 0 0 6px;
+      font-size: 12px;
+      color: #d6e6ff;
+      font-weight: 600;
+    }
+    .trace-line {
+      font-size: 12px;
+      color: #b3c6eb;
+      margin: 2px 0;
+      word-break: break-word;
+    }
+    .typing {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      min-height: 18px;
+    }
+    .dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: #80d8ea;
+      opacity: .3;
+      animation: pulse 1.2s infinite ease-in-out;
+    }
+    .dot:nth-child(2) { animation-delay: .2s; }
+    .dot:nth-child(3) { animation-delay: .4s; }
+    @keyframes pulse {
+      0%, 80%, 100% { opacity: .3; transform: translateY(0); }
+      40% { opacity: 1; transform: translateY(-3px); }
+    }
     .composer {
-      border-top: 1px solid var(--border);
       display: grid;
       grid-template-columns: 1fr auto;
       gap: 10px;
-      padding: 12px;
-      background: rgba(10, 15, 30, .8);
-      backdrop-filter: blur(6px);
+      align-items: end;
     }
-    .composer input {
-      height: 44px;
-      border-radius: 999px;
-      padding: 0 14px;
-    }
-    .composer button {
-      height: 44px;
-      border-radius: 999px;
-      min-width: 90px;
-    }
-    @media (max-width: 1050px) {
-      .app { grid-template-columns: 1fr; grid-template-rows: 46vh 54vh; }
-      .sidebar { border-right: none; border-bottom: 1px solid var(--border); }
+    .composer textarea { min-height: 54px; max-height: 180px; resize: vertical; }
+    .composer button { height: 54px; border-radius: 999px; min-width: 100px; }
+
+    @media (max-width: 1080px) {
+      .layout { grid-template-columns: 1fr; grid-template-rows: 44vh 56vh; }
+      .menu { position: relative; height: auto; border-right: none; border-bottom: 1px solid var(--line); }
+      .main { height: 56vh; }
+      .view { min-height: calc(56vh - 28px); }
+      .chat-wrap { height: calc(56vh - 56px); }
+      .grid.two, .grid.three { grid-template-columns: 1fr; }
     }
   </style>
 </head>
 <body>
-  <div class="app">
-    <aside class="sidebar">
+  <div class="layout">
+    <aside class="menu">
       <div class="brand">OpenUnum Control</div>
       <div class="status" id="topStatus">booting...</div>
 
-      <section class="card">
-        <h3>Model</h3>
-        <div class="row">
-          <select id="provider">
-            <option value="ollama">ollama</option>
-            <option value="openrouter">openrouter</option>
-            <option value="nvidia">nvidia</option>
-            <option value="generic">generic</option>
-          </select>
-          <button id="switchModel">Switch</button>
+      <details open>
+        <summary>Workspace</summary>
+        <div class="submenu">
+          <button class="menu-btn active" data-view="chat">Chat</button>
+          <button class="menu-btn" data-view="operator">Operator Tools</button>
         </div>
-        <div class="row">
-          <input id="model" placeholder="model id" />
-        </div>
-        <div class="row">
-          <button id="importOpenclaw">Import OpenClaw Keys</button>
-          <button id="loadModels">Load Ranked</button>
-        </div>
-        <div class="row">
-          <select id="modelList"></select>
-          <button id="useListedModel">Use</button>
-        </div>
-        <div class="hint" id="modelCatalogStatus"></div>
-      </section>
+      </details>
 
-      <section class="card">
-        <h3>Browser</h3>
-        <div class="row">
-          <input id="cdpUrl" placeholder="http://127.0.0.1:9222" />
-          <button id="saveCdp">Save</button>
+      <details open>
+        <summary>Models</summary>
+        <div class="submenu">
+          <button class="menu-btn" data-view="model-routing">Routing</button>
+          <button class="menu-btn" data-view="provider-config">Provider Config</button>
         </div>
-        <div class="row">
-          <button id="launchBrowser">Launch Debug Browser</button>
-          <button id="extractBtn">Extract</button>
-        </div>
-        <div class="row">
-          <input id="navUrl" placeholder="https://example.com" />
-          <button id="navBtn">Go</button>
-        </div>
-        <div class="row">
-          <input id="searchQ" placeholder="search query" />
-          <button id="searchBtn">Search</button>
-        </div>
-        <div class="hint" id="browserStatusLine"></div>
-      </section>
+      </details>
 
-      <section class="card">
-        <h3>Telegram</h3>
-        <div class="row">
-          <input id="tgToken" placeholder="bot token" />
-          <button id="saveToken">Save</button>
+      <details open>
+        <summary>Browser</summary>
+        <div class="submenu">
+          <button class="menu-btn" data-view="browser">Browser Control</button>
         </div>
-        <div class="row">
-          <button id="startTg">Start</button>
-          <button id="stopTg">Stop</button>
-          <button id="tgRefresh">Refresh</button>
-        </div>
-        <div class="hint" id="tgStatus"></div>
-      </section>
+      </details>
 
-      <section class="card">
-        <h3>Operator</h3>
-        <div class="row">
-          <label class="hint" style="display:flex;align-items:center;gap:6px;">
-            <input type="checkbox" id="shellEnabled" />
-            shell enabled
-          </label>
-          <input id="maxIters" type="number" min="1" max="20" placeholder="iters" />
-          <button id="saveRuntime">Save</button>
+      <details>
+        <summary>Channels</summary>
+        <div class="submenu">
+          <button class="menu-btn" data-view="telegram">Telegram</button>
         </div>
-        <div class="row">
-          <input id="shellCmd" placeholder="shell command" />
-          <button id="runShell">Run</button>
+      </details>
+
+      <details>
+        <summary>Automation</summary>
+        <div class="submenu">
+          <button class="menu-btn" data-view="missions">Missions</button>
         </div>
-        <div class="row">
-          <input id="openTarget" placeholder="open target" />
-          <button id="openTargetBtn">Open</button>
-        </div>
-        <div class="row">
-          <input id="xdotoolCmd" placeholder="xdotool cmd" />
-          <button id="runXdotool">xdo</button>
-        </div>
-        <textarea id="pcOutput" placeholder="tool output..." readonly></textarea>
-        <div class="hint" id="runtimeStatus"></div>
-      </section>
+      </details>
     </aside>
 
-    <section class="main">
-      <header class="chat-header">
+    <main class="main">
+      <header class="header">
         <div>
-          <div class="chat-title">Agent Chat</div>
-          <div class="chat-sub">Messaging-style timeline</div>
+          <div class="title" id="viewTitle">Chat</div>
+          <div class="subtitle" id="viewSubtitle">Messaging timeline</div>
         </div>
-        <div class="chat-actions">
+        <div class="row">
           <button id="newChat">New Chat</button>
-          <div class="chat-sub" id="chatMeta">session</div>
+          <span class="pill" id="chatMeta">session</span>
         </div>
       </header>
 
-      <div class="messages" id="chat"></div>
+      <section class="center">
+        <div class="view active" id="view-chat">
+          <div class="chat-wrap">
+            <div class="messages" id="chat"></div>
+            <div class="composer">
+              <textarea id="message" placeholder="Type a message. Enter sends, Shift+Enter adds a new line"></textarea>
+              <button class="primary" id="send">Send</button>
+            </div>
+          </div>
+        </div>
 
-      <footer class="composer">
-        <input id="message" placeholder="Type a message..." />
-        <button class="primary" id="send">Send</button>
-      </footer>
-    </section>
+        <div class="view" id="view-model-routing">
+          <h3 class="section-title">Model Routing</h3>
+          <div class="grid two">
+            <div class="field">
+              <label>Primary Provider</label>
+              <select id="provider">
+                <option value="ollama">ollama</option>
+                <option value="nvidia">nvidia</option>
+                <option value="openrouter">openrouter</option>
+                <option value="generic">generic</option>
+              </select>
+            </div>
+            <div class="field">
+              <label>Available Models (ranked)</label>
+              <select id="modelList"></select>
+            </div>
+            <div class="field">
+              <label>Fallback Mode</label>
+              <select id="fallbackEnabled">
+                <option value="true">Enabled</option>
+                <option value="false">Disabled</option>
+              </select>
+            </div>
+            <div class="field">
+              <label>Fallback Profile</label>
+              <select id="fallbackProfile">
+                <option value="local_first">Local First</option>
+                <option value="cloud_first">Cloud First</option>
+                <option value="openrouter_first">OpenRouter First</option>
+                <option value="nvidia_first">NVIDIA First</option>
+              </select>
+            </div>
+          </div>
+          <div class="row" style="margin-top:10px;">
+            <button id="loadModels">Load Models</button>
+            <button class="primary" id="switchModel">Use Selected Model</button>
+            <button id="saveRouting">Save Routing</button>
+            <button id="importOpenclaw">Import OpenClaw Keys</button>
+          </div>
+          <div class="hint" id="modelCatalogStatus"></div>
+        </div>
+
+        <div class="view" id="view-provider-config">
+          <h3 class="section-title">Provider Config</h3>
+          <div class="grid two">
+            <div class="field">
+              <label>Ollama Base URL</label>
+              <select id="ollamaUrl">
+                <option value="http://127.0.0.1:11434">Local Ollama (11434)</option>
+                <option value="http://localhost:11434">Localhost Ollama</option>
+              </select>
+            </div>
+            <div class="field">
+              <label>OpenRouter Base URL</label>
+              <select id="openrouterUrl">
+                <option value="https://openrouter.ai/api/v1">OpenRouter API v1</option>
+              </select>
+            </div>
+            <div class="field">
+              <label>NVIDIA Base URL</label>
+              <select id="nvidiaUrl">
+                <option value="https://integrate.api.nvidia.com/v1">NVIDIA Integrate API v1</option>
+              </select>
+            </div>
+            <div class="field">
+              <label>Generic OpenAI-Compatible URL</label>
+              <select id="genericUrl">
+                <option value="">Disabled</option>
+                <option value="http://127.0.0.1:1234/v1">LM Studio local</option>
+                <option value="https://api.openai.com/v1">OpenAI API v1</option>
+              </select>
+            </div>
+            <div class="field">
+              <label>OpenRouter API Key (user value)</label>
+              <input id="openrouterKey" placeholder="sk-or-..." />
+            </div>
+            <div class="field">
+              <label>NVIDIA API Key (user value)</label>
+              <input id="nvidiaKey" placeholder="nvapi-..." />
+            </div>
+            <div class="field">
+              <label>Generic API Key (user value)</label>
+              <input id="genericKey" placeholder="provider key" />
+            </div>
+          </div>
+          <div class="row" style="margin-top:10px;">
+            <button class="primary" id="saveProviders">Save Provider Config</button>
+          </div>
+          <div class="hint" id="providerStatus"></div>
+        </div>
+
+        <div class="view" id="view-browser">
+          <h3 class="section-title">Browser Control</h3>
+          <div class="grid two">
+            <div class="field">
+              <label>CDP Endpoint Preset</label>
+              <select id="cdpPreset">
+                <option value="http://127.0.0.1:9222">Chrome Debug 9222</option>
+                <option value="http://127.0.0.1:9333">OpenUnum Debug 9333</option>
+              </select>
+            </div>
+          </div>
+          <div class="row" style="margin-top:10px;">
+            <button id="saveCdp">Save CDP</button>
+            <button id="launchBrowser">Launch Debug Browser</button>
+          </div>
+          <div class="hint" id="browserStatusLine"></div>
+
+          <hr style="border:none;border-top:1px solid var(--line);margin:14px 0;" />
+
+          <div class="grid two">
+            <div class="field">
+              <label>Navigate URL</label>
+              <input id="navUrl" placeholder="https://example.com" />
+            </div>
+            <div class="field">
+              <label>Search Query</label>
+              <input id="searchQ" placeholder="what to search" />
+            </div>
+          </div>
+          <div class="row" style="margin-top:10px;">
+            <button id="navBtn">Navigate</button>
+            <button id="searchBtn">Search</button>
+            <button id="extractBtn">Extract Page Text</button>
+          </div>
+        </div>
+
+        <div class="view" id="view-telegram">
+          <h3 class="section-title">Telegram Channel</h3>
+          <div class="grid two">
+            <div class="field">
+              <label>Bot Token (user value)</label>
+              <input id="tgToken" placeholder="123456:ABC..." />
+            </div>
+            <div class="field">
+              <label>Channel State</label>
+              <select id="telegramEnabled">
+                <option value="true">Enabled</option>
+                <option value="false">Disabled</option>
+              </select>
+            </div>
+          </div>
+          <div class="row" style="margin-top:10px;">
+            <button id="saveToken">Save Telegram Config</button>
+            <button id="startTg">Start Polling</button>
+            <button id="stopTg">Stop Polling</button>
+            <button id="tgRefresh">Refresh</button>
+          </div>
+          <div class="hint" id="tgStatus"></div>
+        </div>
+
+        <div class="view" id="view-missions">
+          <h3 class="section-title">Mission Runner</h3>
+          <div class="grid two">
+            <div class="field">
+              <label>Mission Goal</label>
+              <input id="missionGoal" placeholder="goal for autonomous execution" />
+            </div>
+            <div class="field">
+              <label>Max Steps</label>
+              <select id="missionSteps">
+                <option>3</option>
+                <option selected>6</option>
+                <option>10</option>
+                <option>15</option>
+                <option>20</option>
+              </select>
+            </div>
+            <div class="field">
+              <label>Step Interval (ms)</label>
+              <select id="missionInterval">
+                <option value="0">0 (no delay)</option>
+                <option value="200">200</option>
+                <option value="400" selected>400</option>
+                <option value="1000">1000</option>
+                <option value="2000">2000</option>
+              </select>
+            </div>
+          </div>
+          <div class="row" style="margin-top:10px;">
+            <button class="primary" id="startMission">Start Mission</button>
+            <button id="stopMission">Stop Mission</button>
+            <button id="refreshMission">Refresh Status</button>
+          </div>
+          <div class="hint" id="missionStatus">idle</div>
+        </div>
+
+        <div class="view" id="view-operator">
+          <h3 class="section-title">Operator Runtime & Tools</h3>
+          <div class="grid three">
+            <div class="field">
+              <label>Autonomy Mode</label>
+              <select id="autonomyMode">
+                <option value="standard">Standard</option>
+                <option value="relentless">Relentless</option>
+              </select>
+            </div>
+            <div class="field">
+              <label>Shell Access</label>
+              <select id="shellEnabled">
+                <option value="true">Enabled</option>
+                <option value="false">Disabled</option>
+              </select>
+            </div>
+            <div class="field">
+              <label>Max Tool Iterations</label>
+              <select id="maxIters">
+                <option>4</option>
+                <option>6</option>
+                <option selected>8</option>
+                <option>10</option>
+                <option>12</option>
+                <option>16</option>
+                <option>20</option>
+              </select>
+            </div>
+          </div>
+          <div class="row" style="margin-top:10px;">
+            <button class="primary" id="applyAutonomyMode">Apply Mode</button>
+            <button id="saveRuntime">Save Runtime</button>
+          </div>
+
+          <hr style="border:none;border-top:1px solid var(--line);margin:14px 0;" />
+
+          <div class="grid two">
+            <div class="field">
+              <label>Shell Command</label>
+              <input id="shellCmd" placeholder="ls -la" />
+            </div>
+            <div class="field">
+              <label>Open Target</label>
+              <input id="openTarget" placeholder="/home/corp-unum" />
+            </div>
+            <div class="field">
+              <label>xdotool Command</label>
+              <input id="xdotoolCmd" placeholder="getactivewindow" />
+            </div>
+          </div>
+          <div class="row" style="margin-top:10px;">
+            <button id="runShell">Run Shell</button>
+            <button id="openTargetBtn">Open Target</button>
+            <button id="runXdotool">Run xdotool</button>
+          </div>
+          <textarea id="pcOutput" placeholder="tool output..." readonly style="margin-top:10px; min-height:220px;"></textarea>
+          <div class="hint" id="runtimeStatus"></div>
+        </div>
+      </section>
+    </main>
   </div>
 
   <script>
+    const VIEW_META = {
+      chat: ['Chat', 'Messaging timeline'],
+      'operator': ['Operator Tools', 'Runtime and desktop/system tool control'],
+      'model-routing': ['Model Routing', 'Primary model selection and fallback strategy'],
+      'provider-config': ['Provider Config', 'Provider endpoints and keys'],
+      'browser': ['Browser Control', 'CDP and browser actions'],
+      'telegram': ['Telegram', 'Bot connectivity and polling control'],
+      'missions': ['Missions', 'Autonomous execution loops']
+    };
+
+    const FALLBACK_PROFILES = {
+      local_first: ['ollama', 'nvidia', 'openrouter', 'generic'],
+      cloud_first: ['nvidia', 'openrouter', 'ollama', 'generic'],
+      openrouter_first: ['openrouter', 'nvidia', 'ollama', 'generic'],
+      nvidia_first: ['nvidia', 'openrouter', 'ollama', 'generic']
+    };
+
     let sessionId = localStorage.getItem('openunum_session') || crypto.randomUUID();
+    let activeMissionId = localStorage.getItem('openunum_mission') || '';
     localStorage.setItem('openunum_session', sessionId);
 
     const q = (id) => document.getElementById(id);
+    const qa = (sel) => Array.from(document.querySelectorAll(sel));
+
     const topStatus = q('topStatus');
     const chat = q('chat');
     q('chatMeta').textContent = sessionId;
 
     const jget = async (path) => (await fetch(path)).json();
     const jpost = async (path, body) =>
-      (await fetch(path, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body || {}) })).json();
+      (await fetch(path, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body || {})
+      })).json();
+
+    function showView(viewId) {
+      qa('.menu-btn').forEach((b) => b.classList.toggle('active', b.dataset.view === viewId));
+      qa('.view').forEach((v) => v.classList.toggle('active', v.id === `view-${viewId}`));
+      const [title, subtitle] = VIEW_META[viewId] || ['OpenUnum', ''];
+      q('viewTitle').textContent = title;
+      q('viewSubtitle').textContent = subtitle;
+    }
 
     function pushMsg(role, text, html) {
       const wrap = document.createElement('div');
@@ -293,6 +630,85 @@
       wrap.appendChild(bubble);
       chat.appendChild(wrap);
       chat.scrollTop = chat.scrollHeight;
+      return { wrap, bubble };
+    }
+
+    function appendTypingBubble() {
+      const node = pushMsg('assistant', '');
+      node.bubble.innerHTML = `<div class="typing" aria-label="Agent is working">
+        <span class="dot"></span><span class="dot"></span><span class="dot"></span>
+      </div>`;
+      return node;
+    }
+
+    function renderTrace(trace) {
+      if (!trace || (!Array.isArray(trace.iterations) && !trace.failures)) return '';
+      const details = document.createElement('details');
+      details.className = 'trace';
+      const summary = document.createElement('summary');
+      const iterCount = Array.isArray(trace.iterations) ? trace.iterations.length : 0;
+      summary.textContent = `Execution trace (${iterCount} steps)`;
+      details.appendChild(summary);
+
+      const body = document.createElement('div');
+      body.className = 'trace-body';
+
+      const meta = document.createElement('div');
+      meta.className = 'trace-line';
+      meta.textContent = `provider/model: ${trace.provider || '-'} / ${trace.model || '-'}`;
+      body.appendChild(meta);
+
+      for (const it of (trace.iterations || [])) {
+        const step = document.createElement('div');
+        step.className = 'trace-step';
+        const title = document.createElement('h5');
+        title.textContent = `Step ${it.step}`;
+        step.appendChild(title);
+
+        if (it.assistantText) {
+          const line = document.createElement('div');
+          line.className = 'trace-line';
+          line.textContent = `assistant: ${it.assistantText}`;
+          step.appendChild(line);
+        }
+        for (const tc of (it.toolCalls || [])) {
+          const l1 = document.createElement('div');
+          l1.className = 'trace-line';
+          l1.textContent = `tool: ${tc.name} args=${JSON.stringify(tc.args || {})}`;
+          step.appendChild(l1);
+          const l2 = document.createElement('div');
+          l2.className = 'trace-line';
+          l2.textContent = `result: ${JSON.stringify(tc.result || {})}`;
+          step.appendChild(l2);
+        }
+        body.appendChild(step);
+      }
+
+      if (Array.isArray(trace.failures) && trace.failures.length > 0) {
+        const fail = document.createElement('div');
+        fail.className = 'trace-step';
+        const title = document.createElement('h5');
+        title.textContent = 'Provider failures';
+        fail.appendChild(title);
+        for (const f of trace.failures) {
+          const l = document.createElement('div');
+          l.className = 'trace-line';
+          l.textContent = f;
+          fail.appendChild(l);
+        }
+        body.appendChild(fail);
+      }
+
+      details.appendChild(body);
+      return details.outerHTML;
+    }
+
+    async function loadSession() {
+      chat.innerHTML = '';
+      const out = await jget(`/api/sessions/${encodeURIComponent(sessionId)}`);
+      for (const m of out.messages || []) {
+        pushMsg(m.role === 'assistant' ? 'assistant' : 'user', m.content);
+      }
     }
 
     function resetSession() {
@@ -302,125 +718,240 @@
       chat.innerHTML = '';
     }
 
+    function setSelectByValueOrFirst(id, value) {
+      const el = q(id);
+      const options = Array.from(el.options).map((o) => o.value);
+      el.value = options.includes(value) ? value : options[0] || '';
+    }
+
+    function profileFromProviders(list = []) {
+      const key = list.join(',');
+      if (key === FALLBACK_PROFILES.local_first.join(',')) return 'local_first';
+      if (key === FALLBACK_PROFILES.cloud_first.join(',')) return 'cloud_first';
+      if (key === FALLBACK_PROFILES.openrouter_first.join(',')) return 'openrouter_first';
+      if (key === FALLBACK_PROFILES.nvidia_first.join(',')) return 'nvidia_first';
+      return 'local_first';
+    }
+
     async function refreshModel() {
       const m = await jget('/api/model/current');
-      q('provider').value = m.provider;
-      q('model').value = m.model;
-      topStatus.textContent = `model=${m.provider}/${m.model}`;
+      setSelectByValueOrFirst('provider', m.provider);
+      topStatus.textContent = `cfg=${m.provider}/${m.model} active=${m.activeProvider}/${m.activeModel}`;
+      await loadModelsForProvider(m.provider, m.model);
+    }
+
+    async function loadModelsForProvider(provider, currentModel = '') {
+      try {
+        const out = await jget(`/api/models?provider=${encodeURIComponent(provider)}`);
+        const list = q('modelList');
+        list.innerHTML = '';
+        const models = out.models || [];
+        for (const m of models) {
+          const opt = document.createElement('option');
+          opt.value = m.id;
+          const params = (m.paramsB || m.paramsB === 0) ? `${m.paramsB.toFixed(1)}B` : '?';
+          const ctx = m.contextWindow || '?';
+          opt.textContent = `${m.id} | score=${m.score?.toFixed?.(1) ?? '?'} | ${params} | ctx=${ctx}`;
+          list.appendChild(opt);
+        }
+        if (currentModel && models.some((m) => m.id === currentModel)) list.value = currentModel;
+        q('modelCatalogStatus').textContent = `loaded ${models.length} ${provider} models`;
+      } catch (error) {
+        q('modelCatalogStatus').textContent = `load failed: ${String(error.message || error)}`;
+      }
     }
 
     async function refreshRuntime() {
       const c = await jget('/api/config');
-      q('shellEnabled').checked = Boolean(c.runtime?.shellEnabled);
-      q('maxIters').value = c.runtime?.maxToolIterations ?? 8;
-      q('runtimeStatus').textContent = `shell=${c.runtime?.shellEnabled} maxIters=${c.runtime?.maxToolIterations}`;
+      setSelectByValueOrFirst('autonomyMode', c.runtime?.autonomyMode || 'standard');
+      setSelectByValueOrFirst('shellEnabled', String(Boolean(c.runtime?.shellEnabled)));
+      setSelectByValueOrFirst('maxIters', String(c.runtime?.maxToolIterations ?? 8));
+      setSelectByValueOrFirst('fallbackEnabled', String(c.model?.routing?.fallbackEnabled !== false));
+      setSelectByValueOrFirst('fallbackProfile', profileFromProviders(c.model?.routing?.fallbackProviders || []));
+      q('runtimeStatus').textContent =
+        `mode=${c.runtime?.autonomyMode || 'standard'} shell=${c.runtime?.shellEnabled} maxIters=${c.runtime?.maxToolIterations}`;
     }
 
-    async function refreshTelegram() {
-      const [cfg, st] = await Promise.all([jget('/api/telegram/config'), jget('/api/telegram/status')]);
-      q('tgStatus').textContent = `token=${cfg.hasToken ? 'set' : 'missing'} enabled=${cfg.enabled} running=${st.running}`;
+    async function refreshProviderConfig() {
+      const c = await jget('/api/providers/config');
+      setSelectByValueOrFirst('ollamaUrl', c.ollamaBaseUrl || 'http://127.0.0.1:11434');
+      setSelectByValueOrFirst('openrouterUrl', c.openrouterBaseUrl || 'https://openrouter.ai/api/v1');
+      setSelectByValueOrFirst('nvidiaUrl', c.nvidiaBaseUrl || 'https://integrate.api.nvidia.com/v1');
+      setSelectByValueOrFirst('genericUrl', c.genericBaseUrl || '');
+      q('providerStatus').textContent = `keys: openrouter=${c.hasOpenrouterApiKey} nvidia=${c.hasNvidiaApiKey} generic=${c.hasGenericApiKey}`;
     }
 
     async function refreshBrowserConfig() {
       const c = await jget('/api/browser/config');
-      q('cdpUrl').value = c.cdpUrl || 'http://127.0.0.1:9222';
+      setSelectByValueOrFirst('cdpPreset', c.cdpUrl || 'http://127.0.0.1:9222');
       const st = await jget('/api/browser/status');
       q('browserStatusLine').textContent = st.ok ? 'connected' : `${st.error}${st.hint ? ' | ' + st.hint : ''}`;
     }
 
+    async function refreshTelegram() {
+      const [cfg, st] = await Promise.all([jget('/api/telegram/config'), jget('/api/telegram/status')]);
+      setSelectByValueOrFirst('telegramEnabled', String(Boolean(cfg.enabled)));
+      q('tgStatus').textContent = `token=${cfg.hasToken ? 'set' : 'missing'} enabled=${cfg.enabled} running=${st.running}`;
+    }
+
+    async function refreshMission() {
+      if (!activeMissionId) {
+        q('missionStatus').textContent = 'idle';
+        return;
+      }
+      const out = await jget(`/api/missions/status?id=${encodeURIComponent(activeMissionId)}`);
+      if (out.error) {
+        q('missionStatus').textContent = out.error;
+        return;
+      }
+      const m = out.mission;
+      q('missionStatus').textContent = `${m.status} step=${m.step}/${m.maxSteps}`;
+      const latest = m.log?.[m.log.length - 1];
+      if (latest) q('pcOutput').value = latest.reply;
+      if (m.status !== 'running' && m.status !== 'stopping') {
+        localStorage.removeItem('openunum_mission');
+        activeMissionId = '';
+      }
+    }
+
+    qa('.menu-btn').forEach((btn) => {
+      btn.addEventListener('click', () => showView(btn.dataset.view));
+    });
+
+    q('newChat').onclick = resetSession;
+
+    q('provider').onchange = async () => {
+      await loadModelsForProvider(q('provider').value);
+    };
+
+    q('loadModels').onclick = async () => {
+      await loadModelsForProvider(q('provider').value);
+    };
+
     q('switchModel').onclick = async () => {
-      const out = await jpost('/api/model/switch', { provider: q('provider').value, model: q('model').value });
-      topStatus.textContent = `model=${out.provider}/${out.model}`;
+      const model = q('modelList').value;
+      if (!model) return;
+      const out = await jpost('/api/model/switch', { provider: q('provider').value, model });
+      topStatus.textContent = `cfg=${out.provider}/${out.model} active=${out.activeProvider}/${out.activeModel}`;
+    };
+
+    q('saveRouting').onclick = async () => {
+      const enabled = q('fallbackEnabled').value === 'true';
+      const profile = q('fallbackProfile').value;
+      const out = await jpost('/api/config', {
+        model: {
+          routing: {
+            fallbackEnabled: enabled,
+            fallbackProviders: FALLBACK_PROFILES[profile] || FALLBACK_PROFILES.local_first
+          }
+        },
+        runtime: {
+          shellEnabled: q('shellEnabled').value === 'true',
+          maxToolIterations: Number(q('maxIters').value || 8)
+        }
+      });
+      q('modelCatalogStatus').textContent = `routing saved | shell=${out.runtime?.shellEnabled} maxIters=${out.runtime?.maxToolIterations}`;
     };
 
     q('importOpenclaw').onclick = async () => {
       const out = await jpost('/api/providers/import-openclaw', {});
-      q('modelCatalogStatus').textContent =
-        `imported: openrouter=${out.imported?.openrouterApiKey} nvidia=${out.imported?.nvidiaApiKey}`;
+      q('modelCatalogStatus').textContent = `imported keys: openrouter=${out.imported?.openrouterApiKey} nvidia=${out.imported?.nvidiaApiKey}`;
+      await refreshProviderConfig();
     };
 
-    q('loadModels').onclick = async () => {
-      const provider = q('provider').value;
-      const out = await jget(`/api/models?provider=${encodeURIComponent(provider)}`);
-      const list = q('modelList');
-      list.innerHTML = '';
-      const models = out.models || [];
-      for (const m of models) {
-        const opt = document.createElement('option');
-        opt.value = m.id;
-        const params = (m.paramsB || m.paramsB === 0) ? `${m.paramsB.toFixed(1)}B` : '?';
-        const ctx = m.contextWindow || '?';
-        opt.textContent = `${m.id} | score=${m.score?.toFixed?.(1) ?? '?'} | ${params} | ctx=${ctx}`;
-        list.appendChild(opt);
-      }
-      q('modelCatalogStatus').textContent = `loaded ${models.length} ${provider} models`;
-      if (models[0]) q('model').value = models[0].id;
+    q('saveProviders').onclick = async () => {
+      await jpost('/api/providers/config', {
+        ollamaBaseUrl: q('ollamaUrl').value,
+        openrouterBaseUrl: q('openrouterUrl').value,
+        nvidiaBaseUrl: q('nvidiaUrl').value,
+        genericBaseUrl: q('genericUrl').value,
+        openrouterApiKey: q('openrouterKey').value.trim(),
+        nvidiaApiKey: q('nvidiaKey').value.trim(),
+        genericApiKey: q('genericKey').value.trim()
+      });
+      q('openrouterKey').value = '';
+      q('nvidiaKey').value = '';
+      q('genericKey').value = '';
+      q('providerStatus').textContent = 'provider config saved';
+      await refreshProviderConfig();
     };
-
-    q('useListedModel').onclick = async () => {
-      const selected = q('modelList').value;
-      if (!selected) return;
-      q('model').value = selected;
-      const provider = q('provider').value;
-      const out = await jpost('/api/model/switch', { provider, model: selected });
-      topStatus.textContent = `model=${out.provider}/${out.model}`;
-    };
-
-    q('send').onclick = async () => {
-      const message = q('message').value.trim();
-      if (!message) return;
-      q('message').value = '';
-      pushMsg('user', message);
-      const out = await jpost('/api/chat', { sessionId, message });
-      const rendered = out.replyHtml ? out.replyHtml : out.reply;
-      pushMsg('assistant', out.reply || '(no reply)', rendered);
-      topStatus.textContent = `model=${out.model.provider}/${out.model.model}`;
-    };
-    q('message').addEventListener('keydown', (e) => { if (e.key === 'Enter') q('send').click(); });
-    q('newChat').onclick = resetSession;
-
-    q('saveToken').onclick = async () => {
-      await jpost('/api/telegram/config', { botToken: q('tgToken').value.trim(), enabled: true });
-      await refreshTelegram();
-    };
-    q('startTg').onclick = async () => { await jpost('/api/telegram/start'); await refreshTelegram(); };
-    q('stopTg').onclick = async () => { await jpost('/api/telegram/stop'); await refreshTelegram(); };
-    q('tgRefresh').onclick = refreshTelegram;
 
     q('saveRuntime').onclick = async () => {
       const out = await jpost('/api/config', {
-        runtime: { shellEnabled: q('shellEnabled').checked, maxToolIterations: Number(q('maxIters').value || 8) }
+        runtime: {
+          autonomyMode: q('autonomyMode').value,
+          shellEnabled: q('shellEnabled').value === 'true',
+          maxToolIterations: Number(q('maxIters').value || 8)
+        },
+        model: {
+          routing: {
+            fallbackEnabled: q('fallbackEnabled').value === 'true',
+            fallbackProviders: FALLBACK_PROFILES[q('fallbackProfile').value] || FALLBACK_PROFILES.local_first
+          }
+        }
       });
-      q('runtimeStatus').textContent = `saved shell=${out.runtime.shellEnabled} maxIters=${out.runtime.maxToolIterations}`;
+      q('runtimeStatus').textContent =
+        `saved mode=${out.runtime.autonomyMode || q('autonomyMode').value} shell=${out.runtime.shellEnabled} maxIters=${out.runtime.maxToolIterations}`;
+    };
+
+    q('applyAutonomyMode').onclick = async () => {
+      const out = await jpost('/api/autonomy/mode', { mode: q('autonomyMode').value });
+      q('runtimeStatus').textContent =
+        `applied mode=${out.mode} shell=${out.runtime?.shellEnabled} maxIters=${out.runtime?.maxToolIterations}`;
+      await refreshRuntime();
+      await refreshModel();
     };
 
     q('saveCdp').onclick = async () => {
-      const out = await jpost('/api/browser/config', { cdpUrl: q('cdpUrl').value.trim() });
+      const out = await jpost('/api/browser/config', { cdpUrl: q('cdpPreset').value });
       q('browserStatusLine').textContent = `saved ${out.cdpUrl}`;
       await refreshBrowserConfig();
     };
 
     q('launchBrowser').onclick = async () => {
       const out = await jpost('/api/browser/launch', {});
-      q('browserStatusLine').textContent = out.ok ? `launched pid=${out.pid} at ${out.cdpUrl}` : `launch failed`;
-      if (out.cdpUrl) q('cdpUrl').value = out.cdpUrl;
+      q('browserStatusLine').textContent = out.ok ? `launched pid=${out.pid} at ${out.cdpUrl}` : 'launch failed';
+      if (out.cdpUrl) setSelectByValueOrFirst('cdpPreset', out.cdpUrl);
       await refreshBrowserConfig();
     };
 
     q('navBtn').onclick = async () => {
       const out = await jpost('/api/browser/navigate', { url: q('navUrl').value.trim() });
       q('pcOutput').value = JSON.stringify(out, null, 2);
+      showView('operator');
     };
 
     q('searchBtn').onclick = async () => {
       const out = await jpost('/api/browser/search', { query: q('searchQ').value.trim() });
       q('pcOutput').value = JSON.stringify(out, null, 2);
+      showView('operator');
     };
 
     q('extractBtn').onclick = async () => {
       const out = await jpost('/api/browser/extract', { selector: 'body' });
       q('pcOutput').value = out?.text || JSON.stringify(out, null, 2);
+      showView('operator');
     };
+
+    q('saveToken').onclick = async () => {
+      await jpost('/api/telegram/config', {
+        botToken: q('tgToken').value.trim(),
+        enabled: q('telegramEnabled').value === 'true'
+      });
+      await refreshTelegram();
+    };
+
+    q('startTg').onclick = async () => {
+      await jpost('/api/telegram/start');
+      await refreshTelegram();
+    };
+
+    q('stopTg').onclick = async () => {
+      await jpost('/api/telegram/stop');
+      await refreshTelegram();
+    };
+
+    q('tgRefresh').onclick = refreshTelegram;
 
     q('runShell').onclick = async () => {
       const out = await jpost('/api/tool/run', { name: 'shell_run', args: { cmd: q('shellCmd').value } });
@@ -437,11 +968,67 @@
       q('pcOutput').value = JSON.stringify(out.result, null, 2);
     };
 
+    q('startMission').onclick = async () => {
+      const goal = q('missionGoal').value.trim();
+      if (!goal) return;
+      const out = await jpost('/api/missions/start', {
+        goal,
+        maxSteps: Number(q('missionSteps').value || 6),
+        intervalMs: Number(q('missionInterval').value || 400)
+      });
+      activeMissionId = out.id;
+      localStorage.setItem('openunum_mission', activeMissionId);
+      q('missionStatus').textContent = `running id=${activeMissionId}`;
+      await refreshMission();
+    };
+
+    q('stopMission').onclick = async () => {
+      if (!activeMissionId) return;
+      await jpost('/api/missions/stop', { id: activeMissionId });
+      await refreshMission();
+    };
+
+    q('refreshMission').onclick = refreshMission;
+
+    q('send').onclick = async () => {
+      const message = q('message').value.trim();
+      if (!message) return;
+      q('message').value = '';
+      pushMsg('user', message);
+      const typing = appendTypingBubble();
+      let out;
+      try {
+        out = await jpost('/api/chat', { sessionId, message });
+      } catch (error) {
+        typing.bubble.textContent = `request failed: ${String(error.message || error)}`;
+        return;
+      }
+      const traceHtml = renderTrace(out.trace);
+      const assistantHtml = `${out.replyHtml || out.reply || '(no reply)'}${traceHtml}`;
+      typing.bubble.innerHTML = assistantHtml;
+      topStatus.textContent = `cfg=${out.model.provider}/${out.model.model} active=${out.model.activeProvider}/${out.model.activeModel}`;
+    };
+
+    q('message').addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        q('send').click();
+      }
+    });
+
+    setInterval(() => {
+      refreshMission().catch(() => {});
+    }, 3000);
+
     (async () => {
+      showView('chat');
       await refreshModel();
       await refreshRuntime();
-      await refreshTelegram();
+      await refreshProviderConfig();
       await refreshBrowserConfig();
+      await refreshTelegram();
+      await loadSession();
+      await refreshMission();
     })();
   </script>
 </body>
