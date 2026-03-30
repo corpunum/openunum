@@ -22,6 +22,8 @@ Returns:
 - `runtime.maxToolIterations: number`
 - `runtime.executorRetryAttempts: number`
 - `runtime.executorRetryBackoffMs: number`
+- `runtime.providerRequestTimeoutMs: number`
+- `runtime.agentTurnTimeoutMs: number`
 - `runtime.autonomyMode: string`
 - `runtime.missionDefaultContinueUntilDone: boolean`
 - `runtime.missionDefaultHardStepCap: number`
@@ -63,17 +65,32 @@ Switch payload:
 ## Chat
 
 - `POST /api/chat`
+- `GET /api/chat/pending?sessionId=...`
 
 Payload:
 ```json
 {"sessionId":"abc","message":"do X"}
 ```
 
-Response includes:
+`POST /api/chat` response includes:
 - `reply`
 - `replyHtml`
 - `model`
 - `trace` (iterations/tool calls/failures)
+
+Long-running behavior:
+- When a turn is still running, `POST /api/chat` returns `202` with:
+```json
+{"ok":true,"pending":true,"sessionId":"abc","startedAt":"...","note":"chat_still_running"}
+```
+- `GET /api/chat/pending?sessionId=abc` returns:
+```json
+{"ok":true,"pending":true,"sessionId":"abc","startedAt":"..."}
+```
+or
+```json
+{"ok":true,"pending":false,"sessionId":"abc"}
+```
 
 ## Direct Tool Run
 

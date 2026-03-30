@@ -26,6 +26,7 @@ let browser = new CDPBrowser(config.browser?.cdpUrl);
 let telegramLoopRunning = false;
 let telegramLoopStopRequested = false;
 let telegramLoopPromise = null;
+const pendingChats = new Map();
 
 function applyAutonomyMode(mode) {
   const m = String(mode || 'standard').toLowerCase();
@@ -174,6 +175,20 @@ function sendJson(res, code, obj) {
   res.end(JSON.stringify(obj));
 }
 
+async function withTimeout(promise, timeoutMs, timeoutMessage = 'operation_timeout') {
+  let timer;
+  try {
+    return await Promise.race([
+      promise,
+      new Promise((_, reject) => {
+        timer = setTimeout(() => reject(new Error(timeoutMessage)), timeoutMs);
+      })
+    ]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 async function parseBody(req) {
   return new Promise((resolve, reject) => {
     const chunks = [];
@@ -188,6 +203,25 @@ async function parseBody(req) {
     });
     req.on('error', reject);
   });
+}
+
+function getOrStartChat(sessionId, message) {
+  const sid = String(sessionId || '').trim();
+  if (!sid) throw new Error('sessionId is required');
+  const existing = pendingChats.get(sid);
+  if (existing) return existing;
+  const startedAt = new Date().toISOString();
+  const promise = agent.chat({ message, sessionId: sid })
+    .then((out) => {
+      saveConfig(config);
+      return out;
+    })
+    .finally(() => {
+      pendingChats.delete(sid);
+    });
+  const entry = { sessionId: sid, message, startedAt, promise };
+  pendingChats.set(sid, entry);
+  return entry;
 }
 
 const server = http.createServer(async (req, res) => {
@@ -339,9 +373,51 @@ const server = http.createServer(async (req, res) => {
 
     if (req.method === 'POST' && url.pathname === '/api/chat') {
       const body = await parseBody(req);
-      const out = await agent.chat({ message: body.message, sessionId: body.sessionId });
-      saveConfig(config);
-      return sendJson(res, 200, { ...out, replyHtml: renderReplyHtml(out.reply) });
+      const sessionId = String(body.sessionId || '').trim();
+      const message = String(body.message || '').trim();
+      if (!sessionId) return sendJson(res, 400, { error: 'sessionId is required' });
+      if (!message) return sendJson(res, 400, { error: 'message is required' });
+
+      const existing = pendingChats.get(sessionId);
+      if (existing) {
+        return sendJson(res, 202, {
+          ok: true,
+          pending: true,
+          sessionId,
+          startedAt: existing.startedAt,
+          note: 'chat_already_running_for_session'
+        });
+      }
+
+      const entry = getOrStartChat(sessionId, message);
+      try {
+        const out = await withTimeout(entry.promise, 9 * 60 * 1000, 'chat_timeout');
+        return sendJson(res, 200, { ...out, replyHtml: renderReplyHtml(out.reply) });
+      } catch (error) {
+        if (String(error.message || error) === 'chat_timeout') {
+          return sendJson(res, 202, {
+            ok: true,
+            pending: true,
+            sessionId,
+            startedAt: entry.startedAt,
+            note: 'chat_still_running'
+          });
+        }
+        throw error;
+      }
+    }
+
+    if (req.method === 'GET' && url.pathname === '/api/chat/pending') {
+      const sessionId = String(url.searchParams.get('sessionId') || '').trim();
+      if (!sessionId) return sendJson(res, 400, { error: 'sessionId is required' });
+      const existing = pendingChats.get(sessionId);
+      if (!existing) return sendJson(res, 200, { ok: true, pending: false, sessionId });
+      return sendJson(res, 200, {
+        ok: true,
+        pending: true,
+        sessionId,
+        startedAt: existing.startedAt
+      });
     }
 
     if (req.method === 'POST' && url.pathname === '/api/tool/run') {
@@ -351,7 +427,7 @@ const server = http.createServer(async (req, res) => {
     }
 
     if (req.method === 'GET' && url.pathname.startsWith('/api/sessions/')) {
-      const sessionId = url.pathname.split('/').pop();
+      const sessionId = decodeURIComponent(url.pathname.split('/').pop() || '');
       const msgs = memory.getMessages(sessionId || '', 100);
       return sendJson(res, 200, { sessionId, messages: msgs });
     }

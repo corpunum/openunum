@@ -11,6 +11,8 @@ Current state (2026-03-30):
 - Mission runner with retry and proof-based completion
 - Persistent self-learning memory from tool outcomes and strategy outcomes
 - Autonomy mode presets (`standard`, `relentless`)
+- Pending chat handling (`/api/chat` + `/api/chat/pending`) to avoid "stuck loading"
+- Local session history persistence in SQLite until user clicks `New Chat`
 
 ## Fast Start
 

@@ -117,6 +117,8 @@ export class OpenUnumAgent {
     };
     const runtimeProvider = buildProvider(attemptConfig);
     const maxIters = this.config.runtime?.maxToolIterations ?? 4;
+    const turnBudgetMs = this.config.runtime?.agentTurnTimeoutMs ?? 420000;
+    const turnStartedAt = Date.now();
     let finalText = '';
     let toolRuns = 0;
     let lastToolResult = null;
@@ -129,7 +131,18 @@ export class OpenUnumAgent {
     };
 
     for (let i = 0; i < maxIters; i += 1) {
-      const out = await runtimeProvider.chat({ messages, tools: this.toolRuntime.toolSchemas() });
+      const elapsed = Date.now() - turnStartedAt;
+      const remainingMs = turnBudgetMs - elapsed;
+      if (remainingMs <= 0) {
+        trace.timedOut = true;
+        trace.timeoutMs = turnBudgetMs;
+        break;
+      }
+      const out = await runtimeProvider.chat({
+        messages,
+        tools: this.toolRuntime.toolSchemas(),
+        timeoutMs: remainingMs
+      });
       const iter = {
         step: i + 1,
         toolCalls: [],
@@ -195,6 +208,16 @@ export class OpenUnumAgent {
       } catch {
         // ignore and fallback to synthesized summary below
       }
+    }
+
+    if (!finalText && trace.timedOut) {
+      finalText = [
+        `Turn timed out after ${trace.timeoutMs}ms before the model produced a final response.`,
+        toolRuns > 0
+          ? `Tool actions executed so far: ${toolRuns}. Open execution trace for the latest results.`
+          : 'No successful tool output was recorded before timeout.',
+        'Retry with a narrower prompt, fewer steps, or a faster model.'
+      ].join('\n');
     }
 
     if (!finalText && toolRuns > 0) {

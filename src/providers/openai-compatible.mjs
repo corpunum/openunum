@@ -1,25 +1,42 @@
 export class OpenAICompatibleProvider {
-  constructor({ baseUrl, apiKey, model }) {
+  constructor({ baseUrl, apiKey, model, timeoutMs = 120000 }) {
     this.baseUrl = baseUrl;
     this.apiKey = apiKey;
     this.model = model;
+    this.timeoutMs = Number.isFinite(timeoutMs) ? Number(timeoutMs) : 120000;
   }
 
-  async chat({ messages, tools = [] }) {
+  async chat({ messages, tools = [], timeoutMs }) {
+    const effectiveTimeout = Number.isFinite(timeoutMs)
+      ? Math.max(1000, Math.min(Number(timeoutMs), this.timeoutMs))
+      : this.timeoutMs;
     const body = {
       model: this.model,
       messages,
       temperature: 0.2,
       tools: tools.length > 0 ? tools : undefined
     };
-    const res = await fetch(`${this.baseUrl}/chat/completions`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: this.apiKey ? `Bearer ${this.apiKey}` : ''
-      },
-      body: JSON.stringify(body)
-    });
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(new Error('provider_timeout')), effectiveTimeout);
+    let res;
+    try {
+      res = await fetch(`${this.baseUrl}/chat/completions`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: this.apiKey ? `Bearer ${this.apiKey}` : ''
+        },
+        body: JSON.stringify(body),
+        signal: controller.signal
+      });
+    } catch (error) {
+      if (error?.name === 'AbortError') {
+        throw new Error(`OpenAI-compatible provider timeout after ${effectiveTimeout}ms`);
+      }
+      throw error;
+    } finally {
+      clearTimeout(timer);
+    }
     if (!res.ok) {
       const text = await res.text();
       throw new Error(`OpenAI-compatible provider failed: ${res.status} ${text}`);

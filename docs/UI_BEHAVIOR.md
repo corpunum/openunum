@@ -37,6 +37,8 @@ User-defined free text remains for:
 - assistant bubble
 - animated typing bubble while request is in-flight
 - expandable execution trace (`details/summary`)
+- duplicate-send guard while one request is active
+- pending-run polling: UI continues waiting and resolves from saved session messages
 
 Trace panel includes:
 - provider/model
@@ -55,6 +57,10 @@ Trace panel includes:
 Local browser storage keys:
 - `openunum_session`
 - `openunum_mission`
+
+Persistence behavior:
+- chat/session history is stored locally in SQLite on server side (`~/.openunum/openunum.db`)
+- history remains available until user explicitly starts a new session via `New Chat`
 
 ## 6. Initialization Sequence
 

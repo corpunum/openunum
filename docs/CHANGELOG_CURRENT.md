@@ -20,6 +20,14 @@ Date: 2026-03-30
    - `strategy_outcomes`
 9. ExecutorDaemon added for retry/backoff command/tool execution.
 10. Direct download capability via `http_download` tool.
+11. Chat reliability hardening:
+   - UI request timeout + robust spinner cleanup
+   - server pending-chat lifecycle (`/api/chat` 202 pending)
+   - pending poll endpoint (`GET /api/chat/pending`)
+   - session-route decode fix for history lookup
+12. Runtime timeout controls:
+   - `runtime.providerRequestTimeoutMs`
+   - `runtime.agentTurnTimeoutMs`
 
 ## Stability/Validation
 

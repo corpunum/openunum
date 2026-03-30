@@ -606,12 +606,34 @@
     q('chatMeta').textContent = sessionId;
 
     const jget = async (path) => (await fetch(path)).json();
-    const jpost = async (path, body) =>
-      (await fetch(path, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body || {})
-      })).json();
+    const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+    async function jpost(path, body, opts = {}) {
+      const timeoutMs = Number.isFinite(opts.timeoutMs) ? Number(opts.timeoutMs) : 30000;
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(new Error('request_timeout')), timeoutMs);
+      try {
+        const res = await fetch(path, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body || {}),
+          signal: controller.signal
+        });
+        const raw = await res.text();
+        let parsed;
+        try {
+          parsed = raw ? JSON.parse(raw) : {};
+        } catch {
+          parsed = { ok: false, error: `invalid_json_response status=${res.status}` };
+        }
+        if (!res.ok) {
+          const msg = parsed?.error || `${res.status} ${res.statusText}`;
+          throw new Error(msg);
+        }
+        return parsed;
+      } finally {
+        clearTimeout(timer);
+      }
+    }
 
     function showView(viewId) {
       qa('.menu-btn').forEach((b) => b.classList.toggle('active', b.dataset.view === viewId));
@@ -716,6 +738,41 @@
       localStorage.setItem('openunum_session', sessionId);
       q('chatMeta').textContent = sessionId;
       chat.innerHTML = '';
+      chatPending = false;
+      q('send').disabled = false;
+    }
+
+    function newestAssistantSince(messages, sinceIso) {
+      const sinceMs = Date.parse(sinceIso || '') || 0;
+      let candidate = null;
+      for (const m of (messages || [])) {
+        if (m.role !== 'assistant') continue;
+        const t = Date.parse(m.created_at || '');
+        if (Number.isFinite(t) && t >= sinceMs) candidate = m;
+      }
+      return candidate;
+    }
+
+    async function resolvePendingReply(typing, startedAtIso) {
+      const deadline = Date.now() + 10 * 60 * 1000;
+      while (Date.now() < deadline) {
+        await sleep(2000);
+        const p = await jget(`/api/chat/pending?sessionId=${encodeURIComponent(sessionId)}`);
+        if (p.pending) {
+          typing.bubble.textContent = 'Agent is still working...';
+          continue;
+        }
+        const out = await jget(`/api/sessions/${encodeURIComponent(sessionId)}`);
+        const msg = newestAssistantSince(out.messages || [], startedAtIso);
+        if (msg?.content) {
+          typing.bubble.textContent = msg.content;
+          return true;
+        }
+        typing.bubble.textContent = 'Agent finished but no assistant message was found yet. Please retry once.';
+        return false;
+      }
+      typing.bubble.textContent = 'Agent is still running in background. You can keep chatting; history is preserved.';
+      return false;
     }
 
     function setSelectByValueOrFirst(id, value) {
@@ -990,23 +1047,35 @@
 
     q('refreshMission').onclick = refreshMission;
 
+    let chatPending = false;
     q('send').onclick = async () => {
+      if (chatPending) return;
       const message = q('message').value.trim();
       if (!message) return;
+      chatPending = true;
+      q('send').disabled = true;
       q('message').value = '';
       pushMsg('user', message);
       const typing = appendTypingBubble();
-      let out;
+      const startedAtIso = new Date().toISOString();
       try {
-        out = await jpost('/api/chat', { sessionId, message });
+        const out = await jpost('/api/chat', { sessionId, message }, { timeoutMs: 10 * 60 * 1000 });
+        if (out?.pending) {
+          await resolvePendingReply(typing, out.startedAt || startedAtIso);
+          return;
+        }
+        const traceHtml = renderTrace(out?.trace);
+        const assistantHtml = `${out?.replyHtml || out?.reply || '(no reply)'}${traceHtml}`;
+        typing.bubble.innerHTML = assistantHtml;
+        if (out?.model?.provider && out?.model?.model && out?.model?.activeProvider && out?.model?.activeModel) {
+          topStatus.textContent = `cfg=${out.model.provider}/${out.model.model} active=${out.model.activeProvider}/${out.model.activeModel}`;
+        }
       } catch (error) {
         typing.bubble.textContent = `request failed: ${String(error.message || error)}`;
-        return;
+      } finally {
+        chatPending = false;
+        q('send').disabled = false;
       }
-      const traceHtml = renderTrace(out.trace);
-      const assistantHtml = `${out.replyHtml || out.reply || '(no reply)'}${traceHtml}`;
-      typing.bubble.innerHTML = assistantHtml;
-      topStatus.textContent = `cfg=${out.model.provider}/${out.model.model} active=${out.model.activeProvider}/${out.model.activeModel}`;
     };
 
     q('message').addEventListener('keydown', (e) => {

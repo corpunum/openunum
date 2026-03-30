@@ -31,6 +31,8 @@ export function defaultConfig() {
       shellEnabled: true,
       executorRetryAttempts: 3,
       executorRetryBackoffMs: 700,
+      providerRequestTimeoutMs: 120000,
+      agentTurnTimeoutMs: 420000,
       autonomyMode: 'standard',
       missionDefaultContinueUntilDone: true,
       missionDefaultHardStepCap: 120,
