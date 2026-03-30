@@ -1,245 +1,377 @@
-/**
- * Self-Healing Module for OpenUnum
- * Monitors system health and auto-recovers from failures
- */
-
 import fs from 'node:fs';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
-import { logInfo, logError } from '../logger.mjs';
+import { getHomeDir, getConfigPath, loadConfig, saveConfig } from '../config.mjs';
+import { logInfo, logError, logWarn } from '../logger.mjs';
 
-export class SelfHealer {
-  constructor({ config, healthCheckIntervalMs = 30000 }) {
+/**
+ * Self-Healing System for OpenUnum
+ * Monitors, detects, and automatically recovers from common failures
+ */
+
+export class SelfHealSystem {
+  constructor({ config, agent, memoryStore }) {
     this.config = config;
-    this.healthCheckIntervalMs = healthCheckIntervalMs;
-    this.consecutiveFailures = 0;
-    this.maxFailures = 3;
-    this.lastHealthCheck = Date.now();
-    this.healthHistory = [];
-    this.autoRecoveryEnabled = true;
-  }
-
-  /**
-   * Check if critical services are healthy
-   */
-  async checkHealth() {
-    const checks = {
-      timestamp: Date.now(),
-      services: {},
-      overall: true
+    this.agent = agent;
+    this.memoryStore = memoryStore;
+    this.healthState = {
+      lastCheck: null,
+      status: 'unknown',
+      issues: [],
+      recoveryAttempts: 0,
+      lastRecovery: null
     };
-
-    // Check 1: Config file integrity
-    try {
-      const configPath = path.join(process.env.HOME || '/home/corp-unum', '.openunum', 'openunum.json');
-      if (fs.existsSync(configPath)) {
-        JSON.parse(fs.readFileSync(configPath, 'utf8'));
-        checks.services.config = { ok: true, path: configPath };
-      } else {
-        checks.services.config = { ok: false, error: 'config_missing' };
-        checks.overall = false;
-      }
-    } catch (error) {
-      checks.services.config = { ok: false, error: String(error.message) };
-      checks.overall = false;
-    }
-
-    // Check 2: API endpoint responsiveness
-    try {
-      const res = await fetch(`http://127.0.0.1:${this.config.server.port}/api/health`, {
-        method: 'GET',
-        timeout: 5000
-      });
-      if (res.ok) {
-        checks.services.api = { ok: true, port: this.config.server.port };
-      } else {
-        checks.services.api = { ok: false, error: 'api_not_responding' };
-        checks.overall = false;
-      }
-    } catch (error) {
-      checks.services.api = { ok: false, error: String(error.message) };
-      checks.overall = false;
-    }
-
-    // Check 3: Browser CDP endpoint
-    try {
-      const res = await fetch(`${this.config.browser.cdpUrl}/json/version`, {
-        method: 'GET',
-        timeout: 3000
-      });
-      if (res.ok) {
-        checks.services.browser = { ok: true, url: this.config.browser.cdpUrl };
-      } else {
-        checks.services.browser = { ok: false, error: 'browser_cdp_not_responding' };
-      }
-    } catch (error) {
-      checks.services.browser = { ok: false, error: String(error.message) };
-    }
-
-    // Check 4: Ollama provider
-    try {
-      const res = await fetch(`${this.config.model.ollamaBaseUrl}/api/tags`, {
-        method: 'GET',
-        timeout: 3000
-      });
-      if (res.ok) {
-        checks.services.ollama = { ok: true, url: this.config.model.ollamaBaseUrl };
-      } else {
-        checks.services.ollama = { ok: false, error: 'ollama_not_responding' };
-      }
-    } catch (error) {
-      checks.services.ollama = { ok: false, error: String(error.message) };
-    }
-
-    // Check 5: Disk space
-    try {
-      const { stdout } = await this.execShell('df -h /home | tail -1 | awk \'{print $5}\'');
-      const usage = parseInt(stdout.replace('%', '').trim(), 10);
-      checks.services.disk = {
-        ok: usage < 90,
-        usage: `${usage}%`,
-        warning: usage > 80
-      };
-      if (!checks.services.disk.ok) {
-        checks.overall = false;
-      }
-    } catch (error) {
-      checks.services.disk = { ok: false, error: String(error.message) };
-    }
-
-    // Check 6: Memory availability
-    try {
-      const { stdout } = await this.execShell('free -m | awk \'NR==2{printf "%.0f", $7}\'');
-      const freeMem = parseInt(stdout.trim(), 10);
-      checks.services.memory = {
-        ok: freeMem > 500,
-        freeMb: freeMem,
-        warning: freeMem < 1000
-      };
-      if (!checks.services.memory.ok) {
-        checks.overall = false;
-      }
-    } catch (error) {
-      checks.services.memory = { ok: false, error: String(error.message) };
-    }
-
-    // Record health history
-    this.healthHistory.push(checks);
-    if (this.healthHistory.length > 100) {
-      this.healthHistory.shift();
-    }
-
-    // Track consecutive failures
-    if (!checks.overall) {
-      this.consecutiveFailures += 1;
-    } else {
-      this.consecutiveFailures = 0;
-    }
-
-    this.lastHealthCheck = Date.now();
-
-    // Log health status
-    if (checks.overall) {
-      logInfo('health_check_passed', { checks: Object.keys(checks.services).length });
-    } else {
-      logError('health_check_failed', {
-        failures: Object.entries(checks.services)
-          .filter(([, v]) => !v.ok)
-          .map(([k]) => k)
-      });
-    }
-
-    return checks;
+    this.issueHistory = [];
+    this.maxIssueHistory = 100;
   }
 
   /**
-   * Attempt automatic recovery from failures
+   * Run comprehensive health check
    */
-  async attemptRecovery(healthCheck) {
-    if (!this.autoRecoveryEnabled) {
-      return { ok: false, reason: 'auto_recovery_disabled' };
-    }
+  async runHealthCheck() {
+    const checks = [];
+    const issues = [];
 
-    const recoveryActions = [];
+    // 1. Check server responsiveness
+    checks.push({
+      name: 'server_responsive',
+      async check: () => {
+        try {
+          const res = await fetch(`http://${this.config.server.host}:${this.config.server.port}/api/health`);
+          return { ok: res.ok, latency: res.ok ? 'ok' : 'failed' };
+        } catch (e) {
+          return { ok: false, error: String(e.message || e) };
+        }
+      }
+    });
 
-    // Recovery 1: Restart browser if CDP is down
-    if (healthCheck.services.browser?.ok === false) {
+    // 2. Check config file integrity
+    checks.push({
+      name: 'config_valid',
+      async check: () => {
+        try {
+          const cfg = loadConfig();
+          return { ok: true, hasModel: Boolean(cfg.model?.provider), hasRuntime: Boolean(cfg.runtime) };
+        } catch (e) {
+          return { ok: false, error: String(e.message || e) };
+        }
+      }
+    });
+
+    // 3. Check database integrity
+    checks.push({
+      name: 'database_valid',
+      async check: () => {
+        try {
+          const dbPath = path.join(getHomeDir(), 'openunum.db');
+          if (!fs.existsSync(dbPath)) return { ok: false, error: 'database_not_found' };
+          const stats = fs.statSync(dbPath);
+          return { ok: stats.size > 0, sizeBytes: stats.size };
+        } catch (e) {
+          return { ok: false, error: String(e.message || e) };
+        }
+      }
+    });
+
+    // 4. Check Ollama connectivity
+    checks.push({
+      name: 'ollama_reachable',
+      async check: () => {
+        try {
+          const res = await fetch(`${this.config.model.ollamaBaseUrl}/api/tags`);
+          return { ok: res.ok, modelsAvailable: res.ok };
+        } catch (e) {
+          return { ok: false, error: String(e.message || e) };
+        }
+      }
+    });
+
+    // 5. Check browser CDP
+    checks.push({
+      name: 'browser_cdp',
+      async check: () => {
+        try {
+          const res = await fetch(`${this.config.browser.cdpUrl}/json/version`);
+          return { ok: res.ok, version: res.ok ? 'connected' : 'failed' };
+        } catch (e) {
+          return { ok: false, error: String(e.message || e) };
+        }
+      }
+    });
+
+    // 6. Check disk space
+    checks.push({
+      name: 'disk_space',
+      async check: () => {
+        try {
+          const { stdout } = await this.runShell('df -h /home | tail -1');
+          const parts = stdout.trim().split(/\s+/);
+          const usePercent = parseInt(parts[4] || '0', 10);
+          return { ok: usePercent < 90, usagePercent: usePercent };
+        } catch (e) {
+          return { ok: false, error: String(e.message || e) };
+        }
+      }
+    });
+
+    // 7. Check available RAM
+    checks.push({
+      name: 'memory_available',
+      async check: () => {
+        try {
+          const { stdout } = await this.runShell('free -m | grep Mem | awk \'{print $7}\'');
+          const availableMB = parseInt(stdout.trim(), 10);
+          return { ok: availableMB > 500, availableMB };
+        } catch (e) {
+          return { ok: false, error: String(e.message || e) };
+        }
+      }
+    });
+
+    // Run all checks
+    for (const check of checks) {
       try {
-        logInfo('auto_recovery_browser', { action: 'launch_debug_browser' });
-        const res = await fetch(`http://127.0.0.1:${this.config.server.port}/api/browser/launch`, {
-          method: 'POST',
-          timeout: 10000
+        const result = await check.check();
+        this.healthState.lastCheck = new Date().toISOString();
+        
+        if (!result.ok) {
+          issues.push({
+            check: check.name,
+            timestamp: new Date().toISOString(),
+            error: result.error || 'check_failed',
+            details: result
+          });
+        }
+      } catch (error) {
+        issues.push({
+          check: check.name,
+          timestamp: new Date().toISOString(),
+          error: `check_exception: ${String(error.message || error)}`
         });
-        if (res.ok) {
-          recoveryActions.push({ service: 'browser', action: 'relaunched', success: true });
-        } else {
-          recoveryActions.push({ service: 'browser', action: 'relaunch_failed', success: false });
-        }
-      } catch (error) {
-        recoveryActions.push({ service: 'browser', action: 'relaunch_error', error: String(error.message) });
       }
     }
 
-    // Recovery 2: Clear stale locks if disk is full
-    if (healthCheck.services.disk?.ok === false) {
-      try {
-        logInfo('auto_recovery_disk', { action: 'clear_temp_files' });
-        await this.execShell('rm -rf /tmp/openunum-* 2>/dev/null; rm -rf /tmp/chrome-debug* 2>/dev/null; echo "cleaned"');
-        recoveryActions.push({ service: 'disk', action: 'temp_files_cleared', success: true });
-      } catch (error) {
-        recoveryActions.push({ service: 'disk', action: 'clear_failed', error: String(error.message) });
-      }
-    }
+    this.healthState.issues = issues;
+    this.healthState.status = issues.length === 0 ? 'healthy' : 'degraded';
 
-    // Recovery 3: Backup and reset config if corrupted
-    if (healthCheck.services.config?.ok === false) {
-      try {
-        logInfo('auto_recovery_config', { action: 'restore_from_backup' });
-        const configPath = path.join(process.env.HOME || '/home/corp-unum', '.openunum', 'openunum.json');
-        const backupPath = `${configPath}.backup`;
-        if (fs.existsSync(backupPath)) {
-          fs.copyFileSync(backupPath, configPath);
-          recoveryActions.push({ service: 'config', action: 'restored_from_backup', success: true });
-        } else {
-          recoveryActions.push({ service: 'config', action: 'no_backup_available', success: false });
-        }
-      } catch (error) {
-        recoveryActions.push({ service: 'config', action: 'restore_failed', error: String(error.message) });
-      }
-    }
-
-    // Recovery 4: Critical failure - trigger full restart
-    if (this.consecutiveFailures >= this.maxFailures) {
-      logError('critical_failure_detected', { consecutiveFailures: this.consecutiveFailures });
-      recoveryActions.push({
-        service: 'system',
-        action: 'critical_restart_required',
-        consecutiveFailures: this.consecutiveFailures
-      });
+    // Log issues
+    if (issues.length > 0) {
+      logWarn('health_check_issues', { count: issues.length, issues: issues.map(i => i.check) });
     }
 
     return {
-      ok: recoveryActions.every((a) => a.success !== false),
-      actions: recoveryActions,
-      consecutiveFailures: this.consecutiveFailures
+      status: this.healthState.status,
+      timestamp: this.healthState.lastCheck,
+      checksPassed: checks.length - issues.length,
+      checksFailed: issues.length,
+      issues
     };
   }
 
   /**
-   * Execute shell command safely
+   * Attempt automatic recovery for detected issues
    */
-  async execShell(cmd, timeoutMs = 10000) {
+  async attemptRecovery(issue) {
+    const recoveryStrategies = {
+      ollama_reachable: async () => {
+        logInfo('recovery_attempt', { issue: 'ollama_reachable', strategy: 'restart_ollama_service' });
+        try {
+          await this.runShell('systemctl restart ollama 2>/dev/null || pkill -f ollama; ollama serve &');
+          await this.sleep(3000);
+          return { ok: true, action: 'restarted_ollama' };
+        } catch (e) {
+          return { ok: false, error: String(e.message || e) };
+        }
+      },
+
+      browser_cdp: async () => {
+        logInfo('recovery_attempt', { issue: 'browser_cdp', strategy: 'launch_debug_browser' });
+        try {
+          const chromeBin = this.findChromeBinary();
+          if (!chromeBin) return { ok: false, error: 'no_chrome_found' };
+          
+          await this.runShell('pkill -f "openunum-chrome-debug" 2>/dev/null || true');
+          const port = 9333;
+          const args = [
+            `--remote-debugging-port=${port}`,
+            '--user-data-dir=/tmp/openunum-chrome-debug',
+            '--no-first-run',
+            '--no-default-browser-check',
+            '--disable-gpu',
+            '--new-window',
+            'about:blank'
+          ].join(' ');
+          
+          spawn(chromeBin, args.split(' '), { detached: true, stdio: 'ignore' }).unref();
+          await this.sleep(3000);
+          
+          this.config.browser.cdpUrl = `http://127.0.0.1:${port}`;
+          saveConfig(this.config);
+          
+          return { ok: true, action: 'launched_browser', cdpUrl: this.config.browser.cdpUrl };
+        } catch (e) {
+          return { ok: false, error: String(e.message || e) };
+        }
+      },
+
+      config_valid: async () => {
+        logInfo('recovery_attempt', { issue: 'config_valid', strategy: 'restore_default_config' });
+        try {
+          const backupPath = `${getConfigPath()}.backup.${Date.now()}`;
+          fs.copyFileSync(getConfigPath(), backupPath);
+          const defaultConfig = this.getDefaultConfig();
+          saveConfig(defaultConfig);
+          return { ok: true, action: 'restored_default_config', backup: backupPath };
+        } catch (e) {
+          return { ok: false, error: String(e.message || e) };
+        }
+      },
+
+      database_valid: async () => {
+        logInfo('recovery_attempt', { issue: 'database_valid', strategy: 'recreate_database' });
+        try {
+          const dbPath = path.join(getHomeDir(), 'openunum.db');
+          const backupPath = `${dbPath}.backup.${Date.now()}`;
+          fs.copyFileSync(dbPath, backupPath);
+          fs.unlinkSync(dbPath);
+          
+          // Reinitialize by loading config (which creates DB)
+          loadConfig();
+          this.memoryStore?.init?.();
+          
+          return { ok: true, action: 'recreated_database', backup: backupPath };
+        } catch (e) {
+          return { ok: false, error: String(e.message || e) };
+        }
+      },
+
+      disk_space: async () => {
+        logInfo('recovery_attempt', { issue: 'disk_space', strategy: 'cleanup_logs' });
+        try {
+          const logDir = path.join(getHomeDir(), 'logs');
+          if (fs.existsSync(logDir)) {
+            const files = fs.readdirSync(logDir);
+            const oldFiles = files.filter(f => {
+              const stat = fs.statSync(path.join(logDir, f));
+              return Date.now() - stat.mtimeMs > 7 * 24 * 60 * 60 * 1000; // 7 days
+            });
+            oldFiles.forEach(f => fs.unlinkSync(path.join(logDir, f)));
+          }
+          return { ok: true, action: 'cleaned_old_logs', count: oldFiles?.length || 0 };
+        } catch (e) {
+          return { ok: false, error: String(e.message || e) };
+        }
+      },
+
+      memory_available: async () => {
+        logInfo('recovery_attempt', { issue: 'memory_available', strategy: 'garbage_collection' });
+        try {
+          if (global.gc) {
+            global.gc();
+            return { ok: true, action: 'forced_gc' };
+          }
+          return { ok: true, action: 'no_gc_available', note: 'run_with_node_expose_gc' };
+        } catch (e) {
+          return { ok: false, error: String(e.message || e) };
+        }
+      }
+    };
+
+    const strategy = recoveryStrategies[issue.check];
+    if (!strategy) {
+      return { ok: false, error: 'no_recovery_strategy', check: issue.check };
+    }
+
+    try {
+      const result = await strategy();
+      this.healthState.recoveryAttempts += 1;
+      this.healthState.lastRecovery = new Date().toISOString();
+      
+      this.recordIssueHistory({
+        issue: issue.check,
+        recoveryAttempted: true,
+        recoverySuccess: result.ok,
+        timestamp: new Date().toISOString()
+      });
+
+      if (result.ok) {
+        logInfo('recovery_success', { issue: issue.check, action: result.action });
+      } else {
+        logError('recovery_failed', { issue: issue.check, error: result.error });
+      }
+
+      return result;
+    } catch (error) {
+      logError('recovery_exception', { issue: issue.check, error: String(error.message || error) });
+      return { ok: false, error: String(error.message || error) };
+    }
+  }
+
+  /**
+   * Run full health check with auto-recovery
+   */
+  async heal() {
+    const health = await this.runHealthCheck();
+    const recoveries = [];
+
+    if (health.status !== 'healthy') {
+      for (const issue of health.issues) {
+        const recovery = await this.attemptRecovery(issue);
+        recoveries.push({ issue: issue.check, recovery });
+      }
+
+      // Re-check after recovery attempts
+      const postHealth = await this.runHealthCheck();
+      return {
+        preHealth: health,
+        recoveries,
+        postHealth,
+        healed: postHealth.status === 'healthy'
+      };
+    }
+
+    return {
+      health,
+      recoveries: [],
+      healed: true
+    };
+  }
+
+  /**
+   * Get current health state
+   */
+  getHealthState() {
+    return {
+      ...this.healthState,
+      issueHistory: this.issueHistory.slice(-20)
+    };
+  }
+
+  /**
+   * Record issue in history
+   */
+  recordIssueHistory(entry) {
+    this.issueHistory.push(entry);
+    if (this.issueHistory.length > this.maxIssueHistory) {
+      this.issueHistory.shift();
+    }
+  }
+
+  /**
+   * Helper: Run shell command
+   */
+  async runShell(cmd, timeoutMs = 30000) {
     return new Promise((resolve, reject) => {
       const child = spawn('bash', ['-c', cmd], {
-        stdio: ['pipe', 'pipe', 'pipe'],
+        stdio: ['ignore', 'pipe', 'pipe'],
         timeout: timeoutMs
       });
 
       let stdout = '';
       let stderr = '';
 
-      child.stdout.on('data', (data) => { stdout += data.toString(); });
-      child.stderr.on('data', (data) => { stderr += data.toString(); });
+      child.stdout.on('data', (d) => { stdout += d; });
+      child.stderr.on('data', (d) => { stderr += d; });
 
       child.on('close', (code) => {
         resolve({ ok: code === 0, code, stdout, stderr });
@@ -250,58 +382,69 @@ export class SelfHealer {
   }
 
   /**
-   * Start continuous health monitoring
+   * Helper: Sleep
    */
-  startMonitoring() {
-    if (this.monitoringInterval) {
-      return { ok: false, reason: 'already_monitoring' };
-    }
-
-    this.monitoringInterval = setInterval(async () => {
-      try {
-        const health = await this.checkHealth();
-        if (!health.overall) {
-          await this.attemptRecovery(health);
-        }
-      } catch (error) {
-        logError('health_monitor_error', { error: String(error.message || error) });
-      }
-    }, this.healthCheckIntervalMs);
-
-    logInfo('health_monitoring_started', { intervalMs: this.healthCheckIntervalMs });
-    return { ok: true, intervalMs: this.healthCheckIntervalMs };
+  sleep(ms) {
+    return new Promise((r) => setTimeout(r, ms));
   }
 
   /**
-   * Stop health monitoring
+   * Helper: Find Chrome binary
    */
-  stopMonitoring() {
-    if (this.monitoringInterval) {
-      clearInterval(this.monitoringInterval);
-      this.monitoringInterval = null;
-      logInfo('health_monitoring_stopped');
-      return { ok: true };
+  findChromeBinary() {
+    const candidates = [
+      '/snap/bin/chromium',
+      '/usr/bin/chromium',
+      '/usr/bin/google-chrome',
+      '/usr/bin/chromium-browser'
+    ];
+    for (const c of candidates) {
+      if (fs.existsSync(c)) return c;
     }
-    return { ok: false, reason: 'not_monitoring' };
+    return null;
   }
 
   /**
-   * Get health history and statistics
+   * Helper: Get default config
    */
-  getHealthReport() {
-    const total = this.healthHistory.length;
-    const passed = this.healthHistory.filter((h) => h.overall).length;
-    const failed = total - passed;
-
+  getDefaultConfig() {
     return {
-      totalChecks: total,
-      passedChecks: passed,
-      failedChecks: failed,
-      successRate: total > 0 ? ((passed / total) * 100).toFixed(2) : 0,
-      consecutiveFailures: this.consecutiveFailures,
-      lastCheck: this.lastHealthCheck,
-      monitoring: Boolean(this.monitoringInterval),
-      recentHistory: this.healthHistory.slice(-10)
+      server: { host: '127.0.0.1', port: 18880 },
+      browser: { cdpUrl: 'http://127.0.0.1:9222', fallbackEnabled: true },
+      runtime: {
+        maxToolIterations: 8,
+        shellEnabled: true,
+        executorRetryAttempts: 3,
+        executorRetryBackoffMs: 700,
+        providerRequestTimeoutMs: 120000,
+        agentTurnTimeoutMs: 420000,
+        autonomyMode: 'standard'
+      },
+      model: {
+        provider: 'ollama',
+        model: 'ollama/qwen3.5:9b-64k',
+        providerModels: {
+          ollama: 'ollama/qwen3.5:9b-64k',
+          openrouter: 'openrouter/openai/gpt-4o-mini',
+          nvidia: 'nvidia/qwen/qwen3-coder-480b-a35b-instruct',
+          generic: 'generic/gpt-4o-mini'
+        },
+        routing: {
+          fallbackEnabled: true,
+          fallbackProviders: ['ollama', 'nvidia', 'openrouter', 'generic'],
+          forcePrimaryProvider: false
+        },
+        ollamaBaseUrl: 'http://127.0.0.1:11434',
+        openrouterBaseUrl: 'https://openrouter.ai/api/v1',
+        nvidiaBaseUrl: 'https://integrate.api.nvidia.com/v1',
+        genericBaseUrl: '',
+        openrouterApiKey: '',
+        nvidiaApiKey: '',
+        genericApiKey: ''
+      },
+      channels: {
+        telegram: { botToken: '', enabled: false }
+      }
     };
   }
 }

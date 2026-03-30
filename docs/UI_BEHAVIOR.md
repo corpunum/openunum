@@ -39,6 +39,7 @@ User-defined free text remains for:
 - expandable execution trace (`details/summary`)
 - duplicate-send guard while one request is active
 - pending-run polling: UI continues waiting and resolves from saved session messages
+- `/auto <goal>` command in chat: starts a mission loop and auto-polls until completion
 
 Trace panel includes:
 - provider/model

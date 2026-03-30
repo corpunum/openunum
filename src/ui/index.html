@@ -607,6 +607,13 @@
 
     const jget = async (path) => (await fetch(path)).json();
     const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+    const escapeHtml = (s) =>
+      String(s || '')
+        .replaceAll('&', '&amp;')
+        .replaceAll('<', '&lt;')
+        .replaceAll('>', '&gt;')
+        .replaceAll('"', '&quot;')
+        .replaceAll("'", '&#39;');
     async function jpost(path, body, opts = {}) {
       const timeoutMs = Number.isFinite(opts.timeoutMs) ? Number(opts.timeoutMs) : 30000;
       const controller = new AbortController();
@@ -773,6 +780,53 @@
       }
       typing.bubble.textContent = 'Agent is still running in background. You can keep chatting; history is preserved.';
       return false;
+    }
+
+    async function runAutoMissionFromChat(rawMessage, typing) {
+      const goal = String(rawMessage || '').replace(/^\/auto\s*/i, '').trim();
+      if (!goal) {
+        typing.bubble.textContent = 'Usage: /auto <goal>';
+        return;
+      }
+
+      const started = await jpost('/api/missions/start', {
+        goal,
+        maxSteps: Number(q('missionSteps').value || 6),
+        intervalMs: Number(q('missionInterval').value || 400),
+        continueUntilDone: true,
+        hardStepCap: 300,
+        maxRetries: 8
+      });
+      activeMissionId = started.id;
+      localStorage.setItem('openunum_mission', activeMissionId);
+      q('missionStatus').textContent = `running id=${activeMissionId}`;
+
+      const deadline = Date.now() + 60 * 60 * 1000;
+      while (Date.now() < deadline) {
+        await sleep(2000);
+        const out = await jget(`/api/missions/status?id=${encodeURIComponent(activeMissionId)}`);
+        if (out.error) {
+          typing.bubble.textContent = `auto mission error: ${out.error}`;
+          return;
+        }
+        const m = out.mission;
+        const latest = m.log?.[m.log.length - 1];
+        const preview = latest?.reply ? String(latest.reply).slice(0, 1400) : 'working...';
+        typing.bubble.innerHTML = `<pre>auto mission ${escapeHtml(m.id)}
+status=${escapeHtml(m.status)} step=${escapeHtml(m.step)}/${escapeHtml(m.hardStepCap || m.maxSteps)}
+
+latest:
+${escapeHtml(preview)}</pre>`;
+        if (m.status !== 'running' && m.status !== 'stopping') {
+          localStorage.removeItem('openunum_mission');
+          activeMissionId = '';
+          typing.bubble.innerHTML = `<pre>${escapeHtml(latest?.reply || `Mission ended: ${m.status}`)}
+
+[mission status: ${escapeHtml(m.status)}]</pre>`;
+          return;
+        }
+      }
+      typing.bubble.textContent = 'Auto mission still running in background. Open Missions for live status.';
     }
 
     function setSelectByValueOrFirst(id, value) {
@@ -1059,6 +1113,10 @@
       const typing = appendTypingBubble();
       const startedAtIso = new Date().toISOString();
       try {
+        if (/^\/auto\b/i.test(message)) {
+          await runAutoMissionFromChat(message, typing);
+          return;
+        }
         const out = await jpost('/api/chat', { sessionId, message }, { timeoutMs: 10 * 60 * 1000 });
         if (out?.pending) {
           await resolvePendingReply(typing, out.startedAt || startedAtIso);

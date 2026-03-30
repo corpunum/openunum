@@ -28,6 +28,9 @@ Date: 2026-03-30
 12. Runtime timeout controls:
    - `runtime.providerRequestTimeoutMs`
    - `runtime.agentTurnTimeoutMs`
+13. Chat `/auto` mission command:
+   - `/auto <goal>` starts mission execution from chat
+   - auto-polls mission progress and posts final status in the same bubble
 
 ## Stability/Validation
 
