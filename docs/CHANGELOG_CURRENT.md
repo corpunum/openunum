@@ -37,6 +37,10 @@ Date: 2026-03-30
 15. Default auto-escalation from chat:
    - new `Auto: On/Off` toggle in chat header (default ON, persisted in localStorage)
    - when enabled, planning-style non-final replies are auto-promoted to mission `/auto` continuation.
+16. Live background activity visibility during typing:
+   - new `Live: On/Off` toggle in chat header (default ON)
+   - pending chat bubbles now show expandable live tool calls/results
+   - new API endpoint: `GET /api/sessions/:sessionId/activity?since=...`
 
 ## Stability/Validation
 

@@ -312,6 +312,7 @@
         <div class="row">
           <button id="newChat">New Chat</button>
           <button id="autoEscalateToggle">Auto: On</button>
+          <button id="liveActivityToggle">Live: On</button>
           <span class="pill" id="chatMeta">session</span>
         </div>
       </header>
@@ -600,6 +601,9 @@
     let autoEscalateEnabled = localStorage.getItem('openunum_auto_escalate');
     if (autoEscalateEnabled == null) autoEscalateEnabled = 'true';
     autoEscalateEnabled = autoEscalateEnabled === 'true';
+    let liveActivityEnabled = localStorage.getItem('openunum_live_activity');
+    if (liveActivityEnabled == null) liveActivityEnabled = 'true';
+    liveActivityEnabled = liveActivityEnabled === 'true';
     localStorage.setItem('openunum_session', sessionId);
 
     const q = (id) => document.getElementById(id);
@@ -609,6 +613,7 @@
     const chat = q('chat');
     q('chatMeta').textContent = sessionId;
     q('autoEscalateToggle').textContent = `Auto: ${autoEscalateEnabled ? 'On' : 'Off'}`;
+    q('liveActivityToggle').textContent = `Live: ${liveActivityEnabled ? 'On' : 'Off'}`;
 
     const jget = async (path) => (await fetch(path)).json();
     const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -769,11 +774,25 @@
       const deadline = Date.now() + 10 * 60 * 1000;
       while (Date.now() < deadline) {
         await sleep(2000);
-        const p = await jget(`/api/chat/pending?sessionId=${encodeURIComponent(sessionId)}`);
-        if (p.pending) {
+        if (liveActivityEnabled) {
+          const act = await jget(`/api/sessions/${encodeURIComponent(sessionId)}/activity?since=${encodeURIComponent(startedAtIso)}`);
+          const tools = Array.isArray(act.toolRuns) ? act.toolRuns : [];
+          const lastTools = tools.slice(-6).map((t) => {
+            const args = escapeHtml(JSON.stringify(t.args || {}));
+            const res = escapeHtml(JSON.stringify(t.result || {}));
+            return `<div class="trace-line">tool: ${escapeHtml(t.toolName)} args=${args}</div><div class="trace-line">result: ${res}</div>`;
+          }).join('');
+          const expanded = tools.length > 0 ? 'open' : '';
+          typing.bubble.innerHTML = `<div>Agent is still working...</div>
+            <details class="trace" ${expanded}>
+              <summary>Live Activity (${tools.length} tool calls)</summary>
+              <div class="trace-body">${lastTools || '<div class="trace-line">No tool call observed yet.</div>'}</div>
+            </details>`;
+        } else {
           typing.bubble.textContent = 'Agent is still working...';
-          continue;
         }
+        const p = await jget(`/api/chat/pending?sessionId=${encodeURIComponent(sessionId)}`);
+        if (p.pending) continue;
         const out = await jget(`/api/sessions/${encodeURIComponent(sessionId)}`);
         const msg = newestAssistantSince(out.messages || [], startedAtIso);
         if (msg?.content) {
@@ -957,6 +976,11 @@ ${escapeHtml(preview)}</pre>`;
       autoEscalateEnabled = !autoEscalateEnabled;
       localStorage.setItem('openunum_auto_escalate', String(autoEscalateEnabled));
       q('autoEscalateToggle').textContent = `Auto: ${autoEscalateEnabled ? 'On' : 'Off'}`;
+    };
+    q('liveActivityToggle').onclick = () => {
+      liveActivityEnabled = !liveActivityEnabled;
+      localStorage.setItem('openunum_live_activity', String(liveActivityEnabled));
+      q('liveActivityToggle').textContent = `Live: ${liveActivityEnabled ? 'On' : 'Off'}`;
     };
 
     q('provider').onchange = async () => {
@@ -1145,7 +1169,7 @@ ${escapeHtml(preview)}</pre>`;
           await runAutoMissionFromChat(message, typing);
           return;
         }
-        const out = await jpost('/api/chat', { sessionId, message }, { timeoutMs: 10 * 60 * 1000 });
+        const out = await jpost('/api/chat', { sessionId, message }, { timeoutMs: 25000 });
         if (out?.pending) {
           await resolvePendingReply(typing, out.startedAt || startedAtIso);
           return;

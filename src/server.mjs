@@ -8,6 +8,7 @@ import { loadConfig, saveConfig } from './config.mjs';
 import { MemoryStore } from './memory/store.mjs';
 import { OpenUnumAgent } from './core/agent.mjs';
 import { MissionRunner } from './core/missions.mjs';
+import { SelfHealMonitor } from './core/selfheal.mjs';
 import { CDPBrowser } from './browser/cdp.mjs';
 import { TelegramChannel } from './channels/telegram.mjs';
 import { logInfo, logError } from './logger.mjs';
@@ -23,6 +24,7 @@ const memory = new MemoryStore();
 const agent = new OpenUnumAgent({ config, memoryStore: memory });
 const missions = new MissionRunner({ agent, memoryStore: memory });
 let browser = new CDPBrowser(config.browser?.cdpUrl);
+const selfHealMonitor = new SelfHealMonitor({ config, agent, browser, memory });
 let telegramLoopRunning = false;
 let telegramLoopStopRequested = false;
 let telegramLoopPromise = null;
@@ -206,69 +208,9 @@ async function parseBody(req) {
 }
 
 async function runHealthCheck() {
-  const checks = {};
-  let allOk = true;
-
-  // Check 1: Server responsiveness
-  checks.server = { ok: true, latencyMs: 0 };
-
-  // Check 2: Config file
-  try {
-    const cfg = loadConfig();
-    checks.config = { ok: true, loaded: true };
-  } catch (error) {
-    checks.config = { ok: false, error: String(error.message || error) };
-    allOk = false;
-  }
-
-  // Check 3: Memory store
-  try {
-    const testId = 'health-check-' + Date.now();
-    memory.addMessage(testId, 'user', 'health check');
-    memory.getMessages(testId, 1);
-    checks.memory = { ok: true };
-  } catch (error) {
-    checks.memory = { ok: false, error: String(error.message || error) };
-    allOk = false;
-  }
-
-  // Check 4: Browser CDP
-  try {
-    const browserStatus = await browser.status();
-    checks.browser = { ok: browserStatus.ok === true, details: browserStatus };
-    if (!browserStatus.ok) allOk = false;
-  } catch (error) {
-    checks.browser = { ok: false, error: String(error.message || error) };
-    allOk = false;
-  }
-
-  // Check 5: Provider connectivity
-  const providerCheck = { ok: true, provider: config.model.provider, model: config.model.model };
-  try {
-    const testModel = agent.getCurrentModel();
-    checks.provider = { ok: true, ...testModel };
-  } catch (error) {
-    checks.provider = { ok: false, error: String(error.message || error) };
-    allOk = false;
-  }
-
-  // Check 6: Disk space
-  try {
-    const home = process.env.OPENUNUM_HOME || require('os').homedir() + '/.openunum';
-    const { execSync } = require('node:child_process');
-    const dfOut = execSync(`df -h "${home}" 2>/dev/null || df -h /`, { encoding: 'utf8' });
-    const lines = dfOut.trim().split('\n');
-    if (lines.length >= 2) {
-      const parts = lines[1].split(/\s+/);
-      const usePercent = parseInt(parts[4] || '0', 10);
-      checks.disk = { ok: usePercent < 95, usedPercent: usePercent, available: parts[3] };
-      if (usePercent >= 95) allOk = false;
-    }
-  } catch (error) {
-    checks.disk = { ok: true, note: 'could not check disk' };
-  }
-
-  return { ok: allOk, timestamp: new Date().toISOString(), checks };
+  // Use the SelfHealMonitor for comprehensive health checks
+  const result = await selfHealMonitor.runFullHealthCheck();
+  return result;
 }
 
 async function runSelfHeal(dryRun = false) {
@@ -639,6 +581,22 @@ const server = http.createServer(async (req, res) => {
     }
 
     if (req.method === 'GET' && url.pathname.startsWith('/api/sessions/')) {
+      if (url.pathname.endsWith('/activity')) {
+        const parts = url.pathname.split('/');
+        const sessionId = decodeURIComponent(parts[3] || '');
+        const since = String(url.searchParams.get('since') || '');
+        const pending = pendingChats.get(sessionId);
+        const toolRuns = memory.getToolRunsSince(sessionId, since, 80);
+        const messages = memory.getMessagesSince(sessionId, since, 80);
+        return sendJson(res, 200, {
+          sessionId,
+          since: since || null,
+          pending: Boolean(pending),
+          pendingStartedAt: pending?.startedAt || null,
+          toolRuns,
+          messages
+        });
+      }
       const sessionId = decodeURIComponent(url.pathname.split('/').pop() || '');
       const msgs = memory.getMessages(sessionId || '', 100);
       return sendJson(res, 200, { sessionId, messages: msgs });

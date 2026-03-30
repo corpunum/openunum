@@ -101,6 +101,35 @@ export class MemoryStore {
       .prepare('SELECT tool_name, args_json, result_json, ok, created_at FROM tool_runs WHERE session_id = ? ORDER BY id DESC LIMIT ?')
       .all(sessionId, limit)
       .reverse();
+    return this.mapToolRows(rows);
+  }
+
+  getToolRunsSince(sessionId, sinceIso, limit = 80) {
+    const since = String(sinceIso || '').trim();
+    const rows = since
+      ? this.db
+        .prepare(
+          'SELECT tool_name, args_json, result_json, ok, created_at FROM tool_runs WHERE session_id = ? AND created_at >= ? ORDER BY id ASC LIMIT ?'
+        )
+        .all(sessionId, since, limit)
+      : this.db
+        .prepare('SELECT tool_name, args_json, result_json, ok, created_at FROM tool_runs WHERE session_id = ? ORDER BY id ASC LIMIT ?')
+        .all(sessionId, limit);
+    return this.mapToolRows(rows);
+  }
+
+  getMessagesSince(sessionId, sinceIso, limit = 80) {
+    const since = String(sinceIso || '').trim();
+    return (since
+      ? this.db
+        .prepare('SELECT role, content, created_at FROM messages WHERE session_id = ? AND created_at >= ? ORDER BY id ASC LIMIT ?')
+        .all(sessionId, since, limit)
+      : this.db
+        .prepare('SELECT role, content, created_at FROM messages WHERE session_id = ? ORDER BY id ASC LIMIT ?')
+        .all(sessionId, limit));
+  }
+
+  mapToolRows(rows) {
     return rows.map((r) => ({
       toolName: r.tool_name,
       args: JSON.parse(r.args_json || '{}'),

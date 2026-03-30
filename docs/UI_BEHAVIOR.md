@@ -42,6 +42,9 @@ User-defined free text remains for:
 - `/auto <goal>` command in chat: starts a mission loop and auto-polls until completion
 - default auto-escalation toggle (`Auto: On/Off`) in chat header:
   when enabled, planning-style replies are automatically escalated into mission continuation
+- live activity toggle (`Live: On/Off`) in chat header:
+  during pending execution, shows expandable real-time tool calls/results so users can distinguish
+  between active progress vs stuck/failing behavior
 
 Trace panel includes:
 - provider/model

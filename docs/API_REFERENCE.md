@@ -104,6 +104,12 @@ Payload:
 ## Session History
 
 - `GET /api/sessions/:sessionId`
+- `GET /api/sessions/:sessionId/activity?since=<ISO8601>`
+
+Activity response includes:
+- `pending` (whether session currently has an active chat run)
+- `toolRuns` (tool call stream with args/results since timestamp)
+- `messages` (messages since timestamp)
 
 ## Missions
 
