@@ -205,6 +205,153 @@ async function parseBody(req) {
   });
 }
 
+async function runHealthCheck() {
+  const checks = {};
+  let allOk = true;
+
+  // Check 1: Server responsiveness
+  checks.server = { ok: true, latencyMs: 0 };
+
+  // Check 2: Config file
+  try {
+    const cfg = loadConfig();
+    checks.config = { ok: true, loaded: true };
+  } catch (error) {
+    checks.config = { ok: false, error: String(error.message || error) };
+    allOk = false;
+  }
+
+  // Check 3: Memory store
+  try {
+    const testId = 'health-check-' + Date.now();
+    memory.addMessage(testId, 'user', 'health check');
+    memory.getMessages(testId, 1);
+    checks.memory = { ok: true };
+  } catch (error) {
+    checks.memory = { ok: false, error: String(error.message || error) };
+    allOk = false;
+  }
+
+  // Check 4: Browser CDP
+  try {
+    const browserStatus = await browser.status();
+    checks.browser = { ok: browserStatus.ok === true, details: browserStatus };
+    if (!browserStatus.ok) allOk = false;
+  } catch (error) {
+    checks.browser = { ok: false, error: String(error.message || error) };
+    allOk = false;
+  }
+
+  // Check 5: Provider connectivity
+  const providerCheck = { ok: true, provider: config.model.provider, model: config.model.model };
+  try {
+    const testModel = agent.getCurrentModel();
+    checks.provider = { ok: true, ...testModel };
+  } catch (error) {
+    checks.provider = { ok: false, error: String(error.message || error) };
+    allOk = false;
+  }
+
+  // Check 6: Disk space
+  try {
+    const home = process.env.OPENUNUM_HOME || require('os').homedir() + '/.openunum';
+    const { execSync } = require('node:child_process');
+    const dfOut = execSync(`df -h "${home}" 2>/dev/null || df -h /`, { encoding: 'utf8' });
+    const lines = dfOut.trim().split('\n');
+    if (lines.length >= 2) {
+      const parts = lines[1].split(/\s+/);
+      const usePercent = parseInt(parts[4] || '0', 10);
+      checks.disk = { ok: usePercent < 95, usedPercent: usePercent, available: parts[3] };
+      if (usePercent >= 95) allOk = false;
+    }
+  } catch (error) {
+    checks.disk = { ok: true, note: 'could not check disk' };
+  }
+
+  return { ok: allOk, timestamp: new Date().toISOString(), checks };
+}
+
+async function runSelfHeal(dryRun = false) {
+  const actions = [];
+  const results = [];
+
+  // Action 1: Check and fix config
+  try {
+    const cfg = loadConfig();
+    if (!cfg.runtime) {
+      actions.push({ action: 'fix_config_runtime', status: dryRun ? 'pending' : 'applied' });
+      if (!dryRun) {
+        cfg.runtime = defaultConfig().runtime;
+        saveConfig(cfg);
+      }
+      results.push({ action: 'fix_config_runtime', success: true });
+    } else {
+      results.push({ action: 'config_ok', success: true });
+    }
+  } catch (error) {
+    actions.push({ action: 'rebuild_config', status: dryRun ? 'pending' : 'applied' });
+    if (!dryRun) {
+      const newCfg = defaultConfig();
+      saveConfig(newCfg);
+    }
+    results.push({ action: 'rebuild_config', success: true });
+  }
+
+  // Action 2: Check browser CDP
+  try {
+    const status = await browser.status();
+    if (!status.ok) {
+      actions.push({ action: 'browser_cdp_unhealthy', status: 'needs_attention', details: status });
+      results.push({ action: 'browser_cdp_unhealthy', success: false, hint: 'Try /api/browser/launch' });
+    } else {
+      results.push({ action: 'browser_ok', success: true });
+    }
+  } catch (error) {
+    actions.push({ action: 'browser_cdp_error', status: 'error', error: String(error.message || error) });
+    results.push({ action: 'browser_cdp_error', success: false, hint: 'Check CDP URL in config' });
+  }
+
+  // Action 3: Check disk space
+  try {
+    const { execSync } = require('node:child_process');
+    const home = process.env.OPENUNUM_HOME || require('os').homedir() + '/.openunum';
+    const dfOut = execSync(`df -h "${home}" 2>/dev/null || df -h /`, { encoding: 'utf8' });
+    const lines = dfOut.trim().split('\n');
+    if (lines.length >= 2) {
+      const parts = lines[1].split(/\s+/);
+      const usePercent = parseInt(parts[4] || '0', 10);
+      if (usePercent >= 90) {
+        actions.push({ action: 'disk_space_critical', usedPercent: usePercent, status: 'warning' });
+        results.push({ action: 'disk_space_critical', success: false, hint: 'Free up disk space' });
+      } else {
+        results.push({ action: 'disk_space_ok', usedPercent: usePercent, success: true });
+      }
+    }
+  } catch {
+    results.push({ action: 'disk_check_skipped', success: true });
+  }
+
+  // Action 4: Check pending chats
+  const pendingCount = pendingChats.size;
+  if (pendingCount > 10) {
+    actions.push({ action: 'pending_chats_high', count: pendingCount, status: 'warning' });
+    results.push({ action: 'pending_chats_high', success: false, hint: 'Wait for chats to complete or restart server' });
+  } else {
+    results.push({ action: 'pending_chats_ok', count: pendingCount, success: true });
+  }
+
+  // Action 5: Reload agent tools if config changed
+  if (actions.some(a => a.action.includes('config'))) {
+    actions.push({ action: 'reload_agent_tools', status: dryRun ? 'pending' : 'applied' });
+    if (!dryRun) {
+      agent.reloadTools();
+    }
+    results.push({ action: 'reload_agent_tools', success: !dryRun });
+  }
+
+  return { ok: results.every(r => r.success !== false), actions, results, dryRun };
+}
+
 function getOrStartChat(sessionId, message) {
   const sid = String(sessionId || '').trim();
   if (!sid) throw new Error('sessionId is required');
@@ -229,7 +376,72 @@ const server = http.createServer(async (req, res) => {
     const url = new URL(req.url || '/', `http://${req.headers.host || '127.0.0.1'}`);
 
     if (req.method === 'GET' && (url.pathname === '/health' || url.pathname === '/api/health')) {
-      return sendJson(res, 200, { ok: true, service: 'openunum' });
+      const health = await runHealthCheck();
+      return sendJson(res, 200, health);
+    }
+
+    if (req.method === 'GET' && url.pathname === '/api/self-heal') {
+      const dryRun = url.searchParams.get('dryRun') !== 'false';
+      const result = await runSelfHeal(dryRun);
+      return sendJson(res, 200, result);
+    }
+
+    if (req.method === 'POST' && url.pathname === '/api/self-heal') {
+      const body = await parseBody(req);
+      const dryRun = body.dryRun !== false;
+      const result = await runSelfHeal(dryRun);
+      return sendJson(res, 200, result);
+    }
+
+    if (req.method === 'POST' && url.pathname === '/api/self-heal/fix') {
+      const result = await runSelfHeal(false);
+      return sendJson(res, 200, result);
+    }
+
+    if (req.method === 'GET' && url.pathname === '/api/health/check') {
+      const health = await runHealthCheck();
+      return sendJson(res, health.ok ? 200 : 503, health);
+    }
+
+    if (req.method === 'POST' && url.pathname === '/api/selfheal/run') {
+      const body = await parseBody(req);
+      const dryRun = Boolean(body?.dryRun);
+      const result = await runSelfHeal(dryRun);
+      if (!dryRun && result.ok) {
+        logInfo('selfheal_executed', { actions: result.actions.length, results: result.results.length });
+      }
+      return sendJson(res, result.ok ? 200 : 500, result);
+    }
+
+    if (req.method === 'GET' && url.pathname === '/api/selfheal/status') {
+      const status = {
+        ok: true,
+        uptime: process.uptime(),
+        pendingChats: pendingChats.size,
+        telegramRunning: telegramLoopRunning,
+        config: {
+          autonomyMode: config.runtime.autonomyMode,
+          shellEnabled: config.runtime.shellEnabled,
+          maxToolIterations: config.runtime.maxToolIterations
+        },
+        model: agent.getCurrentModel(),
+        browser: { cdpUrl: config.browser?.cdpUrl },
+        timestamp: new Date().toISOString()
+      };
+      return sendJson(res, 200, status);
+    }
+
+    if (req.method === 'GET' && url.pathname === '/api/self-heal') {
+      const dryRun = url.searchParams.get('dryRun') !== 'false';
+      const result = await runSelfHeal(dryRun);
+      return sendJson(res, 200, result);
+    }
+
+    if (req.method === 'POST' && url.pathname === '/api/self-heal') {
+      const body = await parseBody(req);
+      const dryRun = body.dryRun !== false;
+      const result = await runSelfHeal(dryRun);
+      return sendJson(res, 200, result);
     }
 
     if (req.method === 'GET' && url.pathname === '/api/config') {

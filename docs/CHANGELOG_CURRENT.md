@@ -31,6 +31,9 @@ Date: 2026-03-30
 13. Chat `/auto` mission command:
    - `/auto <goal>` starts mission execution from chat
    - auto-polls mission progress and posts final status in the same bubble
+14. Agent anti-halt continuation:
+   - if a turn has already executed tools and then emits planning-only text with no new tool calls,
+     OpenUnum now forces up to two additional continuation passes before returning.
 
 ## Stability/Validation
 

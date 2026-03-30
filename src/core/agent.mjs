@@ -51,6 +51,18 @@ function summarizeResult(result) {
   };
 }
 
+function isLikelyCompletionText(text) {
+  const t = String(text || '').toLowerCase();
+  if (!t.trim()) return false;
+  return (
+    t.includes('mission_status: done') ||
+    t.includes('done') ||
+    t.includes('completed') ||
+    t.includes('finished') ||
+    t.includes('successfully')
+  );
+}
+
 export class OpenUnumAgent {
   constructor({ config, memoryStore }) {
     this.config = config;
@@ -129,6 +141,7 @@ export class OpenUnumAgent {
       iterations: [],
       recoveryUsed: false
     };
+    let forcedContinueCount = 0;
 
     for (let i = 0; i < maxIters; i += 1) {
       const elapsed = Date.now() - turnStartedAt;
@@ -155,6 +168,21 @@ export class OpenUnumAgent {
 
       if (!out.toolCalls || out.toolCalls.length === 0) {
         trace.iterations.push(iter);
+        const shouldForceContinue =
+          i < maxIters - 1 &&
+          toolRuns > 0 &&
+          !isLikelyCompletionText(out.content || finalText) &&
+          forcedContinueCount < 2;
+        if (shouldForceContinue) {
+          forcedContinueCount += 1;
+          messages.push({
+            role: 'system',
+            content:
+              'Do not stop at planning text. Continue executing concrete actions now using tools. ' +
+              'Only provide final answer when task is actually completed from tool evidence.'
+          });
+          continue;
+        }
         break;
       }
 
