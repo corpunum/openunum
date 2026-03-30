@@ -47,6 +47,9 @@ Date: 2026-03-30
 18. `/auto` mission resilience:
    - when mission polling returns `mission_not_found` (e.g., runtime restart),
      chat now auto-restarts the mission up to 2 times instead of stopping immediately.
+19. Try-by-try visibility in chat bubble:
+   - pending and `/auto` flows now record background attempts/retries/events in an expandable
+     "Attempts & Retries" panel within the active assistant bubble.
 
 ## Stability/Validation
 

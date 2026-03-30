@@ -45,6 +45,8 @@ User-defined free text remains for:
 - live activity toggle (`Live: On/Off`) in chat header:
   during pending execution, shows expandable real-time tool calls/results so users can distinguish
   between active progress vs stuck/failing behavior
+  it also keeps an expandable "Attempts & Retries" event log (poll counts, mission restarts, status transitions)
+  directly inside the active chat bubble.
 
 Trace panel includes:
 - provider/model
