@@ -311,6 +311,7 @@
         </div>
         <div class="row">
           <button id="newChat">New Chat</button>
+          <button id="autoEscalateToggle">Auto: On</button>
           <span class="pill" id="chatMeta">session</span>
         </div>
       </header>
@@ -596,6 +597,9 @@
 
     let sessionId = localStorage.getItem('openunum_session') || crypto.randomUUID();
     let activeMissionId = localStorage.getItem('openunum_mission') || '';
+    let autoEscalateEnabled = localStorage.getItem('openunum_auto_escalate');
+    if (autoEscalateEnabled == null) autoEscalateEnabled = 'true';
+    autoEscalateEnabled = autoEscalateEnabled === 'true';
     localStorage.setItem('openunum_session', sessionId);
 
     const q = (id) => document.getElementById(id);
@@ -604,6 +608,7 @@
     const topStatus = q('topStatus');
     const chat = q('chat');
     q('chatMeta').textContent = sessionId;
+    q('autoEscalateToggle').textContent = `Auto: ${autoEscalateEnabled ? 'On' : 'Off'}`;
 
     const jget = async (path) => (await fetch(path)).json();
     const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -829,6 +834,24 @@ ${escapeHtml(preview)}</pre>`;
       typing.bubble.textContent = 'Auto mission still running in background. Open Missions for live status.';
     }
 
+    function shouldEscalateToAuto(message, out) {
+      if (!autoEscalateEnabled) return false;
+      if (/^\/\w+/.test(String(message || '').trim())) return false;
+      if (!out || out.pending) return false;
+      const reply = String(out.reply || '').toLowerCase();
+      const completeSignals = ['mission_status: done', 'task completed', 'completed successfully', 'done'];
+      if (completeSignals.some((s) => reply.includes(s))) return false;
+
+      const iters = Array.isArray(out?.trace?.iterations) ? out.trace.iterations : [];
+      const hadTools = iters.some((it) => Array.isArray(it.toolCalls) && it.toolCalls.length > 0);
+      const last = iters.length > 0 ? iters[iters.length - 1] : null;
+      const lastHasNoTools = !last || !Array.isArray(last.toolCalls) || last.toolCalls.length === 0;
+      const planningText = String(last?.assistantText || out.reply || '').toLowerCase();
+      const planningSignal = /\b(plan|step\s*\d|next|let me|i will|going to|continue|create)\b/.test(planningText);
+
+      return hadTools && lastHasNoTools && planningSignal;
+    }
+
     function setSelectByValueOrFirst(id, value) {
       const el = q(id);
       const options = Array.from(el.options).map((o) => o.value);
@@ -930,6 +953,11 @@ ${escapeHtml(preview)}</pre>`;
     });
 
     q('newChat').onclick = resetSession;
+    q('autoEscalateToggle').onclick = () => {
+      autoEscalateEnabled = !autoEscalateEnabled;
+      localStorage.setItem('openunum_auto_escalate', String(autoEscalateEnabled));
+      q('autoEscalateToggle').textContent = `Auto: ${autoEscalateEnabled ? 'On' : 'Off'}`;
+    };
 
     q('provider').onchange = async () => {
       await loadModelsForProvider(q('provider').value);
@@ -1120,6 +1148,11 @@ ${escapeHtml(preview)}</pre>`;
         const out = await jpost('/api/chat', { sessionId, message }, { timeoutMs: 10 * 60 * 1000 });
         if (out?.pending) {
           await resolvePendingReply(typing, out.startedAt || startedAtIso);
+          return;
+        }
+        if (shouldEscalateToAuto(message, out)) {
+          typing.bubble.textContent = 'Planning detected. Auto mission engaged...';
+          await runAutoMissionFromChat(`/auto ${message}`, typing);
           return;
         }
         const traceHtml = renderTrace(out?.trace);

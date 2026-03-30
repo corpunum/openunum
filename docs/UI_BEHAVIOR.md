@@ -40,6 +40,8 @@ User-defined free text remains for:
 - duplicate-send guard while one request is active
 - pending-run polling: UI continues waiting and resolves from saved session messages
 - `/auto <goal>` command in chat: starts a mission loop and auto-polls until completion
+- default auto-escalation toggle (`Auto: On/Off`) in chat header:
+  when enabled, planning-style replies are automatically escalated into mission continuation
 
 Trace panel includes:
 - provider/model

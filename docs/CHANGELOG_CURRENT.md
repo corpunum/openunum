@@ -34,6 +34,9 @@ Date: 2026-03-30
 14. Agent anti-halt continuation:
    - if a turn has already executed tools and then emits planning-only text with no new tool calls,
      OpenUnum now forces up to two additional continuation passes before returning.
+15. Default auto-escalation from chat:
+   - new `Auto: On/Off` toggle in chat header (default ON, persisted in localStorage)
+   - when enabled, planning-style non-final replies are auto-promoted to mission `/auto` continuation.
 
 ## Stability/Validation
 
