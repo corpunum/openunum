@@ -545,7 +545,7 @@ const server = http.createServer(async (req, res) => {
 
       const entry = getOrStartChat(sessionId, message);
       try {
-        const out = await withTimeout(entry.promise, 9 * 60 * 1000, 'chat_timeout');
+        const out = await withTimeout(entry.promise, 20 * 1000, 'chat_timeout');
         return sendJson(res, 200, { ...out, replyHtml: renderReplyHtml(out.reply) });
       } catch (error) {
         if (String(error.message || error) === 'chat_timeout') {

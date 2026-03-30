@@ -1169,7 +1169,7 @@ ${escapeHtml(preview)}</pre>`;
           await runAutoMissionFromChat(message, typing);
           return;
         }
-        const out = await jpost('/api/chat', { sessionId, message }, { timeoutMs: 25000 });
+        const out = await jpost('/api/chat', { sessionId, message }, { timeoutMs: 70000 });
         if (out?.pending) {
           await resolvePendingReply(typing, out.startedAt || startedAtIso);
           return;
@@ -1186,7 +1186,13 @@ ${escapeHtml(preview)}</pre>`;
           topStatus.textContent = `cfg=${out.model.provider}/${out.model.model} active=${out.model.activeProvider}/${out.model.activeModel}`;
         }
       } catch (error) {
-        typing.bubble.textContent = `request failed: ${String(error.message || error)}`;
+        const msg = String(error.message || error);
+        if (msg.includes('request_timeout')) {
+          typing.bubble.textContent = 'Request is still running. Switching to live pending view...';
+          await resolvePendingReply(typing, startedAtIso);
+        } else {
+          typing.bubble.textContent = `request failed: ${msg}`;
+        }
       } finally {
         chatPending = false;
         q('send').disabled = false;

@@ -41,6 +41,9 @@ Date: 2026-03-30
    - new `Live: On/Off` toggle in chat header (default ON)
    - pending chat bubbles now show expandable live tool calls/results
    - new API endpoint: `GET /api/sessions/:sessionId/activity?since=...`
+17. Request timeout hardening:
+   - UI chat timeout increased and now auto-falls back to pending/live mode on timeout
+   - `/api/chat` now returns `pending` quickly (20s window) for long-running turns
 
 ## Stability/Validation
 
