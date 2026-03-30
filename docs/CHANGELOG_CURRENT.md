@@ -50,6 +50,9 @@ Date: 2026-03-30
 19. Try-by-try visibility in chat bubble:
    - pending and `/auto` flows now record background attempts/retries/events in an expandable
      "Attempts & Retries" panel within the active assistant bubble.
+20. Status-check auto-resume:
+   - messages like `are you done?` no longer dead-end on planning replies.
+   - if planning is detected, OpenUnum resumes `/auto` with the last actionable user task prompt.
 
 ## Stability/Validation
 

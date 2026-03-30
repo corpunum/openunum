@@ -598,6 +598,7 @@
 
     let sessionId = localStorage.getItem('openunum_session') || crypto.randomUUID();
     let activeMissionId = localStorage.getItem('openunum_mission') || '';
+    let lastTaskPrompt = localStorage.getItem('openunum_last_task_prompt') || '';
     let autoEscalateEnabled = localStorage.getItem('openunum_auto_escalate');
     if (autoEscalateEnabled == null) autoEscalateEnabled = 'true';
     autoEscalateEnabled = autoEscalateEnabled === 'true';
@@ -909,6 +910,7 @@
       if (!autoEscalateEnabled) return false;
       if (/^\/\w+/.test(String(message || '').trim())) return false;
       if (!out || out.pending) return false;
+      if (isStatusCheckMessage(message)) return false;
       const reply = String(out.reply || '').toLowerCase();
       const completeSignals = ['mission_status: done', 'task completed', 'completed successfully', 'done'];
       if (completeSignals.some((s) => reply.includes(s))) return false;
@@ -920,7 +922,19 @@
       const planningText = String(last?.assistantText || out.reply || '').toLowerCase();
       const planningSignal = /\b(plan|step\s*\d|next|let me|i will|going to|continue|create)\b/.test(planningText);
 
-      return hadTools && lastHasNoTools && planningSignal;
+      return lastHasNoTools && planningSignal && (hadTools || planningText.length > 80);
+    }
+
+    function isStatusCheckMessage(message) {
+      const t = String(message || '').toLowerCase().trim();
+      return /^(are you done\??|done\??|status\??|progress\??|did you finish\??|finished\??|so you done\??)$/.test(t);
+    }
+
+    function isPlanningReply(out) {
+      const iters = Array.isArray(out?.trace?.iterations) ? out.trace.iterations : [];
+      const last = iters.length > 0 ? iters[iters.length - 1] : null;
+      const txt = String(last?.assistantText || out?.reply || '').toLowerCase();
+      return /\b(plan|step\s*\d|next|let me|i will|going to|continue|create)\b/.test(txt);
     }
 
     function setSelectByValueOrFirst(id, value) {
@@ -1210,6 +1224,10 @@
       if (chatPending) return;
       const message = q('message').value.trim();
       if (!message) return;
+      if (!isStatusCheckMessage(message) && !/^\/\w+/.test(message)) {
+        lastTaskPrompt = message;
+        localStorage.setItem('openunum_last_task_prompt', lastTaskPrompt);
+      }
       chatPending = true;
       q('send').disabled = true;
       q('message').value = '';
@@ -1229,6 +1247,11 @@
         if (shouldEscalateToAuto(message, out)) {
           typing.bubble.textContent = 'Planning detected. Auto mission engaged...';
           await runAutoMissionFromChat(`/auto ${message}`, typing);
+          return;
+        }
+        if (isStatusCheckMessage(message) && isPlanningReply(out) && lastTaskPrompt) {
+          typing.bubble.textContent = 'Status check detected while planning continues. Resuming autonomous mission...';
+          await runAutoMissionFromChat(`/auto ${lastTaskPrompt}`, typing);
           return;
         }
         const traceHtml = renderTrace(out?.trace);
