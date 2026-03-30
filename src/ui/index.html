@@ -813,23 +813,34 @@
         return;
       }
 
-      const started = await jpost('/api/missions/start', {
-        goal,
-        maxSteps: Number(q('missionSteps').value || 6),
-        intervalMs: Number(q('missionInterval').value || 400),
-        continueUntilDone: true,
-        hardStepCap: 300,
-        maxRetries: 8
-      });
-      activeMissionId = started.id;
-      localStorage.setItem('openunum_mission', activeMissionId);
-      q('missionStatus').textContent = `running id=${activeMissionId}`;
+      const startAutoMission = async () => {
+        const started = await jpost('/api/missions/start', {
+          goal,
+          maxSteps: Number(q('missionSteps').value || 6),
+          intervalMs: Number(q('missionInterval').value || 400),
+          continueUntilDone: true,
+          hardStepCap: 300,
+          maxRetries: 8
+        });
+        activeMissionId = started.id;
+        localStorage.setItem('openunum_mission', activeMissionId);
+        q('missionStatus').textContent = `running id=${activeMissionId}`;
+      };
+
+      await startAutoMission();
 
       const deadline = Date.now() + 60 * 60 * 1000;
+      let recoveries = 0;
       while (Date.now() < deadline) {
         await sleep(2000);
         const out = await jget(`/api/missions/status?id=${encodeURIComponent(activeMissionId)}`);
         if (out.error) {
+          if (out.error === 'mission_not_found' && recoveries < 2) {
+            recoveries += 1;
+            typing.bubble.textContent = `Mission handle lost (runtime restart likely). Auto-recovering mission... (${recoveries}/2)`;
+            await startAutoMission();
+            continue;
+          }
           typing.bubble.textContent = `auto mission error: ${out.error}`;
           return;
         }

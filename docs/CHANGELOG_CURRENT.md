@@ -44,6 +44,9 @@ Date: 2026-03-30
 17. Request timeout hardening:
    - UI chat timeout increased and now auto-falls back to pending/live mode on timeout
    - `/api/chat` now returns `pending` quickly (20s window) for long-running turns
+18. `/auto` mission resilience:
+   - when mission polling returns `mission_not_found` (e.g., runtime restart),
+     chat now auto-restarts the mission up to 2 times instead of stopping immediately.
 
 ## Stability/Validation
 
