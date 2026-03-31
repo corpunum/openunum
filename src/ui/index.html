@@ -64,6 +64,52 @@
     }
     summary::-webkit-details-marker { display: none; }
     .submenu { display: grid; padding: 8px; gap: 6px; }
+    .sessions-list {
+      display: grid;
+      gap: 6px;
+      max-height: 42vh;
+      overflow: auto;
+      padding: 8px;
+    }
+    .session-item {
+      border: 1px solid #2f4a80;
+      background: linear-gradient(180deg, #172848, #14233f);
+      border-radius: 10px;
+      padding: 8px 9px;
+      cursor: pointer;
+      text-align: left;
+      color: var(--text);
+      width: 100%;
+    }
+    .session-item:hover {
+      border-color: #4d72bd;
+      background: linear-gradient(180deg, #1b3158, #162a4b);
+    }
+    .session-item.active {
+      border-color: #3dd4ee;
+      background: linear-gradient(180deg, #11687a, #0f5263);
+    }
+    .session-title {
+      font-size: 12px;
+      font-weight: 600;
+      color: #e8f2ff;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .session-preview {
+      margin-top: 4px;
+      font-size: 11px;
+      color: #9fb6de;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .session-meta {
+      margin-top: 4px;
+      font-size: 10px;
+      color: #7e9bcb;
+    }
     .menu-btn {
       border: 1px solid #2f4a80;
       background: linear-gradient(180deg, #172848, #14233f);
@@ -313,6 +359,11 @@
           <button class="menu-btn" data-view="model-routing">Routing</button>
           <button class="menu-btn" data-view="provider-config">Provider Config</button>
         </div>
+      </details>
+
+      <details open>
+        <summary>Sessions</summary>
+        <div class="sessions-list" id="sessionList"></div>
       </details>
 
       <details open>
@@ -646,6 +697,8 @@
 
     const topStatus = q('topStatus');
     const chat = q('chat');
+    const sessionListEl = q('sessionList');
+    let sessionCache = [];
     q('chatMeta').textContent = sessionId;
     q('autoEscalateToggle').textContent = `Auto: ${autoEscalateEnabled ? 'On' : 'Off'}`;
     q('liveActivityToggle').textContent = `Live: ${liveActivityEnabled ? 'On' : 'Off'}`;
@@ -737,6 +790,61 @@
       const [title, subtitle] = VIEW_META[viewId] || ['OpenUnum', ''];
       q('viewTitle').textContent = title;
       q('viewSubtitle').textContent = subtitle;
+    }
+
+    function formatRelativeTime(iso) {
+      const t = Date.parse(String(iso || ''));
+      if (!Number.isFinite(t)) return '';
+      const mins = Math.floor((Date.now() - t) / 60000);
+      if (mins < 1) return 'now';
+      if (mins < 60) return `${mins}m`;
+      const hrs = Math.floor(mins / 60);
+      if (hrs < 24) return `${hrs}h`;
+      const days = Math.floor(hrs / 24);
+      if (days < 7) return `${days}d`;
+      return new Date(t).toLocaleDateString();
+    }
+
+    function renderSessionList() {
+      if (!sessionListEl) return;
+      sessionListEl.innerHTML = '';
+      if (!sessionCache.length) {
+        const empty = document.createElement('div');
+        empty.className = 'hint';
+        empty.textContent = 'No sessions yet';
+        sessionListEl.appendChild(empty);
+        return;
+      }
+      for (const s of sessionCache) {
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = `session-item${s.sessionId === sessionId ? ' active' : ''}`;
+        btn.innerHTML = `
+          <div class="session-title">${escapeHtml(s.title || 'New Chat')}</div>
+          <div class="session-preview">${escapeHtml(s.preview || 'No messages yet')}</div>
+          <div class="session-meta">${escapeHtml(formatRelativeTime(s.lastMessageAt || s.createdAt))} · ${Number(s.messageCount || 0)} msgs</div>
+        `;
+        btn.onclick = async () => {
+          if (chatPending) return;
+          sessionId = s.sessionId;
+          localStorage.setItem('openunum_session', sessionId);
+          q('chatMeta').textContent = sessionId;
+          await loadSession();
+          renderSessionList();
+          showView('chat');
+        };
+        sessionListEl.appendChild(btn);
+      }
+    }
+
+    async function refreshSessionList() {
+      const out = await jget('/api/sessions?limit=120');
+      sessionCache = Array.isArray(out.sessions) ? out.sessions : [];
+      renderSessionList();
+    }
+
+    async function ensureSessionExists(id) {
+      await jpost('/api/sessions', { sessionId: id });
     }
 
     function pushMsg(role, text, html) {
@@ -856,17 +964,19 @@
       chat.innerHTML = '';
       const out = await jget(`/api/sessions/${encodeURIComponent(sessionId)}`);
       for (const m of out.messages || []) {
-        pushMsg(m.role === 'assistant' ? 'assistant' : 'user', m.content);
+        pushMsg(m.role === 'assistant' ? 'assistant' : 'user', m.content, m.role === 'assistant' ? m.html : '');
       }
     }
 
-    function resetSession() {
+    async function resetSession() {
       sessionId = crypto.randomUUID();
       localStorage.setItem('openunum_session', sessionId);
       q('chatMeta').textContent = sessionId;
       chat.innerHTML = '';
       chatPending = false;
       q('send').disabled = false;
+      await ensureSessionExists(sessionId);
+      await refreshSessionList();
     }
 
     function newestAssistantSince(messages, sinceIso) {
@@ -905,6 +1015,7 @@
         if (msg?.content) {
           addLiveEvent(typing, 'assistant final response received');
           typing.bubble.innerHTML = msg.html || `<pre>${escapeHtml(msg.content)}</pre>`;
+          await refreshSessionList();
           return true;
         }
         addLiveEvent(typing, 'pending ended but no assistant message found');
@@ -1125,7 +1236,9 @@
       btn.addEventListener('click', () => showView(btn.dataset.view));
     });
 
-    q('newChat').onclick = resetSession;
+    q('newChat').onclick = async () => {
+      await resetSession();
+    };
     q('autoEscalateToggle').onclick = () => {
       autoEscalateEnabled = !autoEscalateEnabled;
       localStorage.setItem('openunum_auto_escalate', String(autoEscalateEnabled));
@@ -1353,6 +1466,7 @@
         if (out?.model?.provider && out?.model?.model && out?.model?.activeProvider && out?.model?.activeModel) {
           topStatus.textContent = `cfg=${formatProviderModel(out.model.provider, out.model.model)} active=${formatProviderModel(out.model.activeProvider, out.model.activeModel)}`;
         }
+        await refreshSessionList();
       } catch (error) {
         const msg = String(error.message || error);
         if (msg.includes('request_timeout')) {
@@ -1380,11 +1494,13 @@
 
     (async () => {
       showView('chat');
+      await ensureSessionExists(sessionId);
       await refreshModel();
       await refreshRuntime();
       await refreshProviderConfig();
       await refreshBrowserConfig();
       await refreshTelegram();
+      await refreshSessionList();
       await loadSession();
       await refreshMission();
     })();

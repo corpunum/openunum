@@ -18,6 +18,20 @@ function scoreByOverlap(queryTokens, text) {
   return hits / Math.sqrt(tokens.size);
 }
 
+function summarizeSessionTitle(text) {
+  const raw = String(text || '')
+    .replace(/```[\s\S]*?```/g, ' ')
+    .replace(/`[^`]*`/g, ' ')
+    .replace(/\[[^\]]+\]\([^)]+\)/g, '$1')
+    .replace(/[*_>#-]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+  if (!raw) return 'New Chat';
+  const words = raw.split(' ').filter(Boolean);
+  const short = words.slice(0, 9).join(' ');
+  return short.length > 72 ? `${short.slice(0, 69)}...` : short;
+}
+
 export class MemoryStore {
   constructor() {
     ensureHome();
@@ -90,11 +104,73 @@ export class MemoryStore {
       .run(sessionId, new Date().toISOString());
   }
 
+  createSession(sessionId) {
+    this.ensureSession(sessionId);
+    return this.getSessionSummary(sessionId);
+  }
+
   addMessage(sessionId, role, content) {
     this.ensureSession(sessionId);
     this.db
       .prepare('INSERT INTO messages (session_id, role, content, created_at) VALUES (?, ?, ?, ?)')
       .run(sessionId, role, content, new Date().toISOString());
+  }
+
+  getSessionSummary(sessionId) {
+    const row = this.db
+      .prepare(
+        `SELECT
+          s.id,
+          s.created_at,
+          (SELECT content FROM messages m WHERE m.session_id = s.id AND m.role = 'user' ORDER BY m.id ASC LIMIT 1) AS first_user,
+          (SELECT content FROM messages m WHERE m.session_id = s.id ORDER BY m.id DESC LIMIT 1) AS last_content,
+          (SELECT role FROM messages m WHERE m.session_id = s.id ORDER BY m.id DESC LIMIT 1) AS last_role,
+          (SELECT created_at FROM messages m WHERE m.session_id = s.id ORDER BY m.id DESC LIMIT 1) AS last_message_at,
+          (SELECT COUNT(*) FROM messages m WHERE m.session_id = s.id) AS message_count
+         FROM sessions s
+         WHERE s.id = ?`
+      )
+      .get(sessionId);
+    if (!row) return null;
+    return {
+      sessionId: row.id,
+      title: summarizeSessionTitle(row.first_user || row.last_content || ''),
+      preview: String(row.last_content || '').slice(0, 180),
+      lastRole: row.last_role || null,
+      messageCount: Number(row.message_count || 0),
+      createdAt: row.created_at,
+      lastMessageAt: row.last_message_at || row.created_at
+    };
+  }
+
+  listSessions(limit = 80) {
+    const rows = this.db
+      .prepare(
+        `SELECT
+          s.id,
+          s.created_at,
+          (SELECT content FROM messages m WHERE m.session_id = s.id AND m.role = 'user' ORDER BY m.id ASC LIMIT 1) AS first_user,
+          (SELECT content FROM messages m WHERE m.session_id = s.id ORDER BY m.id DESC LIMIT 1) AS last_content,
+          (SELECT role FROM messages m WHERE m.session_id = s.id ORDER BY m.id DESC LIMIT 1) AS last_role,
+          (SELECT created_at FROM messages m WHERE m.session_id = s.id ORDER BY m.id DESC LIMIT 1) AS last_message_at,
+          (SELECT COUNT(*) FROM messages m WHERE m.session_id = s.id) AS message_count
+         FROM sessions s
+         ORDER BY COALESCE(
+           (SELECT created_at FROM messages m WHERE m.session_id = s.id ORDER BY m.id DESC LIMIT 1),
+           s.created_at
+         ) DESC
+         LIMIT ?`
+      )
+      .all(limit);
+    return rows.map((row) => ({
+      sessionId: row.id,
+      title: summarizeSessionTitle(row.first_user || row.last_content || ''),
+      preview: String(row.last_content || '').slice(0, 180),
+      lastRole: row.last_role || null,
+      messageCount: Number(row.message_count || 0),
+      createdAt: row.created_at,
+      lastMessageAt: row.last_message_at || row.created_at
+    }));
   }
 
   getMessages(sessionId, limit = 50) {

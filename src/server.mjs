@@ -822,6 +822,19 @@ const server = http.createServer(async (req, res) => {
       return sendJson(res, 200, out);
     }
 
+    if (req.method === 'GET' && url.pathname === '/api/sessions') {
+      const limit = Number(url.searchParams.get('limit') || 80);
+      return sendJson(res, 200, { sessions: memory.listSessions(limit) });
+    }
+
+    if (req.method === 'POST' && url.pathname === '/api/sessions') {
+      const body = await parseBody(req);
+      const sessionId = String(body?.sessionId || '').trim();
+      if (!sessionId) return sendJson(res, 400, { error: 'sessionId is required' });
+      const session = memory.createSession(sessionId);
+      return sendJson(res, 200, { ok: true, session });
+    }
+
     if (req.method === 'GET' && url.pathname.startsWith('/api/sessions/')) {
       if (url.pathname.endsWith('/activity')) {
         const parts = url.pathname.split('/');
