@@ -2,8 +2,8 @@ import { spawn } from 'node:child_process';
 import os from 'node:os';
 import path from 'node:path';
 
-const TEST_PORT = 18881;
-const TEST_HOME = path.join(os.tmpdir(), 'openunum-test-home');
+const TEST_PORT = Number(process.env.OPENUNUM_TEST_PORT || 18881);
+const TEST_HOME = path.join(os.tmpdir(), `openunum-test-home-${TEST_PORT}`);
 
 export async function startServer() {
   const proc = spawn('node', ['src/server.mjs'], {

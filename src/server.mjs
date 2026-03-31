@@ -1,14 +1,17 @@
 import http from 'node:http';
 import fs from 'node:fs';
 import path from 'node:path';
+import os from 'node:os';
 import { spawn } from 'node:child_process';
+import { execSync } from 'node:child_process';
 import { marked } from 'marked';
 import sanitizeHtml from 'sanitize-html';
-import { loadConfig, saveConfig } from './config.mjs';
+import { loadConfig, saveConfig, defaultConfig } from './config.mjs';
 import { MemoryStore } from './memory/store.mjs';
 import { OpenUnumAgent } from './core/agent.mjs';
 import { MissionRunner } from './core/missions.mjs';
 import { SelfHealMonitor } from './core/selfheal.mjs';
+import { getAutonomyMaster } from './core/autonomy-master.mjs';
 import { CDPBrowser } from './browser/cdp.mjs';
 import { TelegramChannel } from './channels/telegram.mjs';
 import { logInfo, logError } from './logger.mjs';
@@ -22,13 +25,15 @@ import {
 const config = loadConfig();
 const memory = new MemoryStore();
 const agent = new OpenUnumAgent({ config, memoryStore: memory });
-const missions = new MissionRunner({ agent, memoryStore: memory });
+const missions = new MissionRunner({ agent, memoryStore: memory, config });
 let browser = new CDPBrowser(config.browser?.cdpUrl);
+const autonomyMaster = getAutonomyMaster({ config, agent, memoryStore: memory, browser });
 const selfHealMonitor = new SelfHealMonitor({ config, agent, browser, memory });
 let telegramLoopRunning = false;
 let telegramLoopStopRequested = false;
 let telegramLoopPromise = null;
 const pendingChats = new Map();
+let researchDailyTimer = null;
 
 function applyAutonomyMode(mode) {
   const m = String(mode || 'standard').toLowerCase();
@@ -45,6 +50,7 @@ function applyAutonomyMode(mode) {
     config.model.routing.forcePrimaryProvider = true;
     config.model.routing.fallbackEnabled = false;
     config.model.routing.fallbackProviders = [config.model.provider];
+    if (config.runtime.autonomyMasterAutoStart) autonomyMaster.start();
     return 'relentless';
   }
 
@@ -59,6 +65,7 @@ function applyAutonomyMode(mode) {
   if (!config.model.routing.fallbackProviders?.length) {
     config.model.routing.fallbackProviders = [config.model.provider];
   }
+  autonomyMaster.stop();
   return 'standard';
 }
 
@@ -172,6 +179,38 @@ async function launchDebugBrowser() {
   return { ok: true, cdpUrl: config.browser.cdpUrl, pid: child.pid };
 }
 
+function msUntilNextHour(hour) {
+  const now = new Date();
+  const next = new Date(now);
+  next.setMinutes(0, 0, 0);
+  next.setHours(Number(hour));
+  if (next <= now) next.setDate(next.getDate() + 1);
+  return Math.max(60 * 1000, next.getTime() - now.getTime());
+}
+
+function stopResearchDailyLoop() {
+  if (researchDailyTimer) {
+    clearTimeout(researchDailyTimer);
+    researchDailyTimer = null;
+  }
+}
+
+function startResearchDailyLoop() {
+  stopResearchDailyLoop();
+  if (!config.runtime?.researchDailyEnabled) return;
+  const run = async () => {
+    try {
+      await agent.runTool('research_run_daily', { simulate: false });
+      logInfo('research_daily_completed', {});
+    } catch (error) {
+      logError('research_daily_failed', { error: String(error.message || error) });
+    } finally {
+      researchDailyTimer = setTimeout(run, msUntilNextHour(config.runtime.researchScheduleHour ?? 3));
+    }
+  };
+  researchDailyTimer = setTimeout(run, msUntilNextHour(config.runtime.researchScheduleHour ?? 3));
+}
+
 function sendJson(res, code, obj) {
   res.writeHead(code, { 'Content-Type': 'application/json' });
   res.end(JSON.stringify(obj));
@@ -255,8 +294,7 @@ async function runSelfHeal(dryRun = false) {
 
   // Action 3: Check disk space
   try {
-    const { execSync } = require('node:child_process');
-    const home = process.env.OPENUNUM_HOME || require('os').homedir() + '/.openunum';
+    const home = process.env.OPENUNUM_HOME || path.join(os.homedir(), '.openunum');
     const dfOut = execSync(`df -h "${home}" 2>/dev/null || df -h /`, { encoding: 'utf8' });
     const lines = dfOut.trim().split('\n');
     if (lines.length >= 2) {
@@ -319,7 +357,11 @@ const server = http.createServer(async (req, res) => {
 
     if (req.method === 'GET' && (url.pathname === '/health' || url.pathname === '/api/health')) {
       const health = await runHealthCheck();
-      return sendJson(res, 200, health);
+      return sendJson(res, 200, {
+        ok: true,
+        service: 'openunum',
+        health
+      });
     }
 
     if (req.method === 'GET' && url.pathname === '/api/self-heal') {
@@ -373,23 +415,12 @@ const server = http.createServer(async (req, res) => {
       return sendJson(res, 200, status);
     }
 
-    if (req.method === 'GET' && url.pathname === '/api/self-heal') {
-      const dryRun = url.searchParams.get('dryRun') !== 'false';
-      const result = await runSelfHeal(dryRun);
-      return sendJson(res, 200, result);
-    }
-
-    if (req.method === 'POST' && url.pathname === '/api/self-heal') {
-      const body = await parseBody(req);
-      const dryRun = body.dryRun !== false;
-      const result = await runSelfHeal(dryRun);
-      return sendJson(res, 200, result);
-    }
-
     if (req.method === 'GET' && url.pathname === '/api/config') {
       return sendJson(res, 200, {
         model: config.model,
         runtime: config.runtime,
+        research: config.research,
+        integrations: config.integrations,
         browser: config.browser,
         channels: { telegram: { enabled: Boolean(config.channels?.telegram?.enabled), hasToken: Boolean(config.channels?.telegram?.botToken) } }
       });
@@ -399,6 +430,48 @@ const server = http.createServer(async (req, res) => {
       const body = await parseBody(req);
       if (body.runtime && typeof body.runtime.shellEnabled === 'boolean') {
         config.runtime.shellEnabled = body.runtime.shellEnabled;
+      }
+      if (body.runtime && typeof body.runtime.workspaceRoot === 'string' && body.runtime.workspaceRoot.trim()) {
+        config.runtime.workspaceRoot = body.runtime.workspaceRoot.trim();
+      }
+      if (body.runtime && typeof body.runtime.ownerControlMode === 'string' && body.runtime.ownerControlMode.trim()) {
+        config.runtime.ownerControlMode = body.runtime.ownerControlMode.trim();
+      }
+      if (body.runtime && typeof body.runtime.selfPokeEnabled === 'boolean') {
+        config.runtime.selfPokeEnabled = body.runtime.selfPokeEnabled;
+      }
+      if (body.runtime && Number.isFinite(body.runtime.toolCircuitFailureThreshold)) {
+        config.runtime.toolCircuitFailureThreshold = Number(body.runtime.toolCircuitFailureThreshold);
+      }
+      if (body.runtime && Number.isFinite(body.runtime.toolCircuitCooldownMs)) {
+        config.runtime.toolCircuitCooldownMs = Number(body.runtime.toolCircuitCooldownMs);
+      }
+      if (body.runtime && typeof body.runtime.autonomyMasterAutoStart === 'boolean') {
+        config.runtime.autonomyMasterAutoStart = body.runtime.autonomyMasterAutoStart;
+      }
+      if (body.runtime && typeof body.runtime.researchDailyEnabled === 'boolean') {
+        config.runtime.researchDailyEnabled = body.runtime.researchDailyEnabled;
+      }
+      if (body.runtime && Number.isFinite(body.runtime.researchScheduleHour)) {
+        config.runtime.researchScheduleHour = Number(body.runtime.researchScheduleHour);
+      }
+      if (body.runtime && typeof body.runtime.contextCompactionEnabled === 'boolean') {
+        config.runtime.contextCompactionEnabled = body.runtime.contextCompactionEnabled;
+      }
+      if (body.runtime && Number.isFinite(body.runtime.contextCompactTriggerPct)) {
+        config.runtime.contextCompactTriggerPct = Number(body.runtime.contextCompactTriggerPct);
+      }
+      if (body.runtime && Number.isFinite(body.runtime.contextCompactTargetPct)) {
+        config.runtime.contextCompactTargetPct = Number(body.runtime.contextCompactTargetPct);
+      }
+      if (body.runtime && Number.isFinite(body.runtime.contextHardFailPct)) {
+        config.runtime.contextHardFailPct = Number(body.runtime.contextHardFailPct);
+      }
+      if (body.runtime && Number.isFinite(body.runtime.contextProtectRecentTurns)) {
+        config.runtime.contextProtectRecentTurns = Number(body.runtime.contextProtectRecentTurns);
+      }
+      if (body.runtime && Number.isFinite(body.runtime.contextFallbackTokens)) {
+        config.runtime.contextFallbackTokens = Number(body.runtime.contextFallbackTokens);
       }
       if (body.runtime && Number.isFinite(body.runtime.maxToolIterations)) {
         config.runtime.maxToolIterations = Number(body.runtime.maxToolIterations);
@@ -424,11 +497,24 @@ const server = http.createServer(async (req, res) => {
       if (body.runtime && Number.isFinite(body.runtime.missionDefaultIntervalMs)) {
         config.runtime.missionDefaultIntervalMs = Number(body.runtime.missionDefaultIntervalMs);
       }
+      if (body.model && typeof body.model.provider === 'string' && body.model.provider.trim()) {
+        config.model.provider = body.model.provider.trim().toLowerCase();
+      }
+      if (body.model && typeof body.model.model === 'string' && body.model.model.trim()) {
+        config.model.model = body.model.model.trim();
+        config.model.providerModels = config.model.providerModels || {};
+        config.model.providerModels[config.model.provider] = config.model.model;
+      }
       if (body.model && body.model.routing) {
         config.model.routing = { ...config.model.routing, ...body.model.routing };
       }
+      if (body.integrations?.googleWorkspace && typeof body.integrations.googleWorkspace.cliCommand === 'string') {
+        config.integrations.googleWorkspace.cliCommand = body.integrations.googleWorkspace.cliCommand.trim() || 'gws';
+      }
       saveConfig(config);
       agent.reloadTools();
+      if (config.runtime.researchDailyEnabled) startResearchDailyLoop();
+      else stopResearchDailyLoop();
       return sendJson(res, 200, { ok: true, runtime: config.runtime });
     }
 
@@ -451,6 +537,40 @@ const server = http.createServer(async (req, res) => {
         runtime: config.runtime,
         routing: config.model.routing
       });
+    }
+
+    if (req.method === 'GET' && url.pathname === '/api/autonomy/master/status') {
+      return sendJson(res, 200, { ok: true, status: autonomyMaster.getStatus() });
+    }
+
+    if (req.method === 'POST' && url.pathname === '/api/autonomy/master/start') {
+      const started = autonomyMaster.start();
+      return sendJson(res, 200, { ok: true, started, status: autonomyMaster.getStatus() });
+    }
+
+    if (req.method === 'POST' && url.pathname === '/api/autonomy/master/stop') {
+      const stopped = autonomyMaster.stop();
+      return sendJson(res, 200, { ok: true, stopped, status: autonomyMaster.getStatus() });
+    }
+
+    if (req.method === 'POST' && url.pathname === '/api/autonomy/master/cycle') {
+      const out = await autonomyMaster.runCycle();
+      return sendJson(res, 200, { ok: true, result: out });
+    }
+
+    if (req.method === 'POST' && url.pathname === '/api/autonomy/master/self-improve') {
+      const out = await autonomyMaster.selfImprove();
+      return sendJson(res, 200, { ok: true, result: out });
+    }
+
+    if (req.method === 'POST' && url.pathname === '/api/autonomy/master/learn-skills') {
+      const out = await autonomyMaster.learnSkills();
+      return sendJson(res, 200, { ok: true, result: out });
+    }
+
+    if (req.method === 'POST' && url.pathname === '/api/autonomy/master/self-test') {
+      const out = await autonomyMaster.fullSelfTest();
+      return sendJson(res, 200, { ok: true, result: out });
     }
 
     if (req.method === 'GET' && url.pathname === '/api/providers/config') {
@@ -580,6 +700,128 @@ const server = http.createServer(async (req, res) => {
       return sendJson(res, 200, { ok: true, result: out });
     }
 
+    if (req.method === 'GET' && url.pathname === '/api/context/status') {
+      const sessionId = String(url.searchParams.get('sessionId') || '').trim();
+      const out = agent.getContextStatus(sessionId);
+      return sendJson(res, 200, out);
+    }
+
+    if (req.method === 'POST' && url.pathname === '/api/context/compact') {
+      const body = await parseBody(req);
+      const out = agent.compactSessionContext({
+        sessionId: body.sessionId,
+        dryRun: Boolean(body.dryRun)
+      });
+      return sendJson(res, 200, out);
+    }
+
+    if (req.method === 'GET' && url.pathname === '/api/context/compactions') {
+      const sessionId = String(url.searchParams.get('sessionId') || '').trim();
+      const limit = Number(url.searchParams.get('limit') || 20);
+      const out = agent.listContextCompactions(sessionId, limit);
+      return sendJson(res, 200, out);
+    }
+
+    if (req.method === 'GET' && url.pathname === '/api/context/artifacts') {
+      const sessionId = String(url.searchParams.get('sessionId') || '').trim();
+      const limit = Number(url.searchParams.get('limit') || 40);
+      const out = agent.listContextArtifacts(sessionId, limit);
+      return sendJson(res, 200, out);
+    }
+
+    if (req.method === 'GET' && url.pathname === '/api/skills') {
+      const out = await agent.runTool('skill_list', {});
+      return sendJson(res, 200, out);
+    }
+
+    if (req.method === 'POST' && url.pathname === '/api/skills/install') {
+      const body = await parseBody(req);
+      const out = await agent.runTool('skill_install', body || {});
+      return sendJson(res, 200, out);
+    }
+
+    if (req.method === 'POST' && url.pathname === '/api/skills/review') {
+      const body = await parseBody(req);
+      const out = await agent.runTool('skill_review', { name: body.name });
+      return sendJson(res, 200, out);
+    }
+
+    if (req.method === 'POST' && url.pathname === '/api/skills/approve') {
+      const body = await parseBody(req);
+      const out = await agent.runTool('skill_approve', { name: body.name });
+      return sendJson(res, 200, out);
+    }
+
+    if (req.method === 'POST' && url.pathname === '/api/skills/execute') {
+      const body = await parseBody(req);
+      const out = await agent.runTool('skill_execute', { name: body.name, args: body.args || {} });
+      return sendJson(res, 200, out);
+    }
+
+    if (req.method === 'POST' && url.pathname === '/api/skills/uninstall') {
+      const body = await parseBody(req);
+      const out = await agent.runTool('skill_uninstall', { name: body.name });
+      return sendJson(res, 200, out);
+    }
+
+    if (req.method === 'GET' && url.pathname === '/api/email/status') {
+      const out = await agent.runTool('email_status', {});
+      return sendJson(res, 200, out);
+    }
+
+    if (req.method === 'POST' && url.pathname === '/api/email/send') {
+      const body = await parseBody(req);
+      const out = await agent.runTool('email_send', body || {});
+      return sendJson(res, 200, out);
+    }
+
+    if (req.method === 'POST' && url.pathname === '/api/email/list') {
+      const body = await parseBody(req);
+      const out = await agent.runTool('email_list', body || {});
+      return sendJson(res, 200, out);
+    }
+
+    if (req.method === 'POST' && url.pathname === '/api/email/read') {
+      const body = await parseBody(req);
+      const out = await agent.runTool('email_read', body || {});
+      return sendJson(res, 200, out);
+    }
+
+    if (req.method === 'POST' && url.pathname === '/api/gworkspace/call') {
+      const body = await parseBody(req);
+      const out = await agent.runTool('gworkspace_call', body || {});
+      return sendJson(res, 200, out);
+    }
+
+    if (req.method === 'POST' && url.pathname === '/api/research/run') {
+      const body = await parseBody(req);
+      const out = await agent.runTool('research_run_daily', { simulate: Boolean(body?.simulate) });
+      return sendJson(res, 200, out);
+    }
+
+    if (req.method === 'GET' && url.pathname === '/api/research/recent') {
+      const out = await agent.runTool('research_list_recent', {
+        limit: Number(url.searchParams.get('limit') || 10)
+      });
+      return sendJson(res, 200, out);
+    }
+
+    if (req.method === 'GET' && url.pathname === '/api/research/queue') {
+      const out = await agent.runTool('research_review_queue', {
+        limit: Number(url.searchParams.get('limit') || 50)
+      });
+      return sendJson(res, 200, out);
+    }
+
+    if (req.method === 'POST' && url.pathname === '/api/research/approve') {
+      const body = await parseBody(req);
+      const out = await agent.runTool('research_approve', {
+        url: String(body?.url || ''),
+        note: String(body?.note || '')
+      });
+      return sendJson(res, 200, out);
+    }
+
     if (req.method === 'GET' && url.pathname.startsWith('/api/sessions/')) {
       if (url.pathname.endsWith('/activity')) {
         const parts = url.pathname.split('/');
@@ -598,7 +840,11 @@ const server = http.createServer(async (req, res) => {
         });
       }
       const sessionId = decodeURIComponent(url.pathname.split('/').pop() || '');
-      const msgs = memory.getMessages(sessionId || '', 100);
+      const msgs = memory.getMessages(sessionId || '', 100)
+        .map((m) => ({
+          ...m,
+          html: m.role === 'assistant' ? renderReplyHtml(m.content || '') : null
+        }));
       return sendJson(res, 200, { sessionId, messages: msgs });
     }
 
@@ -717,4 +963,10 @@ const server = http.createServer(async (req, res) => {
 
 server.listen(config.server.port, config.server.host, () => {
   logInfo('openunum_server_started', { host: config.server.host, port: config.server.port });
+  if (config.runtime?.autonomyMasterAutoStart) {
+    autonomyMaster.start();
+  }
+  if (config.runtime?.researchDailyEnabled) {
+    startResearchDailyLoop();
+  }
 });

@@ -1,0 +1,184 @@
+import fs from 'node:fs';
+import path from 'node:path';
+import { pathToFileURL } from 'node:url';
+import { getHomeDir, ensureHome } from '../config.mjs';
+
+const MANIFEST_VERSION = 1;
+
+function nowIso() {
+  return new Date().toISOString();
+}
+
+function normalizeSkillName(input) {
+  return String(input || '')
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9._-]/g, '-')
+    .replace(/-+/g, '-')
+    .replace(/^-|-$/g, '');
+}
+
+function analyzeCode(content) {
+  const checks = [
+    { code: 'eval', severity: 'critical', pattern: /\beval\s*\(/ },
+    { code: 'function_constructor', severity: 'critical', pattern: /\bnew\s+Function\s*\(/ },
+    { code: 'child_process', severity: 'high', pattern: /\bnode:child_process\b|\bchild_process\b/ },
+    { code: 'fs_write', severity: 'medium', pattern: /\bwriteFile|appendFile|rmSync|unlinkSync|chmod|chown\b/ },
+    { code: 'network_access', severity: 'medium', pattern: /\bfetch\s*\(|\bhttps?:\/\//i },
+    { code: 'env_access', severity: 'medium', pattern: /\bprocess\.env\b/ }
+  ];
+  const findings = checks
+    .filter((c) => c.pattern.test(content))
+    .map((c) => ({ code: c.code, severity: c.severity }));
+  const hasCritical = findings.some((f) => f.severity === 'critical');
+  const hasHigh = findings.some((f) => f.severity === 'high');
+  const verdict = hasCritical ? 'rejected' : hasHigh ? 'pending_review' : findings.length ? 'reviewed' : 'safe';
+  return { verdict, findings };
+}
+
+export class SkillManager {
+  constructor() {
+    ensureHome();
+    this.homeDir = getHomeDir();
+    this.skillsDir = path.join(this.homeDir, 'skills');
+    this.customDir = path.join(this.skillsDir, 'custom');
+    this.manifestPath = path.join(this.skillsDir, 'manifest.json');
+    this.init();
+  }
+
+  init() {
+    fs.mkdirSync(this.customDir, { recursive: true });
+    if (!fs.existsSync(this.manifestPath)) {
+      const initial = { version: MANIFEST_VERSION, updatedAt: nowIso(), skills: [] };
+      fs.writeFileSync(this.manifestPath, JSON.stringify(initial, null, 2), 'utf8');
+    }
+  }
+
+  loadManifest() {
+    const raw = fs.readFileSync(this.manifestPath, 'utf8');
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed.skills)) parsed.skills = [];
+    return parsed;
+  }
+
+  saveManifest(manifest) {
+    manifest.updatedAt = nowIso();
+    fs.writeFileSync(this.manifestPath, JSON.stringify(manifest, null, 2), 'utf8');
+  }
+
+  listSkills() {
+    const manifest = this.loadManifest();
+    return manifest.skills.map((s) => ({
+      name: s.name,
+      approved: Boolean(s.approved),
+      verdict: s.verdict || 'pending_review',
+      installedAt: s.installedAt,
+      lastUsedAt: s.lastUsedAt || null,
+      usageCount: Number(s.usageCount || 0),
+      findings: s.findings || []
+    }));
+  }
+
+  async installSkill({ source, name, content }) {
+    let code = String(content || '');
+    if (!code && source) {
+      if (String(source).startsWith('http://') || String(source).startsWith('https://')) {
+        const res = await fetch(source);
+        if (!res.ok) throw new Error(`skill_download_failed:${res.status}`);
+        code = await res.text();
+      } else {
+        const srcPath = path.resolve(process.cwd(), source);
+        code = fs.readFileSync(srcPath, 'utf8');
+      }
+    }
+    if (!code.trim()) throw new Error('skill_content_required');
+
+    const normalized = normalizeSkillName(name || source || `skill-${Date.now()}`);
+    if (!normalized) throw new Error('invalid_skill_name');
+    const fileName = normalized.endsWith('.mjs') ? normalized : `${normalized}.mjs`;
+    const filePath = path.join(this.customDir, fileName);
+    if (fs.existsSync(filePath)) throw new Error('skill_exists');
+
+    const report = analyzeCode(code);
+    fs.writeFileSync(filePath, code, 'utf8');
+
+    const manifest = this.loadManifest();
+    manifest.skills.push({
+      name: normalized,
+      fileName,
+      filePath,
+      source: source || 'inline',
+      installedAt: nowIso(),
+      approved: report.verdict === 'safe',
+      verdict: report.verdict,
+      findings: report.findings,
+      usageCount: 0
+    });
+    this.saveManifest(manifest);
+
+    return {
+      ok: true,
+      name: normalized,
+      filePath,
+      verdict: report.verdict,
+      findings: report.findings,
+      requiresApproval: report.verdict !== 'safe'
+    };
+  }
+
+  reviewSkill(name) {
+    const normalized = normalizeSkillName(name);
+    const manifest = this.loadManifest();
+    const skill = manifest.skills.find((s) => s.name === normalized);
+    if (!skill) throw new Error('skill_not_found');
+    const code = fs.readFileSync(skill.filePath, 'utf8');
+    const report = analyzeCode(code);
+    skill.verdict = report.verdict;
+    skill.findings = report.findings;
+    if (report.verdict === 'rejected') skill.approved = false;
+    this.saveManifest(manifest);
+    return { ok: true, name: skill.name, verdict: skill.verdict, findings: skill.findings };
+  }
+
+  approveSkill(name) {
+    const normalized = normalizeSkillName(name);
+    const manifest = this.loadManifest();
+    const skill = manifest.skills.find((s) => s.name === normalized);
+    if (!skill) throw new Error('skill_not_found');
+    if (skill.verdict === 'rejected') throw new Error('skill_rejected_cannot_approve');
+    skill.approved = true;
+    skill.approvedAt = nowIso();
+    this.saveManifest(manifest);
+    return { ok: true, name: skill.name, approved: true };
+  }
+
+  async executeSkill(name, args = {}) {
+    const normalized = normalizeSkillName(name);
+    const manifest = this.loadManifest();
+    const skill = manifest.skills.find((s) => s.name === normalized);
+    if (!skill) throw new Error('skill_not_found');
+    if (!skill.approved && skill.verdict !== 'safe') throw new Error('skill_not_approved');
+
+    const mod = await import(`${pathToFileURL(skill.filePath).href}?t=${Date.now()}`);
+    const fn = typeof mod.execute === 'function' ? mod.execute : (typeof mod.default === 'function' ? mod.default : null);
+    if (!fn) throw new Error('invalid_skill_exports');
+    const result = await fn(args);
+
+    skill.usageCount = Number(skill.usageCount || 0) + 1;
+    skill.lastUsedAt = nowIso();
+    this.saveManifest(manifest);
+    return { ok: true, name: skill.name, result };
+  }
+
+  uninstallSkill(name) {
+    const normalized = normalizeSkillName(name);
+    const manifest = this.loadManifest();
+    const idx = manifest.skills.findIndex((s) => s.name === normalized);
+    if (idx < 0) throw new Error('skill_not_found');
+    const [skill] = manifest.skills.splice(idx, 1);
+    if (skill?.filePath && fs.existsSync(skill.filePath)) fs.unlinkSync(skill.filePath);
+    this.saveManifest(manifest);
+    return { ok: true, name: normalized, removed: true };
+  }
+}
+

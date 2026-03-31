@@ -19,6 +19,20 @@ Returns:
 
 `POST` accepts (partial):
 - `runtime.shellEnabled: boolean`
+- `runtime.workspaceRoot: string`
+- `runtime.ownerControlMode: "safe"|"owner-unlocked"|"owner-unrestricted"`
+- `runtime.selfPokeEnabled: boolean`
+- `runtime.toolCircuitFailureThreshold: number`
+- `runtime.toolCircuitCooldownMs: number`
+- `runtime.autonomyMasterAutoStart: boolean`
+- `runtime.researchDailyEnabled: boolean`
+- `runtime.researchScheduleHour: number`
+- `runtime.contextCompactionEnabled: boolean`
+- `runtime.contextCompactTriggerPct: number`
+- `runtime.contextCompactTargetPct: number`
+- `runtime.contextHardFailPct: number`
+- `runtime.contextProtectRecentTurns: number`
+- `runtime.contextFallbackTokens: number`
 - `runtime.maxToolIterations: number`
 - `runtime.executorRetryAttempts: number`
 - `runtime.executorRetryBackoffMs: number`
@@ -30,6 +44,7 @@ Returns:
 - `runtime.missionDefaultMaxRetries: number`
 - `runtime.missionDefaultIntervalMs: number`
 - `model.routing.*`
+- `integrations.googleWorkspace.cliCommand: string`
 
 ## Autonomy Mode
 
@@ -44,6 +59,16 @@ or
 ```json
 {"mode":"relentless"}
 ```
+
+## Autonomy Master
+
+- `GET /api/autonomy/master/status`
+- `POST /api/autonomy/master/start`
+- `POST /api/autonomy/master/stop`
+- `POST /api/autonomy/master/cycle`
+- `POST /api/autonomy/master/self-improve`
+- `POST /api/autonomy/master/learn-skills`
+- `POST /api/autonomy/master/self-test`
 
 ## Provider Config + Discovery
 
@@ -100,6 +125,39 @@ Payload:
 ```json
 {"name":"shell_run","args":{"cmd":"ls -la"}}
 ```
+
+## Context
+
+- `GET /api/context/status?sessionId=...`
+- `POST /api/context/compact`
+- `GET /api/context/compactions?sessionId=...`
+- `GET /api/context/artifacts?sessionId=...`
+
+## Skills
+
+- `GET /api/skills`
+- `POST /api/skills/install`
+- `POST /api/skills/review`
+- `POST /api/skills/approve`
+- `POST /api/skills/execute`
+- `POST /api/skills/uninstall`
+
+## Google Workspace / Email
+
+- `GET /api/email/status`
+- `POST /api/email/send`
+- `POST /api/email/list`
+- `POST /api/email/read`
+- `POST /api/gworkspace/call`
+
+Email support is implemented via `googleworkspace/cli` (`gws`).
+
+## Research
+
+- `POST /api/research/run` (supports `{ "simulate": true }`)
+- `GET /api/research/recent?limit=10`
+- `GET /api/research/queue?limit=50`
+- `POST /api/research/approve`
 
 ## Session History
 

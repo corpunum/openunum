@@ -11,8 +11,11 @@ This folder is optimized for fast machine onboarding (fresh agent session, no pr
 5. [UI_BEHAVIOR.md](/home/corp-unum/openunum/docs/UI_BEHAVIOR.md)
 6. [OPERATIONS_RUNBOOK.md](/home/corp-unum/openunum/docs/OPERATIONS_RUNBOOK.md)
 7. [CONFIG_SCHEMA.md](/home/corp-unum/openunum/docs/CONFIG_SCHEMA.md)
-8. [PROJECT_STATE_SNAPSHOT.md](/home/corp-unum/openunum/docs/PROJECT_STATE_SNAPSHOT.md)
-9. [CHANGELOG_CURRENT.md](/home/corp-unum/openunum/docs/CHANGELOG_CURRENT.md)
+8. [ULTIMATE_AUTONOMY_MODEL.md](/home/corp-unum/openunum/docs/ULTIMATE_AUTONOMY_MODEL.md)
+9. [SKILLS_EMAIL_RESEARCH.md](/home/corp-unum/openunum/docs/SKILLS_EMAIL_RESEARCH.md)
+10. [CONTEXT_COMPACTION.md](/home/corp-unum/openunum/docs/CONTEXT_COMPACTION.md)
+11. [PROJECT_STATE_SNAPSHOT.md](/home/corp-unum/openunum/docs/PROJECT_STATE_SNAPSHOT.md)
+12. [CHANGELOG_CURRENT.md](/home/corp-unum/openunum/docs/CHANGELOG_CURRENT.md)
 
 ## Legacy Planning Docs
 

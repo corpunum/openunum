@@ -170,7 +170,7 @@ async function testToolExecution() {
       log('Tool Execution (shell)', 'PASS');
       
       // Test file write
-      const testPath = '/tmp/openunum-self-test.txt';
+      const testPath = path.join(process.cwd(), 'tests', 'openunum-self-test.txt');
       const writeRes = await httpPost('/api/tool/run', {
         name: 'file_write',
         args: { path: testPath, content: 'self-test-content' }
@@ -189,7 +189,7 @@ async function testToolExecution() {
           log('Tool Execution (file_read)', 'PASS');
           
           // Cleanup
-          execSync(`rm -f ${testPath}`);
+          try { fs.unlinkSync(testPath); } catch {}
           return true;
         }
         log('Tool Execution (file_read)', 'FAIL');

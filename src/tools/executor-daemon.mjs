@@ -75,9 +75,10 @@ export class ExecutorDaemon {
     };
   }
 
-  runShell(cmd, timeoutMs = 120000) {
-    return this.runWithRetry('shell', { cmd, timeoutMs }, async () => new Promise((resolve) => {
-      exec(cmd, { timeout: timeoutMs }, (error, stdout, stderr) => {
+  runShell(cmd, timeoutMs = 120000, options = {}) {
+    const cwd = options?.cwd || process.cwd();
+    return this.runWithRetry('shell', { cmd, timeoutMs, cwd }, async () => new Promise((resolve) => {
+      exec(cmd, { timeout: timeoutMs, cwd }, (error, stdout, stderr) => {
         resolve({
           ok: !error,
           code: error?.code ?? 0,
@@ -89,4 +90,3 @@ export class ExecutorDaemon {
     }));
   }
 }
-

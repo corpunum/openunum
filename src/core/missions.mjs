@@ -5,9 +5,10 @@ function sleep(ms) {
 }
 
 export class MissionRunner {
-  constructor({ agent, memoryStore }) {
+  constructor({ agent, memoryStore, config = null }) {
     this.agent = agent;
     this.memoryStore = memoryStore;
+    this.config = config;
     this.missions = new Map();
   }
 
@@ -107,6 +108,20 @@ MISSION_STATUS: CONTINUE`;
         if (text.includes('MISSION_STATUS: DONE') && newProof) {
           mission.status = 'completed';
           mission.finishedAt = new Date().toISOString();
+          if (this.config?.runtime?.selfPokeEnabled) {
+            const selfPoke = `Identify one high-impact improvement after goal completion: ${mission.goal}. Focus on reliability, speed, or usability and include concrete proof steps.`;
+            mission.log.push({
+              step: mission.step,
+              at: new Date().toISOString(),
+              selfPoke
+            });
+            this.memoryStore?.recordStrategyOutcome?.({
+              goal: mission.goal,
+              strategy: 'self_poke_followup',
+              success: true,
+              evidence: selfPoke
+            });
+          }
           this.memoryStore?.recordStrategyOutcome?.({
             goal: mission.goal,
             strategy: 'tool-driven iterative execution',

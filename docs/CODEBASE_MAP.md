@@ -1,6 +1,6 @@
 # Codebase Map
 
-This map is implementation-accurate as of 2026-03-30.
+This map is implementation-accurate as of 2026-03-31.
 
 ## Top-Level Structure
 
@@ -9,6 +9,12 @@ This map is implementation-accurate as of 2026-03-30.
 - `src/core/missions.mjs`: autonomous mission runner with proof-aware completion
 - `src/tools/runtime.mjs`: unified tool schema + execution routing
 - `src/tools/executor-daemon.mjs`: retry/backoff executor with JSONL logs
+- `src/tools/google-workspace.mjs`: Google Workspace CLI (`gws`) integration for Gmail + generic API calls
+- `src/skills/manager.mjs`: reviewed skill lifecycle (install/review/approve/execute/uninstall)
+- `src/research/manager.mjs`: daily research pipeline + review queue
+- `src/core/autonomy-master.mjs`: continuous autonomy coordinator (self-heal, self-test, self-improve, skill learning)
+- `src/core/context-budget.mjs`: model-aware context window estimation + token usage checks
+- `src/core/context-compact.mjs`: old-message compaction and artifact extraction
 - `src/memory/store.mjs`: SQLite persistence for sessions/messages/facts/tool runs/strategy outcomes
 - `src/browser/cdp.mjs`: Chrome DevTools Protocol abstraction
 - `src/providers/*`: provider adapters
@@ -58,6 +64,21 @@ This map is implementation-accurate as of 2026-03-30.
 - `http_download`
 - `desktop_open`
 - `desktop_xdotool`
+- `skill_list`
+- `skill_install`
+- `skill_review`
+- `skill_approve`
+- `skill_execute`
+- `skill_uninstall`
+- `email_status`
+- `email_send`
+- `email_list`
+- `email_read`
+- `gworkspace_call`
+- `research_run_daily`
+- `research_list_recent`
+- `research_review_queue`
+- `research_approve`
 
 ## Config Layer
 
@@ -69,6 +90,11 @@ This map is implementation-accurate as of 2026-03-30.
 
 - SQLite DB: `~/.openunum/openunum.db`
 - Executor JSONL: `~/.openunum/logs/executor.jsonl`
+- Research reports: `~/.openunum/research/research-YYYY-MM-DD.json`
+- Research approval queue: `~/.openunum/research/review-queue.json`
+- Skill manifest: `~/.openunum/skills/manifest.json`
+- Context compactions: `session_compactions` table in `~/.openunum/openunum.db`
+- Context artifacts: `memory_artifacts` table in `~/.openunum/openunum.db`
 
 ## Important Couplings
 

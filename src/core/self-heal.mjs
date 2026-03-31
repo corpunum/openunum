@@ -35,7 +35,7 @@ export class SelfHealSystem {
     // 1. Check server responsiveness
     checks.push({
       name: 'server_responsive',
-      async check: () => {
+      check: async () => {
         try {
           const res = await fetch(`http://${this.config.server.host}:${this.config.server.port}/api/health`);
           return { ok: res.ok, latency: res.ok ? 'ok' : 'failed' };
@@ -48,7 +48,7 @@ export class SelfHealSystem {
     // 2. Check config file integrity
     checks.push({
       name: 'config_valid',
-      async check: () => {
+      check: async () => {
         try {
           const cfg = loadConfig();
           return { ok: true, hasModel: Boolean(cfg.model?.provider), hasRuntime: Boolean(cfg.runtime) };
@@ -61,7 +61,7 @@ export class SelfHealSystem {
     // 3. Check database integrity
     checks.push({
       name: 'database_valid',
-      async check: () => {
+      check: async () => {
         try {
           const dbPath = path.join(getHomeDir(), 'openunum.db');
           if (!fs.existsSync(dbPath)) return { ok: false, error: 'database_not_found' };
@@ -76,7 +76,7 @@ export class SelfHealSystem {
     // 4. Check Ollama connectivity
     checks.push({
       name: 'ollama_reachable',
-      async check: () => {
+      check: async () => {
         try {
           const res = await fetch(`${this.config.model.ollamaBaseUrl}/api/tags`);
           return { ok: res.ok, modelsAvailable: res.ok };
@@ -89,7 +89,7 @@ export class SelfHealSystem {
     // 5. Check browser CDP
     checks.push({
       name: 'browser_cdp',
-      async check: () => {
+      check: async () => {
         try {
           const res = await fetch(`${this.config.browser.cdpUrl}/json/version`);
           return { ok: res.ok, version: res.ok ? 'connected' : 'failed' };
@@ -102,7 +102,7 @@ export class SelfHealSystem {
     // 6. Check disk space
     checks.push({
       name: 'disk_space',
-      async check: () => {
+      check: async () => {
         try {
           const { stdout } = await this.runShell('df -h /home | tail -1');
           const parts = stdout.trim().split(/\s+/);
@@ -117,7 +117,7 @@ export class SelfHealSystem {
     // 7. Check available RAM
     checks.push({
       name: 'memory_available',
-      async check: () => {
+      check: async () => {
         try {
           const { stdout } = await this.runShell('free -m | grep Mem | awk \'{print $7}\'');
           const availableMB = parseInt(stdout.trim(), 10);
@@ -249,9 +249,10 @@ export class SelfHealSystem {
         logInfo('recovery_attempt', { issue: 'disk_space', strategy: 'cleanup_logs' });
         try {
           const logDir = path.join(getHomeDir(), 'logs');
+          let oldFiles = [];
           if (fs.existsSync(logDir)) {
             const files = fs.readdirSync(logDir);
-            const oldFiles = files.filter(f => {
+            oldFiles = files.filter(f => {
               const stat = fs.statSync(path.join(logDir, f));
               return Date.now() - stat.mtimeMs > 7 * 24 * 60 * 60 * 1000; // 7 days
             });

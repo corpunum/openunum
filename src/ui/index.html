@@ -181,6 +181,40 @@
       padding: 8px;
       overflow: auto;
     }
+    .bubble p { margin: 0 0 10px; }
+    .bubble p:last-child { margin-bottom: 0; }
+    .bubble ul, .bubble ol { margin: 8px 0 10px 18px; padding: 0; }
+    .bubble li { margin: 3px 0; }
+    .bubble code {
+      background: rgba(8, 18, 34, .92);
+      border: 1px solid rgba(69, 97, 134, .7);
+      border-radius: 6px;
+      padding: 1px 5px;
+      font-family: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+      font-size: 12px;
+    }
+    .bubble table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 10px 0;
+      font-size: 12px;
+      display: block;
+      overflow-x: auto;
+    }
+    .bubble th, .bubble td {
+      border: 1px solid rgba(69, 97, 134, .8);
+      padding: 6px 8px;
+      text-align: left;
+      vertical-align: top;
+    }
+    .bubble th {
+      background: rgba(23, 40, 77, .95);
+      color: #dfe9ff;
+    }
+    .bubble td {
+      background: rgba(13, 26, 49, .88);
+      color: #d1e0ff;
+    }
     .trace {
       margin-top: 8px;
       border: 1px solid #37558f;
@@ -616,26 +650,30 @@
     q('autoEscalateToggle').textContent = `Auto: ${autoEscalateEnabled ? 'On' : 'Off'}`;
     q('liveActivityToggle').textContent = `Live: ${liveActivityEnabled ? 'On' : 'Off'}`;
 
-    const jget = async (path) => (await fetch(path)).json();
     const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
-    const escapeHtml = (s) =>
-      String(s || '')
-        .replaceAll('&', '&amp;')
-        .replaceAll('<', '&lt;')
-        .replaceAll('>', '&gt;')
-        .replaceAll('"', '&quot;')
-        .replaceAll("'", '&#39;');
-    async function jpost(path, body, opts = {}) {
-      const timeoutMs = Number.isFinite(opts.timeoutMs) ? Number(opts.timeoutMs) : 30000;
+    function isTransientFetchError(error) {
+      const msg = String(error?.message || error || '').toLowerCase();
+      return msg.includes('failed to fetch') || msg.includes('networkerror') || msg.includes('network request failed');
+    }
+    async function fetchWithRetry(path, options = {}, retry = 2, backoffMs = 450) {
+      let lastError;
+      for (let i = 0; i < retry; i += 1) {
+        try {
+          return await fetch(path, options);
+        } catch (error) {
+          lastError = error;
+          if (!isTransientFetchError(error) || i === retry - 1) break;
+          await sleep(backoffMs * (i + 1));
+        }
+      }
+      throw lastError;
+    }
+    async function jget(path, opts = {}) {
+      const timeoutMs = Number.isFinite(opts.timeoutMs) ? Number(opts.timeoutMs) : 20000;
       const controller = new AbortController();
       const timer = setTimeout(() => controller.abort(new Error('request_timeout')), timeoutMs);
       try {
-        const res = await fetch(path, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(body || {}),
-          signal: controller.signal
-        });
+        const res = await fetchWithRetry(path, { signal: controller.signal }, 2, 400);
         const raw = await res.text();
         let parsed;
         try {
@@ -648,6 +686,46 @@
           throw new Error(msg);
         }
         return parsed;
+      } catch (error) {
+        if (String(error?.name || '') === 'AbortError') throw new Error('request_timeout');
+        throw error;
+      } finally {
+        clearTimeout(timer);
+      }
+    }
+    const escapeHtml = (s) =>
+      String(s || '')
+        .replaceAll('&', '&amp;')
+        .replaceAll('<', '&lt;')
+        .replaceAll('>', '&gt;')
+        .replaceAll('"', '&quot;')
+        .replaceAll("'", '&#39;');
+    async function jpost(path, body, opts = {}) {
+      const timeoutMs = Number.isFinite(opts.timeoutMs) ? Number(opts.timeoutMs) : 30000;
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(new Error('request_timeout')), timeoutMs);
+      try {
+        const res = await fetchWithRetry(path, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body || {}),
+          signal: controller.signal
+        }, 2, 500);
+        const raw = await res.text();
+        let parsed;
+        try {
+          parsed = raw ? JSON.parse(raw) : {};
+        } catch {
+          parsed = { ok: false, error: `invalid_json_response status=${res.status}` };
+        }
+        if (!res.ok) {
+          const msg = parsed?.error || `${res.status} ${res.statusText}`;
+          throw new Error(msg);
+        }
+        return parsed;
+      } catch (error) {
+        if (String(error?.name || '') === 'AbortError') throw new Error('request_timeout');
+        throw error;
       } finally {
         clearTimeout(timer);
       }
@@ -666,7 +744,7 @@
       wrap.className = `bubble-wrap ${role === 'user' ? 'user' : 'ai'}`;
       const bubble = document.createElement('div');
       bubble.className = `bubble ${role === 'user' ? 'user' : 'ai'}`;
-      bubble.innerHTML = html || text;
+      bubble.innerHTML = html || escapeHtml(text || '');
       wrap.appendChild(bubble);
       chat.appendChild(wrap);
       chat.scrollTop = chat.scrollHeight;
@@ -826,7 +904,7 @@
         const msg = newestAssistantSince(out.messages || [], startedAtIso);
         if (msg?.content) {
           addLiveEvent(typing, 'assistant final response received');
-          typing.bubble.textContent = msg.content;
+          typing.bubble.innerHTML = msg.html || `<pre>${escapeHtml(msg.content)}</pre>`;
           return true;
         }
         addLiveEvent(typing, 'pending ended but no assistant message found');
@@ -943,6 +1021,16 @@
       el.value = options.includes(value) ? value : options[0] || '';
     }
 
+    function formatProviderModel(provider, model) {
+      const p = String(provider || '').trim();
+      const m = String(model || '').trim();
+      if (!p) return m;
+      if (!m) return p;
+      if (m.startsWith(`${p}/`)) return m;
+      if (/^(ollama|openrouter|nvidia|generic)\//.test(m)) return m;
+      return `${p}/${m}`;
+    }
+
     function profileFromProviders(list = []) {
       const key = list.join(',');
       if (key === FALLBACK_PROFILES.local_first.join(',')) return 'local_first';
@@ -955,7 +1043,7 @@
     async function refreshModel() {
       const m = await jget('/api/model/current');
       setSelectByValueOrFirst('provider', m.provider);
-      topStatus.textContent = `cfg=${m.provider}/${m.model} active=${m.activeProvider}/${m.activeModel}`;
+      topStatus.textContent = `cfg=${formatProviderModel(m.provider, m.model)} active=${formatProviderModel(m.activeProvider, m.activeModel)}`;
       await loadModelsForProvider(m.provider, m.model);
     }
 
@@ -1061,14 +1149,18 @@
       const model = q('modelList').value;
       if (!model) return;
       const out = await jpost('/api/model/switch', { provider: q('provider').value, model });
-      topStatus.textContent = `cfg=${out.provider}/${out.model} active=${out.activeProvider}/${out.activeModel}`;
+      topStatus.textContent = `cfg=${formatProviderModel(out.provider, out.model)} active=${formatProviderModel(out.activeProvider, out.activeModel)}`;
     };
 
     q('saveRouting').onclick = async () => {
       const enabled = q('fallbackEnabled').value === 'true';
       const profile = q('fallbackProfile').value;
+      const provider = q('provider').value;
+      const selectedModel = q('modelList').value;
       const out = await jpost('/api/config', {
         model: {
+          provider,
+          ...(selectedModel ? { model: selectedModel } : {}),
           routing: {
             fallbackEnabled: enabled,
             fallbackProviders: FALLBACK_PROFILES[profile] || FALLBACK_PROFILES.local_first
@@ -1079,7 +1171,8 @@
           maxToolIterations: Number(q('maxIters').value || 8)
         }
       });
-      q('modelCatalogStatus').textContent = `routing saved | shell=${out.runtime?.shellEnabled} maxIters=${out.runtime?.maxToolIterations}`;
+      q('modelCatalogStatus').textContent = `routing saved | primary=${formatProviderModel(provider, selectedModel || '')} | shell=${out.runtime?.shellEnabled} maxIters=${out.runtime?.maxToolIterations}`;
+      await refreshModel();
     };
 
     q('importOpenclaw').onclick = async () => {
@@ -1258,7 +1351,7 @@
         const assistantHtml = `${out?.replyHtml || out?.reply || '(no reply)'}${traceHtml}`;
         typing.bubble.innerHTML = assistantHtml;
         if (out?.model?.provider && out?.model?.model && out?.model?.activeProvider && out?.model?.activeModel) {
-          topStatus.textContent = `cfg=${out.model.provider}/${out.model.model} active=${out.model.activeProvider}/${out.model.activeModel}`;
+          topStatus.textContent = `cfg=${formatProviderModel(out.model.provider, out.model.model)} active=${formatProviderModel(out.model.activeProvider, out.model.activeModel)}`;
         }
       } catch (error) {
         const msg = String(error.message || error);

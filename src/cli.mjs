@@ -36,6 +36,29 @@ async function main() {
     return;
   }
 
+  if (cmd === 'context' && args[1] === 'status') {
+    const sessionId = getArg('--session', 'cli');
+    const out = agent.getContextStatus(sessionId);
+    console.log(JSON.stringify(out, null, 2));
+    return;
+  }
+
+  if (cmd === 'context' && args[1] === 'compact') {
+    const sessionId = getArg('--session', 'cli');
+    const dryRun = args.includes('--dry-run');
+    const out = agent.compactSessionContext({ sessionId, dryRun });
+    console.log(JSON.stringify(out, null, 2));
+    return;
+  }
+
+  if (cmd === 'context' && args[1] === 'artifacts') {
+    const sessionId = getArg('--session', 'cli');
+    const limit = Number(getArg('--limit', '40'));
+    const out = agent.listContextArtifacts(sessionId, limit);
+    console.log(JSON.stringify(out, null, 2));
+    return;
+  }
+
   if (cmd === 'model' && args[1] === 'switch') {
     const provider = getArg('--provider', config.model.provider);
     const model = getArg('--model', config.model.model);
@@ -88,7 +111,7 @@ async function main() {
     return;
   }
 
-  console.log(`openunum commands:\n  health\n  serve\n  chat --message <text> [--session <id>]\n  model switch --provider <p> --model <m>\n  ollama use --model <id>\n  browser status\n  telegram poll-once\n  telegram run`);
+  console.log(`openunum commands:\n  health\n  serve\n  chat --message <text> [--session <id>]\n  context status --session <id>\n  context compact --session <id> [--dry-run]\n  context artifacts --session <id> [--limit <n>]\n  model switch --provider <p> --model <m>\n  ollama use --model <id>\n  browser status\n  telegram poll-once\n  telegram run`);
 }
 
 main().catch((error) => {

@@ -2,6 +2,8 @@ import crypto from 'node:crypto';
 import { buildProvider } from '../providers/index.mjs';
 import { ToolRuntime } from '../tools/runtime.mjs';
 import { loadSkills } from '../skills/loader.mjs';
+import { buildContextBudgetInfo, estimateMessagesTokens } from './context-budget.mjs';
+import { compactSessionMessages } from './context-compact.mjs';
 
 function inferParamsB(modelId) {
   const m = String(modelId || '').toLowerCase().match(/(\d+(?:\.\d+)?)b/);
@@ -10,19 +12,35 @@ function inferParamsB(modelId) {
 
 function isModelInfoQuestion(text) {
   const t = String(text || '').toLowerCase();
-  return (
-    t.includes('which llm') ||
-    t.includes('what model') ||
-    t.includes('what llm') ||
-    t.includes('context window') ||
-    t.includes('parameter') ||
-    t.includes('billion')
-  );
+  const asksActiveModel =
+    t.includes('which model are you using') ||
+    t.includes('what model are you using') ||
+    t.includes('current model') ||
+    t.includes('which llm are you using') ||
+    t.includes('what llm are you using') ||
+    t.includes('provider/model');
+  const asksCatalog =
+    t.includes('what models we have') ||
+    t.includes('which models we have') ||
+    t.includes('list models') ||
+    t.includes('locally') ||
+    t.includes('in a table');
+  return asksActiveModel && !asksCatalog;
 }
 
 function normalizeModelForProvider(provider, model) {
   const raw = String(model || '').replace(/^(ollama|openrouter|nvidia|generic)\//, '');
   return `${provider}/${raw}`;
+}
+
+function providerModelLabel(provider, model) {
+  const p = String(provider || '').trim();
+  const m = String(model || '').trim();
+  if (!p) return m;
+  if (!m) return p;
+  if (m.startsWith(`${p}/`)) return m;
+  if (/^(ollama|openrouter|nvidia|generic)\//.test(m)) return m;
+  return `${p}/${m}`;
 }
 
 function uniq(arr) {
@@ -97,6 +115,84 @@ export class OpenUnumAgent {
 
   reloadTools() {
     this.toolRuntime = new ToolRuntime(this.config, this.memoryStore);
+  }
+
+  getContextStatus(sessionId) {
+    const sid = String(sessionId || '').trim();
+    if (!sid) throw new Error('sessionId is required');
+    const history = this.memoryStore.getMessagesForContext(sid, 1000)
+      .map((m) => ({ role: m.role, content: m.content }));
+    const model = this.getCurrentModel();
+    const budget = buildContextBudgetInfo({
+      config: this.config,
+      provider: model.activeProvider || model.provider,
+      model: model.activeModel || model.model,
+      messages: history
+    });
+    const latestCompaction = this.memoryStore.getLatestSessionCompaction(sid);
+    return {
+      ok: true,
+      sessionId: sid,
+      messageCount: history.length,
+      estimatedTokens: estimateMessagesTokens(history),
+      budget,
+      latestCompaction
+    };
+  }
+
+  compactSessionContext({ sessionId, dryRun = false }) {
+    const sid = String(sessionId || '').trim();
+    if (!sid) throw new Error('sessionId is required');
+    const model = this.getCurrentModel();
+    const full = this.memoryStore.getMessagesForContext(sid, 2000);
+    if (!full.length) return { ok: true, skipped: true, reason: 'no_messages' };
+    const contextLimit = buildContextBudgetInfo({
+      config: this.config,
+      provider: model.activeProvider || model.provider,
+      model: model.activeModel || model.model,
+      messages: full.map((m) => ({ role: m.role, content: m.content }))
+    }).contextLimit;
+    const targetTokens = Math.floor(contextLimit * Number(this.config.runtime?.contextCompactTargetPct || 0.4));
+    const compacted = compactSessionMessages({
+      messages: full,
+      targetTokens,
+      protectRecentTurns: Number(this.config.runtime?.contextProtectRecentTurns || 8)
+    });
+    if (!dryRun && compacted.cutoffMessageId > 0) {
+      const modelName = `${model.activeProvider || model.provider}/${model.activeModel || model.model}`;
+      this.memoryStore.recordSessionCompaction({
+        sessionId: sid,
+        cutoffMessageId: compacted.cutoffMessageId,
+        model: modelName,
+        ctxLimit: contextLimit,
+        preTokens: compacted.preTokens,
+        postTokens: compacted.postTokens,
+        summary: compacted.summary
+      });
+      this.memoryStore.addMemoryArtifacts(sid, compacted.artifacts);
+      this.memoryStore.addMessage(sid, 'system', compacted.compactedMessages[0]?.content || 'SESSION COMPACTION CHECKPOINT');
+    }
+    return {
+      ok: true,
+      dryRun: Boolean(dryRun),
+      cutoffMessageId: compacted.cutoffMessageId,
+      preTokens: compacted.preTokens,
+      postTokens: compacted.postTokens,
+      summary: compacted.summary,
+      artifactsCount: compacted.artifacts.length
+    };
+  }
+
+  listContextCompactions(sessionId, limit = 20) {
+    const sid = String(sessionId || '').trim();
+    if (!sid) throw new Error('sessionId is required');
+    return { ok: true, sessionId: sid, compactions: this.memoryStore.listSessionCompactions(sid, limit) };
+  }
+
+  listContextArtifacts(sessionId, limit = 40) {
+    const sid = String(sessionId || '').trim();
+    if (!sid) throw new Error('sessionId is required');
+    return { ok: true, sessionId: sid, artifacts: this.memoryStore.getMemoryArtifacts(sid, limit) };
   }
 
   getModelForProvider(provider) {
@@ -268,10 +364,15 @@ export class OpenUnumAgent {
 
   async chat({ message, sessionId = crypto.randomUUID() }) {
     if (isModelInfoQuestion(message)) {
-      const paramsB = inferParamsB(this.config.model.model);
+      const configuredLabel = providerModelLabel(this.config.model.provider, this.config.model.model);
+      const activeLabel = providerModelLabel(
+        this.lastRuntime?.provider || this.config.model.provider,
+        this.lastRuntime?.model || this.config.model.model
+      );
+      const paramsB = inferParamsB(this.lastRuntime?.model || this.config.model.model);
       const reply = [
-        `Configured provider/model: ${this.config.model.provider}/${this.config.model.model}`,
-        `Last active provider/model: ${this.lastRuntime?.provider || this.config.model.provider}/${this.lastRuntime?.model || this.config.model.model}`,
+        `Configured provider/model: ${configuredLabel}`,
+        `Last active provider/model: ${activeLabel}`,
         paramsB ? `Estimated parameter size: ~${paramsB}B (parsed from model id)` : 'Estimated parameter size: unknown from id',
         'Context window: not guaranteed from runtime config; provider metadata endpoint is the source of truth.'
       ].join('\n');
@@ -297,7 +398,9 @@ export class OpenUnumAgent {
     const skillPrompt = skills
       .map((s) => `Skill ${s.name}:\n${s.content.substring(0, 2000)}`)
       .join('\n\n');
-    const strategyHints = this.memoryStore.retrieveStrategyHints(message, 4);
+    const strategyHints = this.memoryStore.retrieveStrategyHintsSmart
+      ? this.memoryStore.retrieveStrategyHintsSmart(message, 6)
+      : this.memoryStore.retrieveStrategyHints(message, 4);
     const strategyPrompt = strategyHints.length
       ? strategyHints
         .map((s, idx) => `${idx + 1}. ${s.success ? 'SUCCESS' : 'FAIL'} | ${s.strategy} | ${s.evidence}`)
@@ -307,8 +410,51 @@ export class OpenUnumAgent {
     const facts = this.memoryStore.retrieveFacts(message, 5)
       .map((f) => `${f.key}: ${f.value}`)
       .join('\n');
+    const knowledgeHits = this.memoryStore.searchKnowledge
+      ? this.memoryStore.searchKnowledge(message, 6).map((k, idx) => `${idx + 1}. [${k.type}] ${k.text}`).join('\n')
+      : '';
 
-    const history = this.memoryStore.getMessages(sessionId, 40).map((m) => ({ role: m.role, content: m.content }));
+    const rawHistory = this.memoryStore.getMessagesForContext(sessionId, 1200)
+      .map((m) => ({ id: m.id, role: m.role, content: m.content }));
+    const modelForBudget = this.getCurrentModel();
+    const triggerInfo = buildContextBudgetInfo({
+      config: this.config,
+      provider: modelForBudget.activeProvider || modelForBudget.provider,
+      model: modelForBudget.activeModel || modelForBudget.model,
+      messages: rawHistory
+    });
+
+    let history = rawHistory.map((m) => ({ role: m.role, content: m.content }));
+    let compactionMeta = null;
+    if (this.config.runtime?.contextCompactionEnabled !== false && triggerInfo.overTrigger) {
+      const targetTokens = Math.floor(triggerInfo.contextLimit * Number(this.config.runtime?.contextCompactTargetPct || 0.4));
+      const compacted = compactSessionMessages({
+        messages: rawHistory,
+        targetTokens,
+        protectRecentTurns: Number(this.config.runtime?.contextProtectRecentTurns || 8)
+      });
+      history = compacted.compactedMessages;
+      if (compacted.cutoffMessageId > 0) {
+        const currentModel = `${modelForBudget.activeProvider || modelForBudget.provider}/${modelForBudget.activeModel || modelForBudget.model}`;
+        this.memoryStore.recordSessionCompaction({
+          sessionId,
+          cutoffMessageId: compacted.cutoffMessageId,
+          model: currentModel,
+          ctxLimit: triggerInfo.contextLimit,
+          preTokens: compacted.preTokens,
+          postTokens: compacted.postTokens,
+          summary: compacted.summary
+        });
+        this.memoryStore.addMemoryArtifacts(sessionId, compacted.artifacts);
+        this.memoryStore.addMessage(sessionId, 'system', compacted.compactedMessages[0]?.content || 'SESSION COMPACTION CHECKPOINT');
+      }
+      compactionMeta = {
+        applied: true,
+        preTokens: compacted.preTokens,
+        postTokens: compacted.postTokens,
+        cutoffMessageId: compacted.cutoffMessageId
+      };
+    }
     const messages = [
       {
         role: 'system',
@@ -318,8 +464,12 @@ export class OpenUnumAgent {
           'Never claim an action was completed unless a tool result in this turn confirms it.\n' +
           'For browser tasks: if browser flow is blocked, pivot to terminal/script strategy immediately (curl/wget/git/python/node) and continue.\n' +
           'Prefer the quickest reliable execution path and build short scripts when it improves completion.\n' +
+          `Owner control mode: ${this.config.runtime?.ownerControlMode || 'safe'}. ` +
+          'In safe mode, avoid destructive operations without explicit owner approval. ' +
+          'In unlocked modes, maximize completion while still requiring tool evidence.\n' +
           'Use tools aggressively to complete tasks end-to-end.\n' +
           (facts ? `Relevant memory:\n${facts}\n` : '') +
+          (knowledgeHits ? `Smart memory recall:\n${knowledgeHits}\n` : '') +
           (strategyPrompt ? `Previous strategy outcomes for related tasks:\n${strategyPrompt}\n` : '') +
           (skillPrompt ? `Loaded skills:\n${skillPrompt}` : '')
       },
@@ -366,6 +516,6 @@ export class OpenUnumAgent {
       }
     }
 
-    return { sessionId, reply: finalText, model: this.getCurrentModel(), trace };
+    return { sessionId, reply: finalText, model: this.getCurrentModel(), trace, context: { budget: triggerInfo, compaction: compactionMeta } };
   }
 }

@@ -35,3 +35,14 @@
 - reboot recovery
 - full regression run passes
 
+## Phase 8
+- reviewed skills lifecycle works end-to-end:
+  - install -> review -> approve -> execute -> uninstall
+- email integration status endpoint works (`googleworkspace/cli`)
+- research pipeline run works (`simulate=true`) and queue is populated
+- autonomy master status and cycle endpoints respond successfully
+
+## Deploy Gate
+- `pnpm test:all`
+- `node tests/self-test-runner.mjs`
+- `pnpm deploy:gate`

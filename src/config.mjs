@@ -29,6 +29,17 @@ export function defaultConfig() {
     runtime: {
       maxToolIterations: 8,
       shellEnabled: true,
+      workspaceRoot: process.env.OPENUNUM_WORKSPACE || process.cwd(),
+      ownerControlMode: process.env.OPENUNUM_OWNER_MODE || 'safe',
+      selfPokeEnabled: true,
+      toolCircuitFailureThreshold: 3,
+      toolCircuitCooldownMs: 300000,
+      contextCompactionEnabled: true,
+      contextCompactTriggerPct: 0.7,
+      contextCompactTargetPct: 0.4,
+      contextHardFailPct: 0.9,
+      contextProtectRecentTurns: 8,
+      contextFallbackTokens: 16000,
       executorRetryAttempts: 3,
       executorRetryBackoffMs: 700,
       providerRequestTimeoutMs: 120000,
@@ -37,7 +48,24 @@ export function defaultConfig() {
       missionDefaultContinueUntilDone: true,
       missionDefaultHardStepCap: 120,
       missionDefaultMaxRetries: 3,
-      missionDefaultIntervalMs: 400
+      missionDefaultIntervalMs: 400,
+      autonomyMasterAutoStart: false,
+      researchDailyEnabled: false,
+      researchScheduleHour: 3
+    },
+    research: {
+      defaultQueries: [
+        'advanced autonomous agents reddit machine learning',
+        'agent engineering methods x twitter',
+        'google agentic workflows latest',
+        'self-healing agent architecture github'
+      ]
+    },
+    integrations: {
+      googleWorkspace: {
+        cliCommand: process.env.GOOGLE_CLOUD_CLI || 'gcloud',
+        enabled: true
+      }
     },
     model: {
       provider: 'ollama',
@@ -47,6 +75,12 @@ export function defaultConfig() {
         openrouter: 'openrouter/openai/gpt-4o-mini',
         nvidia: 'nvidia/qwen/qwen3-coder-480b-a35b-instruct',
         generic: 'generic/gpt-4o-mini'
+      },
+      contextHints: {
+        'ollama/qwen3.5:9b-64k': 64000,
+        'ollama/minimax-m2.7:cloud': 32768,
+        'openrouter/openai/gpt-4o-mini': 128000,
+        'generic/gpt-4o-mini': 128000
       },
       routing: {
         fallbackEnabled: true,
@@ -75,6 +109,15 @@ function withDefaults(config) {
     server: { ...d.server, ...(config.server || {}) },
     browser: { ...d.browser, ...(config.browser || {}) },
     runtime: { ...d.runtime, ...(config.runtime || {}) },
+    research: { ...d.research, ...(config.research || {}) },
+    integrations: {
+      ...d.integrations,
+      ...(config.integrations || {}),
+      googleWorkspace: {
+        ...d.integrations.googleWorkspace,
+        ...(config.integrations?.googleWorkspace || {})
+      }
+    },
     channels: {
       ...d.channels,
       ...(config.channels || {}),
