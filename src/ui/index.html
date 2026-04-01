@@ -251,6 +251,52 @@
     }
     .provider-card.healthy { border-color: rgba(34,197,94,.7); }
     .provider-card.degraded { border-color: rgba(234,179,8,.7); }
+    .table-wrap {
+      overflow: auto;
+      border: 1px solid #2f4a80;
+      border-radius: 12px;
+      background: rgba(10, 19, 36, .72);
+      margin-top: 10px;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      min-width: 760px;
+    }
+    th, td {
+      padding: 10px 12px;
+      border-bottom: 1px solid rgba(47,74,128,.45);
+      text-align: left;
+      vertical-align: top;
+      font-size: 12px;
+    }
+    th {
+      color: #cfe2ff;
+      text-transform: uppercase;
+      letter-spacing: .4px;
+      font-size: 11px;
+      background: rgba(15, 28, 52, .92);
+      position: sticky;
+      top: 0;
+      z-index: 1;
+    }
+    .mono {
+      font-family: "IBM Plex Mono", "Fira Code", monospace;
+      font-size: 12px;
+      word-break: break-all;
+    }
+    .badge {
+      display: inline-block;
+      border-radius: 999px;
+      border: 1px solid #35558e;
+      padding: 4px 8px;
+      font-size: 11px;
+      background: rgba(16, 36, 66, .9);
+      color: #d7e6ff;
+    }
+    .badge.good { border-color: rgba(34,197,94,.7); color: #c8f5d8; }
+    .badge.warn { border-color: rgba(234,179,8,.7); color: #fde68a; }
+    .badge.bad { border-color: rgba(239,68,68,.7); color: #fecaca; }
     .messages {
       overflow: auto;
       padding: 8px;
@@ -554,7 +600,53 @@
         </div>
 
         <div class="view" id="view-provider-config">
-          <h3 class="section-title">Provider Config</h3>
+          <h3 class="section-title">Provider & Auth Console</h3>
+          <div class="hint">Models stay limited to `ollama`, `nvidia`, `openrouter`, `openai`. This screen manages endpoints, ranked availability, and secure auth storage for provider and adjacent service credentials.</div>
+          <div class="row" style="margin-top:10px;">
+            <button id="prefillLocalAuth">Scan Local Auth Sources</button>
+            <button id="refreshAuthCatalog">Refresh Provider/Auth State</button>
+            <select id="authTargetSelect">
+              <option value="openrouterKey">OpenRouter</option>
+              <option value="nvidiaKey">NVIDIA</option>
+              <option value="genericKey">OpenAI</option>
+              <option value="openaiOauthKey">OpenAI OAuth</option>
+              <option value="githubKey">GitHub API</option>
+              <option value="copilotGithubKey">GitHub Copilot</option>
+              <option value="huggingfaceKey">HuggingFace</option>
+              <option value="elevenlabsKey">ElevenLabs</option>
+              <option value="tgToken">Telegram</option>
+            </select>
+            <button id="focusAuthTarget">Focus Credential Field</button>
+          </div>
+          <div class="table-wrap" data-testid="provider-matrix">
+            <table>
+              <thead>
+                <tr>
+                  <th>Provider</th>
+                  <th>Endpoint</th>
+                  <th>Auth</th>
+                  <th>Models</th>
+                  <th>Top Model</th>
+                  <th>Action</th>
+                </tr>
+              </thead>
+              <tbody id="providerMatrixBody"></tbody>
+            </table>
+          </div>
+          <div class="table-wrap" style="margin-top:12px;" data-testid="auth-vault">
+            <table>
+              <thead>
+                <tr>
+                  <th>Service</th>
+                  <th>Mode</th>
+                  <th>Stored</th>
+                  <th>CLI / OAuth</th>
+                  <th>Source</th>
+                </tr>
+              </thead>
+              <tbody id="authMethodBody"></tbody>
+            </table>
+          </div>
           <div class="grid two">
             <div class="field">
               <label>Ollama Base URL</label>
@@ -585,18 +677,46 @@
             <div class="field">
               <label>OpenRouter API Key (user value)</label>
               <input id="openrouterKey" placeholder="sk-or-..." />
+              <div class="hint" id="openrouterKeyMeta"></div>
             </div>
             <div class="field">
               <label>NVIDIA API Key (user value)</label>
               <input id="nvidiaKey" placeholder="nvapi-..." />
+              <div class="hint" id="nvidiaKeyMeta"></div>
             </div>
             <div class="field">
               <label>OpenAI API Key (user value)</label>
               <input id="genericKey" placeholder="provider key" />
+              <div class="hint" id="genericKeyMeta"></div>
+            </div>
+            <div class="field">
+              <label>OpenAI OAuth Token</label>
+              <input id="openaiOauthKey" placeholder="oauth token" />
+              <div class="hint" id="openaiOauthKeyMeta"></div>
+            </div>
+            <div class="field">
+              <label>GitHub Token</label>
+              <input id="githubKey" placeholder="ghp_..." />
+              <div class="hint" id="githubKeyMeta"></div>
+            </div>
+            <div class="field">
+              <label>GitHub Copilot Token</label>
+              <input id="copilotGithubKey" placeholder="copilot token" />
+              <div class="hint" id="copilotGithubKeyMeta"></div>
+            </div>
+            <div class="field">
+              <label>HuggingFace API Key</label>
+              <input id="huggingfaceKey" placeholder="hf_..." />
+              <div class="hint" id="huggingfaceKeyMeta"></div>
+            </div>
+            <div class="field">
+              <label>ElevenLabs API Key</label>
+              <input id="elevenlabsKey" placeholder="xi_..." />
+              <div class="hint" id="elevenlabsKeyMeta"></div>
             </div>
           </div>
           <div class="row" style="margin-top:10px;">
-            <button class="primary" id="saveProviders">Save Provider Config</button>
+            <button class="primary" id="saveProviders">Save Secure Provider/Auth Config</button>
           </div>
           <div class="hint" id="providerStatus" data-testid="provider-health"></div>
         </div>
@@ -827,7 +947,7 @@
       chat: ['Chat', 'Autonomous agent conversation'],
       'operator': ['Trace', 'Runtime, tools, and live execution state'],
       'model-routing': ['Settings', 'Primary model selection and fallback strategy'],
-      'provider-config': ['Settings', 'Provider endpoints and keys'],
+      'provider-config': ['Settings', 'Provider matrix, models, and secure auth vault'],
       'browser': ['Runtime', 'Browser and hardware control'],
       'telegram': ['Settings', 'Channel connectivity and polling control'],
       'missions': ['Missions', 'Autonomous execution loops']
@@ -859,6 +979,7 @@
     const sessionListEl = q('sessionList');
     let sessionCache = [];
     let modelCatalog = null;
+    let authCatalog = null;
     let runtimeOverview = null;
     let missionTimelineCache = null;
     q('chatMeta').textContent = sessionId;
@@ -1403,6 +1524,100 @@
       `).join('');
     }
 
+    function badgeClassForStatus(status) {
+      const normalized = String(status || '').toLowerCase();
+      if (normalized === 'healthy' || normalized === 'configured' || normalized === 'authenticated') return 'good';
+      if (normalized === 'degraded' || normalized === 'partial') return 'warn';
+      if (normalized === 'missing' || normalized === 'unavailable') return 'bad';
+      return '';
+    }
+
+    function renderStatusBadge(text) {
+      const value = String(text || 'unknown');
+      return `<span class="badge ${badgeClassForStatus(value)}">${escapeHtml(value)}</span>`;
+    }
+
+    function setFieldMeta(id, info = '') {
+      const el = q(id);
+      if (el) el.textContent = info;
+    }
+
+    function renderProviderMatrix(providers = []) {
+      const host = q('providerMatrixBody');
+      if (!host) return;
+      host.innerHTML = providers.map((provider) => `
+        <tr>
+          <td>
+            <strong>${escapeHtml(provider.display_name || provider.provider)}</strong><br />
+            <span class="pill">${escapeHtml(provider.provider)}</span>
+          </td>
+          <td class="mono">${escapeHtml(provider.base_url || '-')}</td>
+          <td>
+            ${renderStatusBadge(provider.provider === 'ollama' ? 'configured' : (provider.auth_ready ? 'configured' : 'missing'))}
+            <div class="hint" style="margin-top:6px;">${provider.stored_preview ? `stored ${escapeHtml(provider.stored_preview)}` : 'no stored secret'}</div>
+          </td>
+          <td>${Number(provider.model_count || 0)}</td>
+          <td class="mono">${escapeHtml(provider.top_model || '-')}</td>
+          <td>
+            ${renderStatusBadge(provider.status || 'unknown')}
+            <div class="row" style="margin-top:6px;">
+              <button type="button" class="provider-matrix-select" data-provider="${escapeHtml(provider.provider)}">Use Provider</button>
+            </div>
+          </td>
+        </tr>
+      `).join('');
+      qa('.provider-matrix-select').forEach((btn) => {
+        btn.onclick = async () => {
+          setSelectByValueOrFirst('provider', btn.dataset.provider || 'ollama');
+          await loadModelsForProvider(q('provider').value);
+          showView('model-routing');
+        };
+      });
+    }
+
+    function renderAuthMethodTable(rows = []) {
+      const host = q('authMethodBody');
+      if (!host) return;
+      host.innerHTML = rows.map((row) => `
+        <tr>
+          <td><strong>${escapeHtml(row.display_name || row.id)}</strong></td>
+          <td>${escapeHtml(row.auth_kind || '-')}</td>
+          <td>
+            ${row.stored ? renderStatusBadge('configured') : renderStatusBadge(row.configured ? 'partial' : 'missing')}
+            <div class="hint" style="margin-top:6px;">${row.stored_preview ? escapeHtml(row.stored_preview) : 'no stored secret'}</div>
+          </td>
+          <td>
+            ${row.cli ? renderStatusBadge(row.cli.authenticated ? 'authenticated' : (row.cli.available ? 'available' : 'unavailable')) : '<span class="pill">n/a</span>'}
+            <div class="hint" style="margin-top:6px;">${escapeHtml(row.cli?.account || row.cli?.detail || 'manual')}</div>
+          </td>
+          <td class="mono">${escapeHtml(row.discovered_source || '-')}</td>
+        </tr>
+      `).join('');
+    }
+
+    function authMethodById(id) {
+      return (authCatalog?.auth_methods || []).find((row) => row.id === id) || null;
+    }
+
+    async function refreshAuthCatalog() {
+      authCatalog = await jget('/api/auth/catalog');
+      renderProviderMatrix(authCatalog.providers || []);
+      renderAuthMethodTable(authCatalog.auth_methods || []);
+      const providerById = Object.fromEntries((authCatalog.providers || []).map((row) => [row.provider, row]));
+      const authById = Object.fromEntries((authCatalog.auth_methods || []).map((row) => [row.id, row]));
+      setFieldMeta('openrouterKeyMeta', providerById.openrouter ? `stored=${providerById.openrouter.stored} preview=${providerById.openrouter.stored_preview || 'none'} source=${providerById.openrouter.discovered_source || '-'}` : '');
+      setFieldMeta('nvidiaKeyMeta', providerById.nvidia ? `stored=${providerById.nvidia.stored} preview=${providerById.nvidia.stored_preview || 'none'} source=${providerById.nvidia.discovered_source || '-'}` : '');
+      setFieldMeta('genericKeyMeta', providerById.openai ? `stored=${providerById.openai.stored} preview=${providerById.openai.stored_preview || 'none'} source=${providerById.openai.discovered_source || '-'}` : '');
+      setFieldMeta('openaiOauthKeyMeta', authById['openai-oauth'] ? `stored=${authById['openai-oauth'].stored} preview=${authById['openai-oauth'].stored_preview || 'none'} source=${authById['openai-oauth'].discovered_source || '-'}` : '');
+      setFieldMeta('githubKeyMeta', authById.github ? `stored=${authById.github.stored} preview=${authById.github.stored_preview || 'none'} oauth=${authById.github.cli?.authenticated ? 'active' : 'inactive'}` : '');
+      setFieldMeta('copilotGithubKeyMeta', authById['github-copilot'] ? `stored=${authById['github-copilot'].stored} preview=${authById['github-copilot'].stored_preview || 'none'} source=${authById['github-copilot'].discovered_source || '-'}` : '');
+      setFieldMeta('huggingfaceKeyMeta', authById.huggingface ? `stored=${authById.huggingface.stored} preview=${authById.huggingface.stored_preview || 'none'} cli=${authById.huggingface.cli?.authenticated ? 'active' : (authById.huggingface.cli?.available ? 'available' : 'missing')}` : '');
+      setFieldMeta('elevenlabsKeyMeta', authById.elevenlabs ? `stored=${authById.elevenlabs.stored} preview=${authById.elevenlabs.stored_preview || 'none'} cli=${authById.elevenlabs.cli?.available ? 'available' : 'missing'}` : '');
+      q('providerStatus').setAttribute('data-testid', 'provider-health');
+      q('providerStatus').textContent = `secure store=${authCatalog.secret_store_path} | scanned=${Number(authCatalog.scanned_files?.length || 0)} | github_oauth=${authById.github?.cli?.authenticated ? 'active' : 'inactive'}`;
+      return authCatalog;
+    }
+
     async function refreshRuntimeOverview() {
       runtimeOverview = await jget('/api/runtime/overview');
       q('runtimeAutonomyValue').textContent = runtimeOverview.autonomyMode || 'autonomy-first';
@@ -1563,8 +1778,7 @@
       setSelectByValueOrFirst('openrouterUrl', c.openrouterBaseUrl || 'https://openrouter.ai/api/v1');
       setSelectByValueOrFirst('nvidiaUrl', c.nvidiaBaseUrl || 'https://integrate.api.nvidia.com/v1');
       setSelectByValueOrFirst('genericUrl', c.openaiBaseUrl || c.genericBaseUrl || 'https://api.openai.com/v1');
-      q('providerStatus').setAttribute('data-testid', 'provider-health');
-      q('providerStatus').textContent = `keys: openrouter=${c.hasOpenrouterApiKey} nvidia=${c.hasNvidiaApiKey} openai=${c.hasOpenaiApiKey}`;
+      await refreshAuthCatalog();
     }
 
     async function refreshBrowserConfig() {
@@ -1709,26 +1923,66 @@
 
     q('importOpenclaw').onclick = async () => {
       const out = await jpost('/api/providers/import-openclaw', {});
-      q('modelCatalogStatus').textContent = `imported keys: openrouter=${out.imported?.openrouterApiKey} nvidia=${out.imported?.nvidiaApiKey}`;
+      q('modelCatalogStatus').textContent = `imported keys: openrouter=${out.imported?.openrouterApiKey} nvidia=${out.imported?.nvidiaApiKey} openai=${out.imported?.openaiApiKey}`;
       await refreshProviderConfig();
+      await refreshModelCatalog();
+      await refreshRuntimeOverview();
     };
 
     q('saveProviders').onclick = async () => {
-      await jpost('/api/providers/config', {
-        ollamaBaseUrl: q('ollamaUrl').value,
-        openrouterBaseUrl: q('openrouterUrl').value,
-        nvidiaBaseUrl: q('nvidiaUrl').value,
-        genericBaseUrl: q('genericUrl').value,
-        openrouterApiKey: q('openrouterKey').value.trim(),
-        nvidiaApiKey: q('nvidiaKey').value.trim(),
-        genericApiKey: q('genericKey').value.trim()
+      await jpost('/api/auth/catalog', {
+        providerBaseUrls: {
+          ollamaBaseUrl: q('ollamaUrl').value,
+          openrouterBaseUrl: q('openrouterUrl').value,
+          nvidiaBaseUrl: q('nvidiaUrl').value,
+          openaiBaseUrl: q('genericUrl').value
+        },
+        secrets: {
+          openrouterApiKey: q('openrouterKey').value.trim(),
+          nvidiaApiKey: q('nvidiaKey').value.trim(),
+          openaiApiKey: q('genericKey').value.trim(),
+          openaiOauthToken: q('openaiOauthKey').value.trim(),
+          githubToken: q('githubKey').value.trim(),
+          copilotGithubToken: q('copilotGithubKey').value.trim(),
+          huggingfaceApiKey: q('huggingfaceKey').value.trim(),
+          elevenlabsApiKey: q('elevenlabsKey').value.trim()
+        }
       });
       q('openrouterKey').value = '';
       q('nvidiaKey').value = '';
       q('genericKey').value = '';
-      q('providerStatus').textContent = 'provider config saved';
+      q('openaiOauthKey').value = '';
+      q('githubKey').value = '';
+      q('copilotGithubKey').value = '';
+      q('huggingfaceKey').value = '';
+      q('elevenlabsKey').value = '';
+      q('providerStatus').textContent = 'secure provider/auth config saved';
       await refreshProviderConfig();
+      await refreshModelCatalog();
       await refreshRuntimeOverview();
+    };
+
+    q('prefillLocalAuth').onclick = async () => {
+      const out = await jpost('/api/auth/prefill-local', { overwriteBaseUrls: false });
+      q('providerStatus').textContent = `local auth scan saved | files=${Number(out.scannedFiles?.length || 0)} | github=${Boolean(out.imported?.githubToken)}`;
+      await refreshProviderConfig();
+      await refreshModelCatalog();
+      await refreshRuntimeOverview();
+    };
+
+    q('refreshAuthCatalog').onclick = async () => {
+      await refreshProviderConfig();
+      await refreshModelCatalog();
+      await refreshRuntimeOverview();
+    };
+
+    q('focusAuthTarget').onclick = () => {
+      const target = q('authTargetSelect').value;
+      const el = q(target);
+      if (!el) return;
+      showView(target === 'tgToken' ? 'telegram' : 'provider-config');
+      el.focus();
+      el.scrollIntoView({ behavior: 'smooth', block: 'center' });
     };
 
     q('saveRuntime').onclick = async () => {

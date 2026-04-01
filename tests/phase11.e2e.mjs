@@ -22,7 +22,9 @@ try {
     'data-testid="fallback-model-select"',
     'data-testid="autonomy-mode-select"',
     'data-testid="provider-health"',
-    'data-testid="trace-panel"'
+    'data-testid="trace-panel"',
+    'data-testid="provider-matrix"',
+    'data-testid="auth-vault"'
   ];
 
   for (const marker of requiredMarkers) {
@@ -36,6 +38,16 @@ try {
   assert.equal(html.includes('id="quickPrompts"'), true);
   assert.equal(html.includes('id="runtimeCards"'), true);
   assert.equal(html.includes('id="providerCards"'), true);
+  assert.equal(html.includes('id="providerMatrixBody"'), true);
+  assert.equal(html.includes('id="authMethodBody"'), true);
+  assert.equal(html.includes('id="prefillLocalAuth"'), true);
+  assert.equal(html.includes('id="refreshAuthCatalog"'), true);
+  assert.equal(html.includes('id="authTargetSelect"'), true);
+  assert.equal(html.includes('id="focusAuthTarget"'), true);
+  assert.equal(html.includes('id="openaiOauthKey"'), true);
+  assert.equal(html.includes('id="githubKey"'), true);
+  assert.equal(html.includes('id="huggingfaceKey"'), true);
+  assert.equal(html.includes('id="elevenlabsKey"'), true);
   assert.equal(html.includes('id="exportSessionBtn"'), true);
   assert.equal(html.includes('id="contextBudgetValue"'), true);
   assert.equal(html.includes('id="compactContextBtn"'), true);

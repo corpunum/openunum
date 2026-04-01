@@ -21,6 +21,7 @@ Returns:
 - `capabilities`
 - `modelCatalog`
 - `providerConfig`
+- `authCatalog`
 
 `POST` accepts (partial):
 - `runtime.shellEnabled: boolean`
@@ -125,6 +126,9 @@ Returns a WebUI-oriented flagship summary:
 - `GET /api/providers/config`
 - `POST /api/providers/config`
 - `POST /api/providers/import-openclaw`
+- `GET /api/auth/catalog`
+- `POST /api/auth/catalog`
+- `POST /api/auth/prefill-local`
 - `GET /api/models?provider=ollama|nvidia|openrouter|openai`
 - `GET /api/model-catalog`
 
@@ -151,6 +155,77 @@ Returns a WebUI-oriented flagship summary:
   }
 }
 ```
+
+`GET /api/auth/catalog` returns the secure provider/auth contract:
+```json
+{
+  "contract_version": "2026-04-01.auth-catalog.v1",
+  "secret_store_path": "/home/user/.openunum/secrets.json",
+  "provider_order": ["ollama", "nvidia", "openrouter", "openai"],
+  "providers": [
+    {
+      "provider": "openrouter",
+      "base_url": "https://openrouter.ai/api/v1",
+      "auth_ready": true,
+      "stored": true,
+      "stored_preview": "sk-o***cret",
+      "model_count": 42,
+      "top_model": "anthropic/claude-3.5-sonnet"
+    }
+  ],
+  "auth_methods": [
+    {
+      "id": "github",
+      "display_name": "GitHub",
+      "auth_kind": "token_or_oauth",
+      "configured": true,
+      "stored": false,
+      "cli": {
+        "cli": "gh",
+        "available": true,
+        "authenticated": true,
+        "account": "corpunum"
+      }
+    }
+  ]
+}
+```
+
+`POST /api/auth/catalog` accepts:
+```json
+{
+  "providerBaseUrls": {
+    "ollamaBaseUrl": "http://127.0.0.1:11434",
+    "openrouterBaseUrl": "https://openrouter.ai/api/v1",
+    "nvidiaBaseUrl": "https://integrate.api.nvidia.com/v1",
+    "openaiBaseUrl": "https://api.openai.com/v1"
+  },
+  "secrets": {
+    "openrouterApiKey": "sk-or-...",
+    "nvidiaApiKey": "nvapi-...",
+    "openaiApiKey": "sk-...",
+    "openaiOauthToken": "...",
+    "githubToken": "ghp_...",
+    "copilotGithubToken": "...",
+    "huggingfaceApiKey": "hf_...",
+    "elevenlabsApiKey": "xi_...",
+    "telegramBotToken": "123456:ABC..."
+  },
+  "clear": ["githubToken"]
+}
+```
+
+`POST /api/auth/prefill-local` scans local sources and securely saves discovered credentials without returning raw secret values:
+- `process.env`
+- `/home/corp-unum/.openclaw/openclaw.json`
+- `/home/corp-unum/.openclaw/workspace/.runtime-secrets.env`
+- `/home/corp-unum/.openclaw/workspace/.env.trading_agent`
+- `/home/corp-unum/openclaw/.env`
+- `/home/corp-unum/.openclaw/.env`
+- `/home/corp-unum/openclaw-tradebot/.env`
+- `/home/corp-unum/openunumQwen/.env`
+
+Secrets are no longer returned from `GET /api/config` or persisted in `openunum.json`.
 
 ## Model Runtime
 

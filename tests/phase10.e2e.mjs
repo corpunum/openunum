@@ -1,7 +1,12 @@
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 import { startServer, stopServer, jget, jpost } from './_helpers.mjs';
 
 let proc;
+const TEST_PORT = Number(process.env.OPENUNUM_TEST_PORT || 18881);
+const TEST_HOME = path.join(os.tmpdir(), `openunum-test-home-${TEST_PORT}`);
 
 try {
   proc = await startServer();
@@ -36,6 +41,52 @@ try {
   assert.equal(Array.isArray(runtimeOverview.json.providers), true);
   assert.equal(typeof runtimeOverview.json.git, 'object');
   assert.equal(typeof runtimeOverview.json.browser, 'object');
+
+  const authCatalog = await jget('/api/auth/catalog');
+  assert.equal(authCatalog.status, 200);
+  assert.equal(authCatalog.json.contract_version, '2026-04-01.auth-catalog.v1');
+  assert.deepEqual(authCatalog.json.provider_order, ['ollama', 'nvidia', 'openrouter', 'openai']);
+  assert.equal(Array.isArray(authCatalog.json.providers), true);
+  assert.equal(Array.isArray(authCatalog.json.auth_methods), true);
+  assert.equal(Boolean(authCatalog.json.secret_store_path), true);
+  assert.equal(authCatalog.json.providers.some((row) => row.provider === 'openai'), true);
+  assert.equal(authCatalog.json.auth_methods.some((row) => row.id === 'github'), true);
+
+  const savedAuth = await jpost('/api/auth/catalog', {
+    providerBaseUrls: {
+      ollamaBaseUrl: 'http://127.0.0.1:11434',
+      openrouterBaseUrl: 'https://openrouter.ai/api/v1',
+      nvidiaBaseUrl: 'https://integrate.api.nvidia.com/v1',
+      openaiBaseUrl: 'https://api.openai.com/v1'
+    },
+    secrets: {
+      openrouterApiKey: 'sk-or-phase10-secret',
+      nvidiaApiKey: 'nvapi-phase10-secret',
+      openaiApiKey: 'sk-openai-phase10-secret',
+      githubToken: 'ghp_phase10_secret',
+      huggingfaceApiKey: 'hf_phase10_secret',
+      elevenlabsApiKey: 'xi_phase10_secret',
+      telegramBotToken: '123456:phase10-secret'
+    }
+  });
+  assert.equal(savedAuth.status, 200);
+  assert.equal(savedAuth.json.ok, true);
+  assert.equal(savedAuth.json.catalog.providers.some((row) => row.provider === 'openrouter' && row.stored === true), true);
+
+  const configFile = fs.readFileSync(path.join(TEST_HOME, 'openunum.json'), 'utf8');
+  const secretFilePath = path.join(TEST_HOME, 'secrets.json');
+  const secretFile = fs.readFileSync(secretFilePath, 'utf8');
+  assert.equal(configFile.includes('sk-or-phase10-secret'), false);
+  assert.equal(configFile.includes('nvapi-phase10-secret'), false);
+  assert.equal(configFile.includes('ghp_phase10_secret'), false);
+  assert.equal(secretFile.includes('sk-or-phase10-secret'), true);
+  assert.equal(secretFile.includes('ghp_phase10_secret'), true);
+  assert.equal((fs.statSync(secretFilePath).mode & 0o777), 0o600);
+
+  const prefill = await jpost('/api/auth/prefill-local', { overwriteBaseUrls: false });
+  assert.equal(prefill.status, 200);
+  assert.equal(prefill.json.ok, true);
+  assert.equal(Array.isArray(prefill.json.scannedFiles), true);
 
   const sessionId = `phase10-${Date.now()}`;
   const created = await jpost('/api/sessions', { sessionId });

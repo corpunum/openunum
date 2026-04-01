@@ -51,6 +51,26 @@ Date: 2026-04-01
    - mission timeline filter/search controls in the WebUI
    - artifact drill-down from mission timeline into operator output
    - direct mission-session open/clone controls from the timeline
+14. Added a secure provider/auth console pass to the flagship:
+   - provider matrix table with endpoint, auth readiness, model count, and top-model visibility
+   - secure auth vault for provider and adjacent integration credentials
+   - redacted auth method table for GitHub, Google Workspace, HuggingFace, ElevenLabs, Telegram, OpenAI OAuth, and GitHub Copilot
+15. Added secure secret persistence outside `openunum.json`:
+   - new `~/.openunum/secrets.json` store written with mode `0600`
+   - legacy provider/Telegram secrets are migrated out of config on load
+   - `GET /api/config` is now sanitized and no longer returns raw secrets
+16. Added new provider/auth endpoints:
+   - `GET /api/auth/catalog`
+   - `POST /api/auth/catalog`
+   - `POST /api/auth/prefill-local`
+17. Expanded local auth discovery beyond the old OpenClaw importer:
+   - scans OpenClaw/OpenUnum-adjacent env files and runtime secret files
+   - imports OpenAI, GitHub, HuggingFace, ElevenLabs, and Telegram secrets when present
+   - exposes GitHub CLI / Google Cloud / HuggingFace CLI / ElevenLabs CLI availability as redacted UI state
+18. Expanded flagship tests to verify:
+   - secure secret persistence and scrubbed config writes
+   - auth catalog contract
+   - provider matrix and auth vault WebUI markers
 
 Date: 2026-03-30
 

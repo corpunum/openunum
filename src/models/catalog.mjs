@@ -1,4 +1,5 @@
 import fs from 'node:fs';
+import { scanLocalAuthSources } from '../secrets/store.mjs';
 
 export const MODEL_CATALOG_CONTRACT_VERSION = '2026-04-01.model-catalog.v1';
 export const PROVIDER_ORDER = ['ollama', 'nvidia', 'openrouter', 'openai'];
@@ -227,38 +228,21 @@ function parseEnvFile(filePath) {
 }
 
 export function importProviderSecretsFromOpenClaw() {
-  const out = {
-    openrouterApiKey: '',
-    nvidiaApiKey: '',
-    openrouterBaseUrl: '',
-    nvidiaBaseUrl: ''
+  const scan = scanLocalAuthSources();
+  return {
+    openrouterApiKey: scan.secrets.openrouterApiKey || '',
+    nvidiaApiKey: scan.secrets.nvidiaApiKey || '',
+    openaiApiKey: scan.secrets.openaiApiKey || '',
+    githubToken: scan.secrets.githubToken || '',
+    huggingfaceApiKey: scan.secrets.huggingfaceApiKey || '',
+    elevenlabsApiKey: scan.secrets.elevenlabsApiKey || '',
+    telegramBotToken: scan.secrets.telegramBotToken || '',
+    openrouterBaseUrl: scan.providerBaseUrls.openrouterBaseUrl || '',
+    nvidiaBaseUrl: scan.providerBaseUrls.nvidiaBaseUrl || '',
+    openaiBaseUrl: scan.providerBaseUrls.openaiBaseUrl || '',
+    ollamaBaseUrl: scan.providerBaseUrls.ollamaBaseUrl || '',
+    filesScanned: scan.filesScanned
   };
-
-  const configPath = '/home/corp-unum/.openclaw/openclaw.json';
-  if (fs.existsSync(configPath)) {
-    const json = JSON.parse(fs.readFileSync(configPath, 'utf8'));
-    out.nvidiaApiKey = json?.models?.providers?.nvidia?.apiKey || '';
-    out.nvidiaBaseUrl = json?.models?.providers?.nvidia?.baseUrl || '';
-    out.openrouterApiKey = json?.models?.providers?.openrouter?.apiKey || '';
-    out.openrouterBaseUrl = json?.models?.providers?.openrouter?.baseUrl || '';
-  }
-
-  const envCandidates = [
-    '/home/corp-unum/openclaw/.env',
-    '/home/corp-unum/.openclaw/.env',
-    '/home/corp-unum/.openclaw/workspace/.env.trading_agent'
-  ];
-  for (const p of envCandidates) {
-    const env = parseEnvFile(p);
-    if (!out.openrouterApiKey && env.OPENROUTER_API_KEY) out.openrouterApiKey = env.OPENROUTER_API_KEY;
-    if (!out.nvidiaApiKey && (env.NVIDIA_API_KEY || env.NVIDIA_NIM_API_KEY)) {
-      out.nvidiaApiKey = env.NVIDIA_API_KEY || env.NVIDIA_NIM_API_KEY;
-    }
-    if (!out.openrouterBaseUrl && env.OPENROUTER_BASE_URL) out.openrouterBaseUrl = env.OPENROUTER_BASE_URL;
-    if (!out.nvidiaBaseUrl && env.NVIDIA_BASE_URL) out.nvidiaBaseUrl = env.NVIDIA_BASE_URL;
-  }
-
-  return out;
 }
 
 function getProviderConnection(modelConfig, provider) {

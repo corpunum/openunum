@@ -17,6 +17,19 @@ import { CDPBrowser } from './browser/cdp.mjs';
 import { TelegramChannel } from './channels/telegram.mjs';
 import { logInfo, logError } from './logger.mjs';
 import {
+  AUTH_CATALOG_CONTRACT_VERSION,
+  AUTH_TARGET_DEFS,
+  applySecretsToConfig,
+  getCliAuthStatus,
+  getSecretsPath,
+  loadSecretStore,
+  mergeSecrets,
+  saveSecretStore,
+  scanLocalAuthSources,
+  scrubSecretsFromConfig,
+  secretPreview
+} from './secrets/store.mjs';
+import {
   MODEL_CATALOG_CONTRACT_VERSION,
   PROVIDER_ORDER,
   buildLegacyProviderModels,
@@ -61,6 +74,19 @@ function normalizeModelSettings() {
     .filter((provider, index, arr) => provider && arr.indexOf(provider) === index);
 }
 
+function reloadConfigSecrets() {
+  const applied = applySecretsToConfig({ model: config.model, channels: config.channels });
+  config.model = { ...config.model, ...(applied.model || {}) };
+  config.channels = {
+    ...(config.channels || {}),
+    telegram: {
+      ...(config.channels?.telegram || {}),
+      ...(applied.channels?.telegram || {})
+    }
+  };
+  normalizeModelSettings();
+}
+
 function getProviderConfigPayload() {
   return {
     ollamaBaseUrl: config.model.ollamaBaseUrl,
@@ -72,6 +98,150 @@ function getProviderConfigPayload() {
     hasNvidiaApiKey: Boolean(config.model.nvidiaApiKey),
     hasOpenaiApiKey: Boolean(config.model.openaiApiKey || config.model.genericApiKey),
     hasGenericApiKey: Boolean(config.model.openaiApiKey || config.model.genericApiKey)
+  };
+}
+
+function persistSecretUpdates(secretUpdates = {}, clear = []) {
+  const currentStore = loadSecretStore();
+  const nextStore = mergeSecrets(currentStore, secretUpdates, clear);
+  saveSecretStore(nextStore);
+  reloadConfigSecrets();
+  return nextStore;
+}
+
+function buildAuthMethodRows(store, scan, cliStatus) {
+  const secrets = store.secrets || {};
+  return [
+    {
+      id: 'github',
+      display_name: 'GitHub',
+      auth_kind: 'token_or_oauth',
+      configured: Boolean(secrets.githubToken || cliStatus.github?.authenticated),
+      stored: Boolean(secrets.githubToken),
+      stored_preview: secretPreview(secrets.githubToken),
+      discovered: Boolean(scan.secrets.githubToken),
+      discovered_source: scan.sourceMap.githubToken || null,
+      cli: cliStatus.github
+    },
+    {
+      id: 'google-workspace',
+      display_name: 'Google Workspace',
+      auth_kind: 'oauth_cli',
+      configured: Boolean(cliStatus.googleWorkspace?.authenticated),
+      stored: false,
+      stored_preview: null,
+      discovered: false,
+      discovered_source: null,
+      cli: cliStatus.googleWorkspace
+    },
+    {
+      id: 'huggingface',
+      display_name: 'HuggingFace',
+      auth_kind: 'api_key_or_cli',
+      configured: Boolean(secrets.huggingfaceApiKey || cliStatus.huggingface?.authenticated),
+      stored: Boolean(secrets.huggingfaceApiKey),
+      stored_preview: secretPreview(secrets.huggingfaceApiKey),
+      discovered: Boolean(scan.secrets.huggingfaceApiKey),
+      discovered_source: scan.sourceMap.huggingfaceApiKey || null,
+      cli: cliStatus.huggingface
+    },
+    {
+      id: 'elevenlabs',
+      display_name: 'ElevenLabs',
+      auth_kind: 'api_key',
+      configured: Boolean(secrets.elevenlabsApiKey),
+      stored: Boolean(secrets.elevenlabsApiKey),
+      stored_preview: secretPreview(secrets.elevenlabsApiKey),
+      discovered: Boolean(scan.secrets.elevenlabsApiKey),
+      discovered_source: scan.sourceMap.elevenlabsApiKey || null,
+      cli: cliStatus.elevenlabs
+    },
+    {
+      id: 'telegram',
+      display_name: 'Telegram',
+      auth_kind: 'bot_token',
+      configured: Boolean(secrets.telegramBotToken),
+      stored: Boolean(secrets.telegramBotToken),
+      stored_preview: secretPreview(secrets.telegramBotToken),
+      discovered: Boolean(scan.secrets.telegramBotToken),
+      discovered_source: scan.sourceMap.telegramBotToken || null,
+      cli: null
+    },
+    {
+      id: 'openai-oauth',
+      display_name: 'OpenAI OAuth',
+      auth_kind: 'oauth_token',
+      configured: Boolean(secrets.openaiOauthToken),
+      stored: Boolean(secrets.openaiOauthToken),
+      stored_preview: secretPreview(secrets.openaiOauthToken),
+      discovered: Boolean(scan.secrets.openaiOauthToken),
+      discovered_source: scan.sourceMap.openaiOauthToken || null,
+      cli: null
+    },
+    {
+      id: 'github-copilot',
+      display_name: 'GitHub Copilot',
+      auth_kind: 'token',
+      configured: Boolean(secrets.copilotGithubToken),
+      stored: Boolean(secrets.copilotGithubToken),
+      stored_preview: secretPreview(secrets.copilotGithubToken),
+      discovered: Boolean(scan.secrets.copilotGithubToken),
+      discovered_source: scan.sourceMap.copilotGithubToken || null,
+      cli: null
+    }
+  ];
+}
+
+async function buildAuthCatalogPayload() {
+  reloadConfigSecrets();
+  const [catalog] = await Promise.all([buildModelCatalog(config.model)]);
+  const store = loadSecretStore();
+  const scan = scanLocalAuthSources();
+  const cliStatus = getCliAuthStatus();
+  const providerKeyField = {
+    ollama: null,
+    nvidia: 'nvidiaApiKey',
+    openrouter: 'openrouterApiKey',
+    openai: 'openaiApiKey'
+  };
+  const providerBaseField = {
+    ollama: 'ollamaBaseUrl',
+    nvidia: 'nvidiaBaseUrl',
+    openrouter: 'openrouterBaseUrl',
+    openai: 'openaiBaseUrl'
+  };
+
+  return {
+    contract_version: AUTH_CATALOG_CONTRACT_VERSION,
+    secret_store_path: getSecretsPath(),
+    provider_order: [...PROVIDER_ORDER],
+    auth_targets: AUTH_TARGET_DEFS,
+    scanned_files: scan.filesScanned,
+    providers: catalog.providers.map((provider) => {
+      const keyField = providerKeyField[provider.provider];
+      const baseField = providerBaseField[provider.provider];
+      const storedValue = keyField ? store.secrets?.[keyField] : '';
+      const discoveredValue = keyField ? scan.secrets?.[keyField] : '';
+      return {
+        provider: provider.provider,
+        display_name: provider.display_name,
+        auth_kind: provider.provider === 'ollama' ? 'none' : 'api_key',
+        selected: catalog.selected?.provider === provider.provider,
+        status: provider.status,
+        degraded_reason: provider.degraded_reason,
+        base_url: config.model?.[baseField] || null,
+        base_url_source: scan.sourceMap?.[baseField] || null,
+        model_count: provider.models?.length || 0,
+        top_model: provider.models?.[0]?.model_id || null,
+        top_model_rank: provider.models?.[0]?.rank || null,
+        stored: Boolean(storedValue),
+        stored_preview: secretPreview(storedValue),
+        discovered: Boolean(discoveredValue),
+        discovered_source: keyField ? (scan.sourceMap?.[keyField] || null) : null,
+        auth_ready: provider.provider === 'ollama' ? true : Boolean(config.model?.[keyField])
+      };
+    }),
+    auth_methods: buildAuthMethodRows(store, scan, cliStatus)
   };
 }
 
@@ -586,19 +756,78 @@ const server = http.createServer(async (req, res) => {
       return sendJson(res, 200, catalog);
     }
 
+    if (req.method === 'GET' && url.pathname === '/api/auth/catalog') {
+      return sendJson(res, 200, await buildAuthCatalogPayload());
+    }
+
+    if (req.method === 'POST' && url.pathname === '/api/auth/catalog') {
+      const body = await parseBody(req);
+      const providerBaseUrls = body?.providerBaseUrls || {};
+      const secretUpdates = body?.secrets || {};
+      const clear = Array.isArray(body?.clear) ? body.clear : [];
+
+      if (typeof providerBaseUrls.ollamaBaseUrl === 'string' && providerBaseUrls.ollamaBaseUrl.trim()) config.model.ollamaBaseUrl = providerBaseUrls.ollamaBaseUrl.trim();
+      if (typeof providerBaseUrls.openrouterBaseUrl === 'string' && providerBaseUrls.openrouterBaseUrl.trim()) config.model.openrouterBaseUrl = providerBaseUrls.openrouterBaseUrl.trim();
+      if (typeof providerBaseUrls.nvidiaBaseUrl === 'string' && providerBaseUrls.nvidiaBaseUrl.trim()) config.model.nvidiaBaseUrl = providerBaseUrls.nvidiaBaseUrl.trim();
+      if (typeof providerBaseUrls.openaiBaseUrl === 'string' && providerBaseUrls.openaiBaseUrl.trim()) config.model.openaiBaseUrl = providerBaseUrls.openaiBaseUrl.trim();
+      if (typeof body?.telegram?.enabled === 'boolean') {
+        config.channels.telegram = config.channels.telegram || {};
+        config.channels.telegram.enabled = body.telegram.enabled;
+      }
+
+      persistSecretUpdates(secretUpdates, clear);
+      saveConfig(config);
+      agent.reloadTools();
+
+      return sendJson(res, 200, {
+        ok: true,
+        catalog: await buildAuthCatalogPayload()
+      });
+    }
+
+    if (req.method === 'POST' && url.pathname === '/api/auth/prefill-local') {
+      const body = await parseBody(req);
+      const scan = scanLocalAuthSources();
+      const overwriteBaseUrls = body?.overwriteBaseUrls === true;
+      persistSecretUpdates(scan.secrets);
+      if (scan.providerBaseUrls.ollamaBaseUrl && (overwriteBaseUrls || !config.model.ollamaBaseUrl)) config.model.ollamaBaseUrl = scan.providerBaseUrls.ollamaBaseUrl;
+      if (scan.providerBaseUrls.openrouterBaseUrl && (overwriteBaseUrls || !config.model.openrouterBaseUrl)) config.model.openrouterBaseUrl = scan.providerBaseUrls.openrouterBaseUrl;
+      if (scan.providerBaseUrls.nvidiaBaseUrl && (overwriteBaseUrls || !config.model.nvidiaBaseUrl)) config.model.nvidiaBaseUrl = scan.providerBaseUrls.nvidiaBaseUrl;
+      if (scan.providerBaseUrls.openaiBaseUrl && (overwriteBaseUrls || !config.model.openaiBaseUrl)) config.model.openaiBaseUrl = scan.providerBaseUrls.openaiBaseUrl;
+      saveConfig(config);
+      agent.reloadTools();
+      return sendJson(res, 200, {
+        ok: true,
+        imported: {
+          openrouterApiKey: Boolean(scan.secrets.openrouterApiKey),
+          nvidiaApiKey: Boolean(scan.secrets.nvidiaApiKey),
+          openaiApiKey: Boolean(scan.secrets.openaiApiKey),
+          githubToken: Boolean(scan.secrets.githubToken),
+          huggingfaceApiKey: Boolean(scan.secrets.huggingfaceApiKey),
+          elevenlabsApiKey: Boolean(scan.secrets.elevenlabsApiKey),
+          telegramBotToken: Boolean(scan.secrets.telegramBotToken)
+        },
+        scannedFiles: scan.filesScanned,
+        catalog: await buildAuthCatalogPayload()
+      });
+    }
+
     if (req.method === 'GET' && url.pathname === '/api/config') {
+      reloadConfigSecrets();
       normalizeModelSettings();
       const catalog = await buildModelCatalog(config.model);
+      const sanitized = scrubSecretsFromConfig(config);
       return sendJson(res, 200, {
-        model: config.model,
-        runtime: config.runtime,
-        research: config.research,
-        integrations: config.integrations,
-        browser: config.browser,
+        model: sanitized.model,
+        runtime: sanitized.runtime,
+        research: sanitized.research,
+        integrations: sanitized.integrations,
+        browser: sanitized.browser,
         channels: { telegram: { enabled: Boolean(config.channels?.telegram?.enabled), hasToken: Boolean(config.channels?.telegram?.botToken) } },
         capabilities: buildCapabilitiesPayload(),
         modelCatalog: catalog,
-        providerConfig: getProviderConfigPayload()
+        providerConfig: getProviderConfigPayload(),
+        authCatalog: await buildAuthCatalogPayload()
       });
     }
 
@@ -754,6 +983,7 @@ const server = http.createServer(async (req, res) => {
     }
 
     if (req.method === 'GET' && url.pathname === '/api/providers/config') {
+      reloadConfigSecrets();
       normalizeModelSettings();
       return sendJson(res, 200, getProviderConfigPayload());
     }
@@ -766,30 +996,50 @@ const server = http.createServer(async (req, res) => {
       if (typeof up.nvidiaBaseUrl === 'string') config.model.nvidiaBaseUrl = up.nvidiaBaseUrl.trim();
       if (typeof up.openaiBaseUrl === 'string') config.model.openaiBaseUrl = up.openaiBaseUrl.trim();
       if (typeof up.genericBaseUrl === 'string') config.model.openaiBaseUrl = up.genericBaseUrl.trim();
-      if (typeof up.openrouterApiKey === 'string') config.model.openrouterApiKey = up.openrouterApiKey.trim();
-      if (typeof up.nvidiaApiKey === 'string') config.model.nvidiaApiKey = up.nvidiaApiKey.trim();
-      if (typeof up.openaiApiKey === 'string') config.model.openaiApiKey = up.openaiApiKey.trim();
-      if (typeof up.genericApiKey === 'string') config.model.openaiApiKey = up.genericApiKey.trim();
+      const secretUpdates = {};
+      if (typeof up.openrouterApiKey === 'string') secretUpdates.openrouterApiKey = up.openrouterApiKey.trim();
+      if (typeof up.nvidiaApiKey === 'string') secretUpdates.nvidiaApiKey = up.nvidiaApiKey.trim();
+      if (typeof up.openaiApiKey === 'string') secretUpdates.openaiApiKey = up.openaiApiKey.trim();
+      if (typeof up.genericApiKey === 'string') secretUpdates.openaiApiKey = up.genericApiKey.trim();
+      persistSecretUpdates(secretUpdates);
       normalizeModelSettings();
       saveConfig(config);
+      agent.reloadTools();
       return sendJson(res, 200, { ok: true });
     }
 
     if (req.method === 'POST' && url.pathname === '/api/providers/import-openclaw') {
       const imported = importProviderSecretsFromOpenClaw();
-      if (imported.openrouterApiKey) config.model.openrouterApiKey = imported.openrouterApiKey;
-      if (imported.nvidiaApiKey) config.model.nvidiaApiKey = imported.nvidiaApiKey;
+      persistSecretUpdates({
+        openrouterApiKey: imported.openrouterApiKey || '',
+        nvidiaApiKey: imported.nvidiaApiKey || '',
+        openaiApiKey: imported.openaiApiKey || '',
+        githubToken: imported.githubToken || '',
+        huggingfaceApiKey: imported.huggingfaceApiKey || '',
+        elevenlabsApiKey: imported.elevenlabsApiKey || '',
+        telegramBotToken: imported.telegramBotToken || ''
+      });
       if (imported.openrouterBaseUrl) config.model.openrouterBaseUrl = imported.openrouterBaseUrl;
       if (imported.nvidiaBaseUrl) config.model.nvidiaBaseUrl = imported.nvidiaBaseUrl;
+      if (imported.openaiBaseUrl) config.model.openaiBaseUrl = imported.openaiBaseUrl;
+      if (imported.ollamaBaseUrl) config.model.ollamaBaseUrl = imported.ollamaBaseUrl;
       normalizeModelSettings();
       saveConfig(config);
+      agent.reloadTools();
       return sendJson(res, 200, {
         ok: true,
         imported: {
           openrouterApiKey: Boolean(imported.openrouterApiKey),
           nvidiaApiKey: Boolean(imported.nvidiaApiKey),
+          openaiApiKey: Boolean(imported.openaiApiKey),
+          githubToken: Boolean(imported.githubToken),
+          huggingfaceApiKey: Boolean(imported.huggingfaceApiKey),
+          elevenlabsApiKey: Boolean(imported.elevenlabsApiKey),
+          telegramBotToken: Boolean(imported.telegramBotToken),
           openrouterBaseUrl: imported.openrouterBaseUrl || config.model.openrouterBaseUrl,
-          nvidiaBaseUrl: imported.nvidiaBaseUrl || config.model.nvidiaBaseUrl
+          nvidiaBaseUrl: imported.nvidiaBaseUrl || config.model.nvidiaBaseUrl,
+          openaiBaseUrl: imported.openaiBaseUrl || config.model.openaiBaseUrl,
+          ollamaBaseUrl: imported.ollamaBaseUrl || config.model.ollamaBaseUrl
         }
       });
     }
@@ -1142,6 +1392,7 @@ const server = http.createServer(async (req, res) => {
     }
 
     if (req.method === 'GET' && url.pathname === '/api/telegram/config') {
+      reloadConfigSecrets();
       const tg = config.channels.telegram || { botToken: '', enabled: false };
       return sendJson(res, 200, { enabled: Boolean(tg.enabled), hasToken: Boolean(tg.botToken) });
     }
@@ -1149,11 +1400,17 @@ const server = http.createServer(async (req, res) => {
     if (req.method === 'POST' && url.pathname === '/api/telegram/config') {
       const body = await parseBody(req);
       const tg = config.channels.telegram || {};
-      if (typeof body.botToken === 'string') tg.botToken = body.botToken.trim();
+      const secretUpdates = {};
+      if (typeof body.botToken === 'string') secretUpdates.telegramBotToken = body.botToken.trim();
       if (typeof body.enabled === 'boolean') tg.enabled = body.enabled;
       config.channels.telegram = tg;
+      persistSecretUpdates(secretUpdates);
       saveConfig(config);
-      return sendJson(res, 200, { ok: true, enabled: Boolean(tg.enabled), hasToken: Boolean(tg.botToken) });
+      return sendJson(res, 200, {
+        ok: true,
+        enabled: Boolean(config.channels?.telegram?.enabled),
+        hasToken: Boolean(config.channels?.telegram?.botToken)
+      });
     }
 
     if (req.method === 'GET' && url.pathname === '/api/telegram/status') {
