@@ -95,6 +95,19 @@ Date: 2026-04-01
    - `GET /api/auth/job` and `POST /api/auth/job/input` added for browser-driven OAuth orchestration
    - OpenAI provider auth readiness now recognizes native/compat OpenAI Codex OAuth even when no OpenAI API key is configured
    - OpenAI model catalog stays available from seeded policy models while OAuth is present
+24. Wired native OpenAI Codex OAuth into actual model execution:
+   - added `src/providers/openai-codex-oauth.mjs`
+   - `openai` provider selection now prefers Codex OAuth transport for GPT-5 and Codex-family OpenAI models
+   - non-Codex OpenAI models still use API-key `/chat/completions` when an API key is configured
+   - provider loop now preserves assistant tool-call metadata between tool iterations so Codex tool continuation works correctly
+   - added `tests/phase12.openai-codex-provider.e2e.mjs`
+25. Expanded seeded OpenAI catalog coverage for OAuth-capable model routing:
+   - `gpt-5.4-pro`
+   - `gpt-5.4`
+   - `gpt-5.4-mini`
+   - `gpt-5.4-nano`
+   - `gpt-5.3-codex`
+   - `gpt-5.3-codex-spark`
 
 Date: 2026-03-30
 

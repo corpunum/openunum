@@ -1,8 +1,15 @@
 import { OpenAICompatibleProvider } from './openai-compatible.mjs';
+import { OpenAICodexOAuthProvider } from './openai-codex-oauth.mjs';
 import { OllamaProvider } from './ollama.mjs';
+import { getEffectiveOpenAICodexOAuthStatus, getStoredOpenAICodexOAuth } from '../secrets/store.mjs';
 
 function normalizeProviderId(provider) {
   return String(provider || 'ollama').trim().toLowerCase() === 'generic' ? 'openai' : String(provider || 'ollama').trim().toLowerCase();
+}
+
+function prefersOpenAICodexTransport(model) {
+  const id = String(model || '').replace(/^(generic|openai)\//, '').trim().toLowerCase();
+  return /^gpt-5/.test(id) || id.includes('codex');
 }
 
 export function buildProvider(config) {
@@ -30,6 +37,14 @@ export function buildProvider(config) {
     });
   }
   if (provider === 'openai') {
+    const oauth = getStoredOpenAICodexOAuth() || getEffectiveOpenAICodexOAuthStatus().active;
+    const apiKey = config.model.openaiApiKey || config.model.genericApiKey;
+    if (oauth && (!apiKey || prefersOpenAICodexTransport(model))) {
+      return new OpenAICodexOAuthProvider({
+        model: model.replace(/^(generic|openai)\//, ''),
+        timeoutMs
+      });
+    }
     return new OpenAICompatibleProvider({
       baseUrl: config.model.openaiBaseUrl || config.model.genericBaseUrl,
       apiKey: config.model.openaiApiKey || config.model.genericApiKey,

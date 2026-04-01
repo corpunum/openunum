@@ -38,8 +38,12 @@ const MODEL_SEEDS = {
     seedModel('openrouter', 'openai/gpt-4o-mini', 'GPT-4o Mini', 128000, 89, 'low', 'medium', true, true, true)
   ],
   openai: [
+    seedModel('openai', 'gpt-5.4-pro', 'GPT-5.4 Pro', 262144, 102, 'medium', 'high', true, true, true),
     seedModel('openai', 'gpt-5.4', 'GPT-5.4', 262144, 100, 'medium', 'high', true, true, true),
     seedModel('openai', 'gpt-5.3-codex', 'GPT-5.3 Codex', 262144, 98, 'medium', 'high', true, false, true),
+    seedModel('openai', 'gpt-5.4-mini', 'GPT-5.4 Mini', 262144, 94, 'low', 'medium', true, true, true),
+    seedModel('openai', 'gpt-5.3-codex-spark', 'GPT-5.3 Codex Spark', 262144, 92, 'low', 'medium', true, false, true),
+    seedModel('openai', 'gpt-5.4-nano', 'GPT-5.4 Nano', 262144, 88, 'low', 'low', true, true, true),
     seedModel('openai', 'gpt-4o-mini', 'GPT-4o Mini', 128000, 89, 'low', 'medium', true, true, true)
   ]
 };

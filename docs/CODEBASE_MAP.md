@@ -46,6 +46,7 @@ This map is implementation-accurate as of 2026-03-31.
 
 - `src/providers/ollama.mjs`: uses Ollama `/api/chat`
 - `src/providers/openai-compatible.mjs`: uses `/chat/completions`
+- `src/providers/openai-codex-oauth.mjs`: uses ChatGPT Codex OAuth + `/codex/responses`
 - `src/providers/index.mjs`: provider selection and model normalization
 
 ## Tool Layer (Current Tool Names)

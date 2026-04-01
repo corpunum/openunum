@@ -404,9 +404,23 @@ export class OpenUnumAgent {
         toolCalls: [],
         assistantText: out.content || ''
       };
-      if (out.content) {
+      if (out.content || (out.toolCalls && out.toolCalls.length > 0)) {
         finalText = out.content;
-        messages.push({ role: 'assistant', content: out.content });
+        const assistantMessage = {
+          role: 'assistant',
+          content: out.content || ''
+        };
+        if (out.toolCalls && out.toolCalls.length > 0) {
+          assistantMessage.tool_calls = out.toolCalls.map((tc) => ({
+            id: tc.id,
+            type: 'function',
+            function: {
+              name: tc.name,
+              arguments: tc.arguments ?? '{}'
+            }
+          }));
+        }
+        messages.push(assistantMessage);
       }
 
       if (!out.toolCalls || out.toolCalls.length === 0) {

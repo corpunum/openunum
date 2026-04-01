@@ -269,6 +269,8 @@ Supported service test rows:
 
 `openai-oauth` now has a native `openunum` OAuth flow. If a local `openunum` OAuth credential is not present yet, it can still import an existing OpenClaw Codex OAuth profile from `~/.openclaw/agents/*/agent/auth-profiles.json` as a compatibility discovery source.
 
+When an OpenAI Codex OAuth credential is present, `openunum` now prefers the native Codex transport for GPT-5 and Codex-family `openai/*` models. Non-Codex OpenAI models still use the API-key `/chat/completions` path when an API key is configured.
+
 `POST /api/service/connect` accepts:
 ```json
 {
@@ -314,6 +316,11 @@ Use that endpoint only when the automatic callback/browser flow does not complet
 
 - `GET /api/model/current`
 - `POST /api/model/switch`
+
+OpenAI runtime routing rules:
+- `openai/gpt-5*` and `openai/*codex*` prefer native Codex OAuth transport when `openai-oauth` is configured
+- `openai/gpt-4o-mini` and other non-Codex OpenAI models use the API-key OpenAI-compatible transport when an API key is configured
+- if no OpenAI API key exists but OpenAI Codex OAuth exists, `openunum` still exposes the seeded OpenAI catalog and uses the OAuth transport for selected OpenAI models
 
 Switch payload:
 ```json
