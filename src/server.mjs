@@ -19,19 +19,32 @@ import { logInfo, logError } from './logger.mjs';
 import {
   AUTH_CATALOG_CONTRACT_VERSION,
   AUTH_TARGET_DEFS,
+  GOOGLE_WORKSPACE_DEFAULT_SCOPES,
   applySecretsToConfig,
   getCliAuthStatus,
+  getEffectiveGoogleWorkspaceOAuthStatus,
   getEffectiveOpenAICodexOAuthStatus,
+  getGoogleWorkspaceOAuthConfig,
   getSecretsPath,
+  getStoredGoogleWorkspaceOAuth,
   getStoredOpenAICodexOAuth,
   loadSecretStore,
   mergeSecrets,
+  saveGoogleWorkspaceOAuth,
+  saveGoogleWorkspaceOAuthConfig,
   saveSecretStore,
   saveOpenAICodexOAuth,
   scanLocalAuthSources,
   scrubSecretsFromConfig,
   secretPreview
 } from './secrets/store.mjs';
+import {
+  buildGoogleWorkspaceAuthUrl,
+  buildGoogleWorkspaceRedirectUri,
+  createGoogleWorkspacePkce,
+  exchangeGoogleWorkspaceAuthorizationCode,
+  fetchGoogleWorkspaceUser
+} from './oauth/google-workspace.mjs';
 import {
   MODEL_CATALOG_CONTRACT_VERSION,
   PROVIDER_ORDER,
@@ -181,6 +194,93 @@ async function startOpenAICodexOAuthJob() {
   return { ok: true, started: true, job: summarizeAuthJob(job) };
 }
 
+async function startGoogleWorkspaceOAuthJob() {
+  pruneAuthJobs();
+  const oauthConfig = getGoogleWorkspaceOAuthConfig();
+  if (!oauthConfig.clientId) {
+    return {
+      ok: false,
+      started: false,
+      error: 'google_workspace_client_id_missing',
+      prerequisite: 'Save a Google OAuth Desktop Client ID first, then rerun Connect.'
+    };
+  }
+  const id = crypto.randomUUID();
+  const { verifier, challenge, state } = createGoogleWorkspacePkce();
+  const redirectUri = buildGoogleWorkspaceRedirectUri(config.server);
+  const authUrl = buildGoogleWorkspaceAuthUrl({
+    clientId: oauthConfig.clientId,
+    redirectUri,
+    scopes: oauthConfig.scopes || GOOGLE_WORKSPACE_DEFAULT_SCOPES.join(' '),
+    state,
+    challenge
+  });
+  const job = {
+    id,
+    service: 'google-workspace',
+    status: 'awaiting_browser',
+    progress: 'Open the browser and approve Google Workspace access',
+    authUrl,
+    browserOpened: false,
+    promptMessage: null,
+    error: null,
+    account: null,
+    source: 'openunum',
+    createdAt: new Date().toISOString(),
+    updatedAt: Date.now(),
+    state,
+    verifier,
+    redirectUri,
+    clientId: oauthConfig.clientId,
+    clientSecret: oauthConfig.clientSecret || '',
+    scopes: oauthConfig.scopes || GOOGLE_WORKSPACE_DEFAULT_SCOPES.join(' ')
+  };
+  authJobs.set(id, job);
+  const opened = openUrlInDesktopBrowser(authUrl);
+  job.browserOpened = opened.opened;
+  return { ok: true, started: true, job: summarizeAuthJob(job) };
+}
+
+function findGoogleWorkspaceAuthJobByState(state) {
+  pruneAuthJobs();
+  const expected = String(state || '').trim();
+  if (!expected) return null;
+  for (const job of authJobs.values()) {
+    if (job.service === 'google-workspace' && String(job.state || '').trim() === expected) return job;
+  }
+  return null;
+}
+
+async function completeGoogleWorkspaceAuthJob(job, code) {
+  const token = await exchangeGoogleWorkspaceAuthorizationCode({
+    clientId: job.clientId,
+    clientSecret: job.clientSecret,
+    code,
+    verifier: job.verifier,
+    redirectUri: job.redirectUri
+  });
+  let email = '';
+  try {
+    const user = await fetchGoogleWorkspaceUser(token.access_token);
+    email = String(user?.email || '').trim();
+  } catch {
+    email = '';
+  }
+  saveGoogleWorkspaceOAuth({
+    access: token.access_token,
+    refresh: token.refresh_token,
+    expires: Date.now() + (Number(token.expires_in || 3600) * 1000),
+    email,
+    scope: String(token.scope || job.scopes || '').trim(),
+    tokenType: String(token.token_type || 'Bearer').trim() || 'Bearer',
+    source: 'openunum'
+  });
+  job.status = 'completed';
+  job.progress = 'oauth complete';
+  job.account = email || null;
+  job.updatedAt = Date.now();
+}
+
 function getAuthJob(id) {
   pruneAuthJobs();
   return authJobs.get(String(id || '').trim()) || null;
@@ -255,6 +355,9 @@ function buildAuthMethodRows(store, scan, cliStatus) {
   const secrets = store.secrets || {};
   const storedOpenAiOauth = getStoredOpenAICodexOAuth(store);
   const effectiveOpenAiOauth = getEffectiveOpenAICodexOAuthStatus();
+  const storedGoogleOauth = getStoredGoogleWorkspaceOAuth(store);
+  const effectiveGoogleOauth = getEffectiveGoogleWorkspaceOAuthStatus();
+  const googleOauthConfig = getGoogleWorkspaceOAuthConfig(store);
   return [
     {
       id: 'github',
@@ -270,14 +373,25 @@ function buildAuthMethodRows(store, scan, cliStatus) {
     {
       id: 'google-workspace',
       display_name: 'Google Workspace',
-      auth_kind: 'oauth_cli',
-      configured: Boolean(cliStatus.googleWorkspace?.authenticated),
-      stored: false,
-      stored_preview: null,
-      discovered: false,
-      discovered_source: null,
-      cli: cliStatus.googleWorkspace,
-      install_hint: cliStatus.googleWorkspace?.available ? null : 'Install Google Cloud CLI (`gcloud`) first, then rerun Connect.'
+      auth_kind: 'oauth_native',
+      configured: Boolean(effectiveGoogleOauth.active),
+      stored: Boolean(storedGoogleOauth?.access),
+      stored_preview: secretPreview(storedGoogleOauth?.access),
+      discovered: Boolean(scan.oauthConfigs?.googleWorkspaceClientId),
+      discovered_source: scan.sourceMap.googleWorkspaceClientId || null,
+      cli: {
+        cli: 'openunum',
+        available: Boolean(googleOauthConfig.clientId),
+        authenticated: Boolean(effectiveGoogleOauth.active),
+        account: effectiveGoogleOauth.active?.email || null,
+        detail: effectiveGoogleOauth.active
+          ? 'authenticated'
+          : (googleOauthConfig.clientId ? 'client_id_saved' : 'client_id_missing')
+      },
+      oauth_client_id: googleOauthConfig.clientId || '',
+      oauth_client_id_preview: secretPreview(googleOauthConfig.clientId),
+      oauth_client_secret_preview: secretPreview(googleOauthConfig.clientSecret),
+      oauth_scopes: googleOauthConfig.scopes
     },
     {
       id: 'huggingface',
@@ -418,13 +532,15 @@ async function testServiceConnection({ service, secret }) {
     };
   }
   if (id === 'google-workspace') {
+    const googleClient = new (await import('./tools/google-workspace.mjs')).GoogleWorkspaceClient(config);
+    const status = await googleClient.status();
     return {
-      ok: Boolean(cli.googleWorkspace?.authenticated),
+      ok: Boolean(status.authenticated),
       service: id,
-      status: cli.googleWorkspace?.authenticated ? 'authenticated' : (cli.googleWorkspace?.available ? 'available' : 'unavailable'),
-      account: cli.googleWorkspace?.account || null,
-      detail: cli.googleWorkspace?.detail || null,
-      prerequisite: cli.googleWorkspace?.available ? null : 'Install Google Cloud CLI (`gcloud`) to start OAuth for Google Workspace.'
+      status: status.authenticated ? 'authenticated' : (status.installed ? 'available' : 'unavailable'),
+      account: status.account || null,
+      detail: status.detail || null,
+      prerequisite: status.installed ? null : status.hint || 'Save a Google OAuth Desktop Client ID first.'
     };
   }
   if (id === 'huggingface') {
@@ -505,7 +621,6 @@ async function testServiceConnection({ service, secret }) {
 function oauthCommandForService(service) {
   const id = String(service || '').trim().toLowerCase();
   if (id === 'github') return 'gh auth login -w';
-  if (id === 'google-workspace') return 'gcloud auth login --update-adc';
   if (id === 'openai-oauth') return 'openclaw models auth login --provider openai-codex';
   return null;
 }
@@ -538,14 +653,6 @@ function launchOauthCommand(service) {
   if (!cmd) return { ok: false, started: false, error: 'oauth_not_supported' };
   const cli = getCliAuthStatus();
   if (service === 'github' && !cli.github?.available) return { ok: false, started: false, error: 'gh_not_available' };
-  if (service === 'google-workspace' && !cli.googleWorkspace?.available) {
-    return {
-      ok: false,
-      started: false,
-      error: 'gcloud_not_available',
-      prerequisite: 'Install Google Cloud CLI (`gcloud`) first, then rerun Connect.'
-    };
-  }
   if (service === 'openai-oauth' && !cli.openclaw?.available) {
     return {
       ok: false,
@@ -1147,6 +1254,7 @@ const server = http.createServer(async (req, res) => {
       const body = await parseBody(req);
       const providerBaseUrls = body?.providerBaseUrls || {};
       const secretUpdates = body?.secrets || {};
+      const oauthConfig = body?.oauthConfig || {};
       const clear = Array.isArray(body?.clear) ? body.clear : [];
 
       if (typeof providerBaseUrls.ollamaBaseUrl === 'string' && providerBaseUrls.ollamaBaseUrl.trim()) config.model.ollamaBaseUrl = providerBaseUrls.ollamaBaseUrl.trim();
@@ -1159,6 +1267,13 @@ const server = http.createServer(async (req, res) => {
       }
 
       persistSecretUpdates(secretUpdates, clear);
+      if (oauthConfig.googleWorkspace && typeof oauthConfig.googleWorkspace === 'object') {
+        saveGoogleWorkspaceOAuthConfig({
+          clientId: oauthConfig.googleWorkspace.clientId,
+          clientSecret: oauthConfig.googleWorkspace.clientSecret,
+          scopes: oauthConfig.googleWorkspace.scopes
+        });
+      }
       saveConfig(config);
       agent.reloadTools();
 
@@ -1234,6 +1349,49 @@ const server = http.createServer(async (req, res) => {
       return sendJson(res, 200, { ok: true, job: summarizeAuthJob(job) });
     }
 
+    if (req.method === 'GET' && url.pathname === '/oauth/google-workspace/callback') {
+      const state = String(url.searchParams.get('state') || '').trim();
+      const code = String(url.searchParams.get('code') || '').trim();
+      const error = String(url.searchParams.get('error') || '').trim();
+      const errorDescription = String(url.searchParams.get('error_description') || '').trim();
+      const job = findGoogleWorkspaceAuthJobByState(state);
+      if (!job) {
+        res.writeHead(404, noCacheHeaders('text/html; charset=utf-8'));
+        res.end('<html><body><h1>Google Workspace OAuth</h1><p>Auth job not found.</p></body></html>');
+        return;
+      }
+      if (error) {
+        job.status = 'failed';
+        job.error = errorDescription || error;
+        job.updatedAt = Date.now();
+        res.writeHead(400, noCacheHeaders('text/html; charset=utf-8'));
+        res.end(`<html><body><h1>Google Workspace OAuth</h1><p>${sanitizeHtml(job.error)}</p></body></html>`);
+        return;
+      }
+      if (!code) {
+        job.status = 'failed';
+        job.error = 'google_workspace_code_missing';
+        job.updatedAt = Date.now();
+        res.writeHead(400, noCacheHeaders('text/html; charset=utf-8'));
+        res.end('<html><body><h1>Google Workspace OAuth</h1><p>Missing authorization code.</p></body></html>');
+        return;
+      }
+      try {
+        await completeGoogleWorkspaceAuthJob(job, code);
+        agent.reloadTools();
+        res.writeHead(200, noCacheHeaders('text/html; charset=utf-8'));
+        res.end('<html><body><h1>Google Workspace OAuth</h1><p>Authentication completed. You can close this window.</p></body></html>');
+        return;
+      } catch (callbackError) {
+        job.status = 'failed';
+        job.error = String(callbackError.message || callbackError);
+        job.updatedAt = Date.now();
+        res.writeHead(400, noCacheHeaders('text/html; charset=utf-8'));
+        res.end(`<html><body><h1>Google Workspace OAuth</h1><p>${sanitizeHtml(job.error)}</p></body></html>`);
+        return;
+      }
+    }
+
     if (req.method === 'POST' && url.pathname === '/api/auth/job/input') {
       const body = await parseBody(req);
       const out = completeAuthJob(body?.id, body?.input);
@@ -1243,8 +1401,12 @@ const server = http.createServer(async (req, res) => {
 
     if (req.method === 'POST' && url.pathname === '/api/service/connect') {
       const body = await parseBody(req);
-      if (String(body?.service || '').trim().toLowerCase() === 'openai-oauth') {
+      const service = String(body?.service || '').trim().toLowerCase();
+      if (service === 'openai-oauth') {
         return sendJson(res, 200, await startOpenAICodexOAuthJob());
+      }
+      if (service === 'google-workspace') {
+        return sendJson(res, 200, await startGoogleWorkspaceOAuthJob());
       }
       return sendJson(res, 200, launchOauthCommand(body.service));
     }

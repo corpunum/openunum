@@ -1652,10 +1652,11 @@
 
     function serviceSummaryText(row) {
       const parts = [];
+      if (row.id === 'google-workspace' && row.oauth_client_id_preview) parts.push(`client ${row.oauth_client_id_preview}`);
       if (row.cli?.account) parts.push(row.cli.account);
       else if (row.stored_preview) parts.push(`stored ${row.stored_preview}`);
       else if (row.discovered_source) parts.push('discovered locally');
-      else if (row.cli?.available) parts.push('cli available');
+      else if (row.cli?.available) parts.push('ready to connect');
       else parts.push('manual setup');
       if (row.cli?.detail && !row.cli?.authenticated && !row.cli?.available) parts.push(row.cli.detail);
       return parts.join(' | ');
@@ -1787,6 +1788,22 @@
           <tr>
             <td colspan="4">
               <div class="soft-panel">
+                ${row.id === 'google-workspace' ? `
+                  <div class="grid two">
+                    <div class="field">
+                      <label>OAuth Client ID</label>
+                      <input class="service-oauth-client-id mono" data-service="${row.id}" value="${escapeHtml(row.oauth_client_id || '')}" placeholder="Google Desktop OAuth Client ID" />
+                    </div>
+                    <div class="field">
+                      <label>OAuth Client Secret</label>
+                      <input class="service-oauth-client-secret mono" data-service="${row.id}" value="" placeholder="${escapeHtml(row.oauth_client_secret_preview ? `current ${row.oauth_client_secret_preview}` : 'optional')}" />
+                    </div>
+                  </div>
+                  <div class="field" style="margin-top:10px;">
+                    <label>Scopes</label>
+                    <textarea class="service-oauth-scopes mono" data-service="${row.id}" rows="3">${escapeHtml(row.oauth_scopes || '')}</textarea>
+                  </div>
+                ` : ''}
                 <div class="hint">mode=${escapeHtml(row.auth_kind || '-')} | source=${escapeHtml(row.discovered_source || '-')}</div>
                 <div class="hint">cli=${escapeHtml(row.cli?.cli || 'n/a')} | detail=${escapeHtml(row.cli?.detail || 'manual')}</div>
               </div>
@@ -1883,6 +1900,19 @@
       const authRow = authMethodById(service);
       if (!authRow) return;
       const secretField = SERVICE_SECRET_FIELD[service];
+      if (service === 'google-workspace') {
+        const clientId = document.querySelector(`.service-oauth-client-id[data-service="${service}"]`)?.value?.trim() || '';
+        const clientSecret = document.querySelector(`.service-oauth-client-secret[data-service="${service}"]`)?.value?.trim() || '';
+        const scopes = document.querySelector(`.service-oauth-scopes[data-service="${service}"]`)?.value?.trim() || '';
+        await jpost('/api/auth/catalog', {
+          oauthConfig: {
+            googleWorkspace: { clientId, clientSecret, scopes }
+          }
+        });
+        q('providerStatus').textContent = `saved ${service}`;
+        await refreshAuthCatalog();
+        return;
+      }
       if (!secretField) return;
       const input = document.querySelector(`.service-secret-input[data-service="${service}"]`);
       const secret = input?.value?.trim() || '';

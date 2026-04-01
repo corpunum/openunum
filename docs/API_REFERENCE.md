@@ -280,10 +280,12 @@ When an OpenAI Codex OAuth credential is present, `openunum` now prefers the nat
 
 OAuth kick-off is currently supported for:
 - `github` -> `gh auth login -w`
-- `google-workspace` -> `gcloud auth login --update-adc`
+- `google-workspace` -> native `openunum` browser/callback PKCE flow using a saved Google Desktop OAuth client
 - `openai-oauth` -> native `openunum` browser/callback flow using ChatGPT Codex OAuth
 
-When the required CLI is missing, `POST /api/service/connect` returns `started: false` with a `prerequisite` hint instead of a generic failure.
+For `google-workspace`, save the Google OAuth Desktop Client ID first via `POST /api/auth/catalog` under `oauthConfig.googleWorkspace`, then click `Connect`.
+
+When a required prerequisite is missing, `POST /api/service/connect` returns `started: false` with a `prerequisite` hint instead of a generic failure.
 
 For `openai-oauth`, `POST /api/service/connect` now returns an auth job payload:
 ```json
@@ -311,6 +313,19 @@ For `openai-oauth`, `POST /api/service/connect` now returns an auth job payload:
 ```
 
 Use that endpoint only when the automatic callback/browser flow does not complete and the UI prompts for a pasted redirect URL or authorization code.
+
+`POST /api/auth/catalog` also accepts Google Workspace OAuth client configuration:
+```json
+{
+  "oauthConfig": {
+    "googleWorkspace": {
+      "clientId": "google-client-id.apps.googleusercontent.com",
+      "clientSecret": "optional-secret",
+      "scopes": "openid email profile https://www.googleapis.com/auth/gmail.modify"
+    }
+  }
+}
+```
 
 ## Model Runtime
 
@@ -429,7 +444,7 @@ Payload:
 - `POST /api/email/read`
 - `POST /api/gworkspace/call`
 
-Email support is implemented via `googleworkspace/cli` (`gws`).
+Email support is now implemented via native Google OAuth credentials stored in `~/.openunum/secrets.json`. `openunum` refreshes Google access tokens itself and calls Gmail/Google APIs directly over HTTPS.
 
 ## Research
 

@@ -68,6 +68,13 @@ try {
       huggingfaceApiKey: 'hf_phase10_secret',
       elevenlabsApiKey: 'xi_phase10_secret',
       telegramBotToken: '123456:phase10-secret'
+    },
+    oauthConfig: {
+      googleWorkspace: {
+        clientId: 'google-client-id-phase10.apps.googleusercontent.com',
+        clientSecret: 'google-client-secret-phase10',
+        scopes: 'openid email profile https://www.googleapis.com/auth/gmail.modify'
+      }
     }
   });
   assert.equal(savedAuth.status, 200);
@@ -82,6 +89,8 @@ try {
   assert.equal(configFile.includes('ghp_phase10_secret'), false);
   assert.equal(secretFile.includes('sk-or-phase10-secret'), true);
   assert.equal(secretFile.includes('ghp_phase10_secret'), true);
+  assert.equal(secretFile.includes('google-client-id-phase10.apps.googleusercontent.com'), true);
+  assert.equal(secretFile.includes('google-client-secret-phase10'), true);
   assert.equal((fs.statSync(secretFilePath).mode & 0o777), 0o600);
 
   const prefill = await jpost('/api/auth/prefill-local', { overwriteBaseUrls: false });
@@ -125,6 +134,11 @@ try {
   });
   assert.equal(googleKickoff.status, 200);
   assert.equal(typeof googleKickoff.json.started, 'boolean');
+
+  const authCatalogAfterSave = await jget('/api/auth/catalog');
+  const googleWorkspaceRow = authCatalogAfterSave.json.auth_methods.find((row) => row.id === 'google-workspace');
+  assert.equal(googleWorkspaceRow.oauth_client_id, 'google-client-id-phase10.apps.googleusercontent.com');
+  assert.equal(typeof googleWorkspaceRow.oauth_client_secret_preview, 'string');
 
   const sessionId = `phase10-${Date.now()}`;
   const created = await jpost('/api/sessions', { sessionId });

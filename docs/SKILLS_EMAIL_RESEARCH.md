@@ -24,15 +24,14 @@ Security notes:
 
 ## Google Workspace / Gmail
 
-Integration uses `googleworkspace/cli` (`gws`).
+Integration uses native Google Workspace OAuth managed by `openunum`.
 
 Setup:
 
-1. Install CLI:
-   `npm install -g @googleworkspace/cli`
-2. Authenticate:
-   `gws auth setup`
-3. Verify:
+1. Create a Google Desktop OAuth client in Google Cloud Console.
+2. Save the client ID in Providers -> Google Workspace.
+3. Click `Connect` to complete the browser OAuth flow.
+4. Verify:
    `GET /api/email/status`
 
 Supported APIs:
@@ -40,7 +39,7 @@ Supported APIs:
 - `POST /api/email/send`
 - `POST /api/email/list`
 - `POST /api/email/read`
-- `POST /api/gworkspace/call` for generic Workspace API commands.
+- `POST /api/gworkspace/call` for generic supported Workspace API commands.
 
 ## Daily Research Pipeline
 
@@ -61,4 +60,3 @@ Storage:
 Adoption rule:
 
 - research findings are `pending_review` until explicitly approved.
-

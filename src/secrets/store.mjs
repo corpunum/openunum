@@ -18,6 +18,16 @@ export const SECRET_FIELD_LABELS = {
   telegramBotToken: 'Telegram Bot Token'
 };
 
+export const GOOGLE_WORKSPACE_DEFAULT_SCOPES = [
+  'openid',
+  'email',
+  'profile',
+  'https://www.googleapis.com/auth/gmail.modify',
+  'https://www.googleapis.com/auth/gmail.send',
+  'https://www.googleapis.com/auth/drive.metadata.readonly',
+  'https://www.googleapis.com/auth/calendar.readonly'
+];
+
 export const AUTH_TARGET_DEFS = [
   { id: 'openrouterApiKey', display_name: 'OpenRouter', category: 'provider', auth_kind: 'api_key' },
   { id: 'nvidiaApiKey', display_name: 'NVIDIA', category: 'provider', auth_kind: 'api_key' },
@@ -67,6 +77,22 @@ function defaultSecrets() {
         accountId: '',
         email: '',
         source: 'openunum'
+      },
+      googleWorkspace: {
+        access: '',
+        refresh: '',
+        expires: 0,
+        email: '',
+        scope: '',
+        tokenType: 'Bearer',
+        source: 'openunum'
+      }
+    },
+    oauthConfig: {
+      googleWorkspace: {
+        clientId: '',
+        clientSecret: '',
+        scopes: GOOGLE_WORKSPACE_DEFAULT_SCOPES.join(' ')
       }
     }
   };
@@ -87,6 +113,18 @@ function withSecretDefaults(store = {}) {
       openaiCodex: {
         ...base.oauth.openaiCodex,
         ...(store.oauth?.openaiCodex || {})
+      },
+      googleWorkspace: {
+        ...base.oauth.googleWorkspace,
+        ...(store.oauth?.googleWorkspace || {})
+      }
+    },
+    oauthConfig: {
+      ...base.oauthConfig,
+      ...(store.oauthConfig || {}),
+      googleWorkspace: {
+        ...base.oauthConfig.googleWorkspace,
+        ...(store.oauthConfig?.googleWorkspace || {})
       }
     }
   };
@@ -167,6 +205,85 @@ export function clearOpenAICodexOAuth() {
   };
   next.secrets.openaiOauthToken = '';
   return saveSecretStore(next);
+}
+
+export function getStoredGoogleWorkspaceOAuth(store = loadSecretStore()) {
+  const oauth = store?.oauth?.googleWorkspace || {};
+  const access = String(oauth.access || '').trim();
+  const refresh = String(oauth.refresh || '').trim();
+  const expires = Number(oauth.expires || 0) || 0;
+  const email = String(oauth.email || '').trim();
+  const scope = String(oauth.scope || '').trim();
+  const tokenType = String(oauth.tokenType || 'Bearer').trim() || 'Bearer';
+  const source = String(oauth.source || 'openunum').trim();
+  if (!access || !refresh) return null;
+  return { access, refresh, expires, email, scope, tokenType, source };
+}
+
+export function saveGoogleWorkspaceOAuth(credentials = {}) {
+  const current = loadSecretStore();
+  const next = withSecretDefaults(current);
+  next.oauth.googleWorkspace = {
+    access: String(credentials.access || '').trim(),
+    refresh: String(credentials.refresh || '').trim(),
+    expires: Number(credentials.expires || 0) || 0,
+    email: String(credentials.email || '').trim(),
+    scope: String(credentials.scope || '').trim(),
+    tokenType: String(credentials.tokenType || 'Bearer').trim() || 'Bearer',
+    source: String(credentials.source || 'openunum').trim()
+  };
+  return saveSecretStore(next);
+}
+
+export function clearGoogleWorkspaceOAuth() {
+  const current = loadSecretStore();
+  const next = withSecretDefaults(current);
+  next.oauth.googleWorkspace = {
+    access: '',
+    refresh: '',
+    expires: 0,
+    email: '',
+    scope: '',
+    tokenType: 'Bearer',
+    source: 'openunum'
+  };
+  return saveSecretStore(next);
+}
+
+export function getGoogleWorkspaceOAuthConfig(store = loadSecretStore()) {
+  const cfg = store?.oauthConfig?.googleWorkspace || {};
+  const clientId = String(cfg.clientId || '').trim();
+  const clientSecret = String(cfg.clientSecret || '').trim();
+  const scopes = String(cfg.scopes || GOOGLE_WORKSPACE_DEFAULT_SCOPES.join(' ')).trim() || GOOGLE_WORKSPACE_DEFAULT_SCOPES.join(' ');
+  return { clientId, clientSecret, scopes };
+}
+
+export function saveGoogleWorkspaceOAuthConfig(config = {}) {
+  const current = loadSecretStore();
+  const next = withSecretDefaults(current);
+  next.oauthConfig.googleWorkspace = {
+    clientId: String(config.clientId || '').trim(),
+    clientSecret: String(config.clientSecret || '').trim(),
+    scopes: String(config.scopes || GOOGLE_WORKSPACE_DEFAULT_SCOPES.join(' ')).trim() || GOOGLE_WORKSPACE_DEFAULT_SCOPES.join(' ')
+  };
+  return saveSecretStore(next);
+}
+
+export function getEffectiveGoogleWorkspaceOAuthStatus() {
+  const store = loadSecretStore();
+  const stored = getStoredGoogleWorkspaceOAuth(store);
+  if (stored && (!stored.expires || stored.expires > Date.now())) {
+    return {
+      source: 'openunum',
+      active: {
+        ...stored,
+        filePath: getSecretsPath(),
+        profileId: 'google-workspace:openunum',
+        agentId: 'openunum'
+      }
+    };
+  }
+  return { source: null, active: stored ? { ...stored, filePath: getSecretsPath(), profileId: 'google-workspace:openunum', agentId: 'openunum' } : null };
 }
 
 function setIfMissing(target, key, value, source, sourceMap) {
@@ -265,6 +382,7 @@ export function getEffectiveOpenAICodexOAuthStatus() {
 export function scanLocalAuthSources() {
   const secrets = {};
   const providerBaseUrls = {};
+  const oauthConfigs = {};
   const sourceMap = {};
   const filesScanned = [];
 
@@ -302,6 +420,9 @@ export function scanLocalAuthSources() {
     setIfMissing(secrets, 'huggingfaceApiKey', env.HF_TOKEN || env.HUGGINGFACE_API_KEY, `${filePath}:HF_TOKEN`, sourceMap);
     setIfMissing(secrets, 'elevenlabsApiKey', env.ELEVENLABS_API_KEY, `${filePath}:ELEVENLABS_API_KEY`, sourceMap);
     setIfMissing(secrets, 'telegramBotToken', env.TELEGRAM_BOT_TOKEN, `${filePath}:TELEGRAM_BOT_TOKEN`, sourceMap);
+    setIfMissing(oauthConfigs, 'googleWorkspaceClientId', env.GOOGLE_WORKSPACE_CLIENT_ID || env.GOOGLE_CLIENT_ID, `${filePath}:GOOGLE_WORKSPACE_CLIENT_ID`, sourceMap);
+    setIfMissing(oauthConfigs, 'googleWorkspaceClientSecret', env.GOOGLE_WORKSPACE_CLIENT_SECRET || env.GOOGLE_CLIENT_SECRET, `${filePath}:GOOGLE_WORKSPACE_CLIENT_SECRET`, sourceMap);
+    setIfMissing(oauthConfigs, 'googleWorkspaceScopes', env.GOOGLE_WORKSPACE_SCOPES || env.GOOGLE_SCOPES, `${filePath}:GOOGLE_WORKSPACE_SCOPES`, sourceMap);
     setIfMissing(providerBaseUrls, 'ollamaBaseUrl', env.OLLAMA_BASE_URL, `${filePath}:OLLAMA_BASE_URL`, sourceMap);
     setIfMissing(providerBaseUrls, 'openrouterBaseUrl', env.OPENROUTER_BASE_URL, `${filePath}:OPENROUTER_BASE_URL`, sourceMap);
     setIfMissing(providerBaseUrls, 'nvidiaBaseUrl', env.NVIDIA_BASE_URL, `${filePath}:NVIDIA_BASE_URL`, sourceMap);
@@ -318,6 +439,9 @@ export function scanLocalAuthSources() {
   setIfMissing(secrets, 'huggingfaceApiKey', process.env.HF_TOKEN || process.env.HUGGINGFACE_API_KEY, `${envSource}:HF_TOKEN`, sourceMap);
   setIfMissing(secrets, 'elevenlabsApiKey', process.env.ELEVENLABS_API_KEY, `${envSource}:ELEVENLABS_API_KEY`, sourceMap);
   setIfMissing(secrets, 'telegramBotToken', process.env.TELEGRAM_BOT_TOKEN, `${envSource}:TELEGRAM_BOT_TOKEN`, sourceMap);
+  setIfMissing(oauthConfigs, 'googleWorkspaceClientId', process.env.GOOGLE_WORKSPACE_CLIENT_ID || process.env.GOOGLE_CLIENT_ID, `${envSource}:GOOGLE_WORKSPACE_CLIENT_ID`, sourceMap);
+  setIfMissing(oauthConfigs, 'googleWorkspaceClientSecret', process.env.GOOGLE_WORKSPACE_CLIENT_SECRET || process.env.GOOGLE_CLIENT_SECRET, `${envSource}:GOOGLE_WORKSPACE_CLIENT_SECRET`, sourceMap);
+  setIfMissing(oauthConfigs, 'googleWorkspaceScopes', process.env.GOOGLE_WORKSPACE_SCOPES || process.env.GOOGLE_SCOPES, `${envSource}:GOOGLE_WORKSPACE_SCOPES`, sourceMap);
   setIfMissing(providerBaseUrls, 'ollamaBaseUrl', process.env.OLLAMA_BASE_URL, `${envSource}:OLLAMA_BASE_URL`, sourceMap);
   setIfMissing(providerBaseUrls, 'openrouterBaseUrl', process.env.OPENROUTER_BASE_URL, `${envSource}:OPENROUTER_BASE_URL`, sourceMap);
   setIfMissing(providerBaseUrls, 'nvidiaBaseUrl', process.env.NVIDIA_BASE_URL, `${envSource}:NVIDIA_BASE_URL`, sourceMap);
@@ -338,7 +462,18 @@ export function scanLocalAuthSources() {
     );
   }
 
-  return { secrets, providerBaseUrls, sourceMap, filesScanned };
+  const googleConfig = getGoogleWorkspaceOAuthConfig();
+  if (googleConfig.clientId) {
+    setIfMissing(oauthConfigs, 'googleWorkspaceClientId', googleConfig.clientId, `${getSecretsPath()}:oauthConfig.googleWorkspace.clientId`, sourceMap);
+  }
+  if (googleConfig.clientSecret) {
+    setIfMissing(oauthConfigs, 'googleWorkspaceClientSecret', googleConfig.clientSecret, `${getSecretsPath()}:oauthConfig.googleWorkspace.clientSecret`, sourceMap);
+  }
+  if (googleConfig.scopes) {
+    setIfMissing(oauthConfigs, 'googleWorkspaceScopes', googleConfig.scopes, `${getSecretsPath()}:oauthConfig.googleWorkspace.scopes`, sourceMap);
+  }
+
+  return { secrets, providerBaseUrls, oauthConfigs, sourceMap, filesScanned };
 }
 
 export function mergeSecrets(currentStore, updates = {}, clear = []) {

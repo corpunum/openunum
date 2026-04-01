@@ -1,6 +1,6 @@
 # Codebase Map
 
-This map is implementation-accurate as of 2026-03-31.
+This map is implementation-accurate as of 2026-04-01.
 
 ## Top-Level Structure
 
@@ -9,7 +9,8 @@ This map is implementation-accurate as of 2026-03-31.
 - `src/core/missions.mjs`: autonomous mission runner with proof-aware completion
 - `src/tools/runtime.mjs`: unified tool schema + execution routing
 - `src/tools/executor-daemon.mjs`: retry/backoff executor with JSONL logs
-- `src/tools/google-workspace.mjs`: Google Workspace CLI (`gws`) integration for Gmail + generic API calls
+- `src/tools/google-workspace.mjs`: native Google Workspace OAuth + Gmail/Google API client
+- `src/oauth/google-workspace.mjs`: Google installed-app PKCE helpers and token refresh
 - `src/skills/manager.mjs`: reviewed skill lifecycle (install/review/approve/execute/uninstall)
 - `src/research/manager.mjs`: daily research pipeline + review queue
 - `src/core/autonomy-master.mjs`: continuous autonomy coordinator (self-heal, self-test, self-improve, skill learning)

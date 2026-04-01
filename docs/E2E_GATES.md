@@ -38,7 +38,7 @@
 ## Phase 8
 - reviewed skills lifecycle works end-to-end:
   - install -> review -> approve -> execute -> uninstall
-- email integration status endpoint works (`googleworkspace/cli`)
+- email integration status endpoint works (native Google Workspace OAuth)
 - research pipeline run works (`simulate=true`) and queue is populated
 - autonomy master status and cycle endpoints respond successfully
 

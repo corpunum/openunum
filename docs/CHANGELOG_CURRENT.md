@@ -84,12 +84,12 @@ Date: 2026-04-01
    - `POST /api/provider/test`
    - `POST /api/service/test`
    - `POST /api/service/connect`
-   - service OAuth kick-off currently supports GitHub and Google Workspace when their CLIs are installed
+   - service OAuth kick-off supports GitHub CLI plus native `openunum` browser flows for OpenAI Codex and Google Workspace
 22. Fixed service OAuth flows in the flagship Providers screen:
    - `openai-oauth` now discovers and reuses existing OpenClaw Codex OAuth profiles from `~/.openclaw/agents/*/agent/auth-profiles.json`
    - `openai-oauth` `Connect` now starts a native `openunum` OAuth job with browser/callback handling and optional manual code paste fallback
    - native OpenAI OAuth credentials are now persisted in `~/.openunum/secrets.json` under `oauth.openaiCodex`
-   - `google-workspace` now returns an explicit `gcloud` prerequisite/install hint instead of a dead generic error
+   - `google-workspace` now saves native Google OAuth client config in `~/.openunum/secrets.json` and starts a browser/callback PKCE flow without `gcloud`
    - the Providers UI now exposes `Connect` for OpenAI OAuth in the same row-level action model as the other OAuth-capable services
 23. Aligned auth and provider state for OpenAI OAuth:
    - `GET /api/auth/job` and `POST /api/auth/job/input` added for browser-driven OAuth orchestration
@@ -108,6 +108,11 @@ Date: 2026-04-01
    - `gpt-5.4-nano`
    - `gpt-5.3-codex`
    - `gpt-5.3-codex-spark`
+26. Replaced the old Google Workspace CLI dependency with native `openunum` Google OAuth and API calls:
+   - added `src/oauth/google-workspace.mjs`
+   - `src/tools/google-workspace.mjs` now refreshes Google tokens and calls Gmail/Google APIs directly
+   - Providers -> Google Workspace now saves client ID, optional client secret, and scopes through `/api/auth/catalog`
+   - added `tests/phase13.google-workspace-native.e2e.mjs`
 
 Date: 2026-03-30
 
