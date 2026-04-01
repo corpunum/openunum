@@ -1792,7 +1792,7 @@
                   <div class="grid two">
                     <div class="field">
                       <label>OAuth Client ID</label>
-                      <input class="service-oauth-client-id mono" data-service="${row.id}" value="${escapeHtml(row.oauth_client_id || '')}" placeholder="Google Desktop OAuth Client ID" />
+                      <input class="service-oauth-client-id mono" data-service="${row.id}" value="${escapeHtml(row.oauth_client_id || '')}" placeholder="Google Desktop OAuth Client ID or downloaded OAuth JSON" />
                     </div>
                     <div class="field">
                       <label>OAuth Client Secret</label>
@@ -1904,11 +1904,16 @@
         const clientId = document.querySelector(`.service-oauth-client-id[data-service="${service}"]`)?.value?.trim() || '';
         const clientSecret = document.querySelector(`.service-oauth-client-secret[data-service="${service}"]`)?.value?.trim() || '';
         const scopes = document.querySelector(`.service-oauth-scopes[data-service="${service}"]`)?.value?.trim() || '';
-        await jpost('/api/auth/catalog', {
+        const payload = {
           oauthConfig: {
-            googleWorkspace: { clientId, clientSecret, scopes }
+            googleWorkspace: {
+              clientId,
+              scopes
+            }
           }
-        });
+        };
+        if (clientSecret) payload.oauthConfig.googleWorkspace.clientSecret = clientSecret;
+        await jpost('/api/auth/catalog', payload);
         q('providerStatus').textContent = `saved ${service}`;
         await refreshAuthCatalog();
         return;
@@ -1931,6 +1936,9 @@
     }
 
     async function connectServiceRow(service) {
+      if (service === 'google-workspace') {
+        await saveServiceRow(service);
+      }
       const out = await jpost('/api/service/connect', { service });
       if (out.job?.id) {
         q('providerStatus').textContent = `oauth started ${service} | waiting for browser sign-in`;

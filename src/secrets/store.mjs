@@ -258,14 +258,66 @@ export function getGoogleWorkspaceOAuthConfig(store = loadSecretStore()) {
   return { clientId, clientSecret, scopes };
 }
 
+function parseGoogleWorkspaceOAuthConfigInput(value) {
+  const raw = String(value || '').trim();
+  if (!raw) return null;
+  if (!(raw.startsWith('{') || raw.startsWith('['))) return null;
+  try {
+    const parsed = JSON.parse(raw);
+    if (parsed && typeof parsed === 'object') {
+      if (parsed.installed && typeof parsed.installed === 'object') return parsed.installed;
+      if (parsed.web && typeof parsed.web === 'object') return parsed.web;
+      return parsed;
+    }
+  } catch {}
+  return null;
+}
+
+export function normalizeGoogleWorkspaceOAuthConfig(config = {}, current = getGoogleWorkspaceOAuthConfig()) {
+  const parsed = parseGoogleWorkspaceOAuthConfigInput(config.clientId);
+  const source = parsed || config;
+  const nextClientId = source?.client_id ?? source?.clientId ?? config.clientId;
+  const nextClientSecret = source?.client_secret ?? source?.clientSecret ?? config.clientSecret;
+  const nextScopes = source?.scopes ?? config.scopes;
+  return {
+    clientId: typeof nextClientId === 'string' && nextClientId.trim()
+      ? nextClientId.trim()
+      : current.clientId,
+    clientSecret: typeof nextClientSecret === 'string'
+      ? (nextClientSecret.trim() || current.clientSecret)
+      : current.clientSecret,
+    scopes: typeof nextScopes === 'string' && nextScopes.trim()
+      ? nextScopes.trim()
+      : current.scopes
+  };
+}
+
+export function validateGoogleWorkspaceOAuthConfig(config = {}) {
+  const clientId = String(config.clientId || '').trim();
+  if (!clientId) {
+    return { ok: false, error: 'google_workspace_client_id_missing', prerequisite: 'Save a Google Desktop OAuth Client ID first, then rerun Connect.' };
+  }
+  if (!clientId.endsWith('.apps.googleusercontent.com')) {
+    return {
+      ok: false,
+      error: 'google_workspace_client_id_invalid',
+      prerequisite: 'Use a Google OAuth Client ID ending in .apps.googleusercontent.com. API keys and service account IDs will not work.'
+    };
+  }
+  if (clientId.includes('YOUR_CLIENT_ID') || clientId.includes('{') || clientId.includes('}')) {
+    return {
+      ok: false,
+      error: 'google_workspace_client_id_invalid',
+      prerequisite: 'The saved Google Client ID is malformed. Paste the actual client ID or the downloaded OAuth JSON.'
+    };
+  }
+  return { ok: true };
+}
+
 export function saveGoogleWorkspaceOAuthConfig(config = {}) {
   const current = loadSecretStore();
   const next = withSecretDefaults(current);
-  next.oauthConfig.googleWorkspace = {
-    clientId: String(config.clientId || '').trim(),
-    clientSecret: String(config.clientSecret || '').trim(),
-    scopes: String(config.scopes || GOOGLE_WORKSPACE_DEFAULT_SCOPES.join(' ')).trim() || GOOGLE_WORKSPACE_DEFAULT_SCOPES.join(' ')
-  };
+  next.oauthConfig.googleWorkspace = normalizeGoogleWorkspaceOAuthConfig(config, getGoogleWorkspaceOAuthConfig(next));
   return saveSecretStore(next);
 }
 

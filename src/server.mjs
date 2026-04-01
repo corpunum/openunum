@@ -30,13 +30,15 @@ import {
   getStoredOpenAICodexOAuth,
   loadSecretStore,
   mergeSecrets,
+  normalizeGoogleWorkspaceOAuthConfig,
   saveGoogleWorkspaceOAuth,
   saveGoogleWorkspaceOAuthConfig,
   saveSecretStore,
   saveOpenAICodexOAuth,
   scanLocalAuthSources,
   scrubSecretsFromConfig,
-  secretPreview
+  secretPreview,
+  validateGoogleWorkspaceOAuthConfig
 } from './secrets/store.mjs';
 import {
   buildGoogleWorkspaceAuthUrl,
@@ -197,14 +199,8 @@ async function startOpenAICodexOAuthJob() {
 async function startGoogleWorkspaceOAuthJob() {
   pruneAuthJobs();
   const oauthConfig = getGoogleWorkspaceOAuthConfig();
-  if (!oauthConfig.clientId) {
-    return {
-      ok: false,
-      started: false,
-      error: 'google_workspace_client_id_missing',
-      prerequisite: 'Save a Google OAuth Desktop Client ID first, then rerun Connect.'
-    };
-  }
+  const validation = validateGoogleWorkspaceOAuthConfig(oauthConfig);
+  if (!validation.ok) return { ok: false, started: false, ...validation };
   const id = crypto.randomUUID();
   const { verifier, challenge, state } = createGoogleWorkspacePkce();
   const redirectUri = buildGoogleWorkspaceRedirectUri(config.server);
@@ -1268,11 +1264,11 @@ const server = http.createServer(async (req, res) => {
 
       persistSecretUpdates(secretUpdates, clear);
       if (oauthConfig.googleWorkspace && typeof oauthConfig.googleWorkspace === 'object') {
-        saveGoogleWorkspaceOAuthConfig({
+        saveGoogleWorkspaceOAuthConfig(normalizeGoogleWorkspaceOAuthConfig({
           clientId: oauthConfig.googleWorkspace.clientId,
           clientSecret: oauthConfig.googleWorkspace.clientSecret,
           scopes: oauthConfig.googleWorkspace.scopes
-        });
+        }));
       }
       saveConfig(config);
       agent.reloadTools();

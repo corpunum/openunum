@@ -140,6 +140,50 @@ try {
   assert.equal(googleWorkspaceRow.oauth_client_id, 'google-client-id-phase10.apps.googleusercontent.com');
   assert.equal(typeof googleWorkspaceRow.oauth_client_secret_preview, 'string');
 
+  const invalidGoogleSave = await jpost('/api/auth/catalog', {
+    oauthConfig: {
+      googleWorkspace: {
+        clientId: 'AIza-invalid-api-key',
+        scopes: 'openid email profile'
+      }
+    }
+  });
+  assert.equal(invalidGoogleSave.status, 200);
+
+  const invalidGoogleTest = await jpost('/api/service/test', {
+    service: 'google-workspace',
+    secret: ''
+  });
+  assert.equal(invalidGoogleTest.status, 200);
+  assert.equal(invalidGoogleTest.json.ok, false);
+  assert.equal(invalidGoogleTest.json.detail, 'google_workspace_client_id_invalid');
+
+  const invalidGoogleKickoff = await jpost('/api/service/connect', {
+    service: 'google-workspace'
+  });
+  assert.equal(invalidGoogleKickoff.status, 200);
+  assert.equal(invalidGoogleKickoff.json.started, false);
+  assert.equal(invalidGoogleKickoff.json.error, 'google_workspace_client_id_invalid');
+
+  const normalizedGoogleSave = await jpost('/api/auth/catalog', {
+    oauthConfig: {
+      googleWorkspace: {
+        clientId: JSON.stringify({
+          installed: {
+            client_id: 'google-client-id-phase10.apps.googleusercontent.com',
+            client_secret: 'google-client-secret-phase10b'
+          }
+        })
+      }
+    }
+  });
+  assert.equal(normalizedGoogleSave.status, 200);
+
+  const authCatalogAfterNormalize = await jget('/api/auth/catalog');
+  const normalizedGoogleRow = authCatalogAfterNormalize.json.auth_methods.find((row) => row.id === 'google-workspace');
+  assert.equal(normalizedGoogleRow.oauth_client_id, 'google-client-id-phase10.apps.googleusercontent.com');
+  assert.equal(typeof normalizedGoogleRow.oauth_client_secret_preview, 'string');
+
   const sessionId = `phase10-${Date.now()}`;
   const created = await jpost('/api/sessions', { sessionId });
   assert.equal(created.status, 200);

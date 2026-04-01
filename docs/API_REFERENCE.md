@@ -285,6 +285,11 @@ OAuth kick-off is currently supported for:
 
 For `google-workspace`, save the Google OAuth Desktop Client ID first via `POST /api/auth/catalog` under `oauthConfig.googleWorkspace`, then click `Connect`.
 
+`openunum` now validates the saved Google client locally before opening the browser:
+- the client ID must end in `.apps.googleusercontent.com`
+- you can paste either the raw client ID or the downloaded OAuth JSON
+- `Connect` auto-saves the current Google row before starting OAuth
+
 When a required prerequisite is missing, `POST /api/service/connect` returns `started: false` with a `prerequisite` hint instead of a generic failure.
 
 For `openai-oauth`, `POST /api/service/connect` now returns an auth job payload:

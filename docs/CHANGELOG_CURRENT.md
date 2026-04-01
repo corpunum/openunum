@@ -113,6 +113,11 @@ Date: 2026-04-01
    - `src/tools/google-workspace.mjs` now refreshes Google tokens and calls Gmail/Google APIs directly
    - Providers -> Google Workspace now saves client ID, optional client secret, and scopes through `/api/auth/catalog`
    - added `tests/phase13.google-workspace-native.e2e.mjs`
+27. Hardened the Google Workspace OAuth UX:
+   - `Connect` now auto-saves the current Google row before starting OAuth
+   - blank secret inputs no longer wipe the stored Google client secret
+   - malformed Google client IDs are rejected locally before the browser opens
+   - downloaded Google OAuth JSON can be pasted directly and is normalized into client credentials
 
 Date: 2026-03-30
 

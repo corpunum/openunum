@@ -1,7 +1,8 @@
 import {
   getEffectiveGoogleWorkspaceOAuthStatus,
   getGoogleWorkspaceOAuthConfig,
-  saveGoogleWorkspaceOAuth
+  saveGoogleWorkspaceOAuth,
+  validateGoogleWorkspaceOAuthConfig
 } from '../secrets/store.mjs';
 import { fetchGoogleWorkspaceUser, resolveGoogleWorkspaceAccessToken } from '../oauth/google-workspace.mjs';
 
@@ -108,14 +109,15 @@ export class GoogleWorkspaceClient {
   async status() {
     const authConfig = this.getAuthConfig();
     const status = getEffectiveGoogleWorkspaceOAuthStatus();
-    if (!authConfig.clientId) {
+    const validation = validateGoogleWorkspaceOAuthConfig(authConfig);
+    if (!validation.ok) {
       return {
         ok: true,
         installed: false,
         cli: 'openunum',
         authenticated: false,
-        detail: 'google_workspace_client_id_missing',
-        hint: 'Save a Google OAuth Desktop Client ID in Providers -> Google Workspace, then click Connect.'
+        detail: validation.error,
+        hint: validation.prerequisite
       };
     }
     if (!status.active) {
