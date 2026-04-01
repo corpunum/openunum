@@ -130,6 +130,8 @@ export function defaultConfig() {
       },
       contextHints: {
         'ollama/qwen3.5:9b-64k': 64000,
+        'ollama/qwen3.5-9b-uncensored-aggressive:latest': 16384,
+        'ollama/qwen3.5-9b-uncensored-local:latest': 16384,
         'ollama/minimax-m2.7:cloud': 32768,
         'openrouter/openai/gpt-4o-mini': 128000,
         'openai/gpt-4o-mini': 128000

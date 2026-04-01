@@ -39,6 +39,15 @@ function hasUnsafeShellMetacharacters(cmd) {
   return /[;&|`]/.test(String(cmd || ''));
 }
 
+function isLikelyInteractiveShellCommand(cmd) {
+  const text = String(cmd || '').trim();
+  if (/^ollama run\s+\S+$/i.test(text)) return true;
+  if (/^python(\d+(\.\d+)*)?\s+-i\b/i.test(text)) return true;
+  if (/^node\s+-i\b/i.test(text)) return true;
+  if (/^(sqlite3|psql|mysql)\b/i.test(text) && !/(-c|--command|-e|--execute)\b/.test(text)) return true;
+  return false;
+}
+
 function requiresUnlockedMode(cmd) {
   const patterns = [
     /\bsudo\b/i,
@@ -55,6 +64,77 @@ function applySimplePatch(original, find, replace) {
     throw new Error('Patch target not found');
   }
   return original.replace(find, replace);
+}
+
+function tryParseCurlAsHttpRequest(cmd) {
+  const text = String(cmd || '').trim();
+  if (!/^curl\b/.test(text)) return null;
+  if (/[;&|`]/.test(text)) return null;
+  const urlMatch = text.match(/https?:\/\/[^\s'"]+/);
+  if (!urlMatch) return null;
+  const url = urlMatch[0];
+  const methodMatch = text.match(/(?:^|\s)-X\s+([A-Za-z]+)/);
+  const method = String(methodMatch?.[1] || 'GET').toUpperCase();
+  const headerMatches = [...text.matchAll(/(?:^|\s)-H\s+(['"])(.*?)\1/g)];
+  const headers = {};
+  for (const match of headerMatches) {
+    const line = String(match[2] || '');
+    const idx = line.indexOf(':');
+    if (idx === -1) continue;
+    headers[line.slice(0, idx).trim()] = line.slice(idx + 1).trim();
+  }
+  const bodyJsonMatch = text.match(/(?:^|\s)-d\s+'([^']+)'/);
+  const bodyTextMatch = text.match(/(?:^|\s)-d\s+"([^"]+)"/);
+  let bodyJson = undefined;
+  let bodyText = undefined;
+  const payload = bodyJsonMatch?.[1] ?? bodyTextMatch?.[1];
+  if (payload != null) {
+    try {
+      bodyJson = JSON.parse(payload);
+    } catch {
+      bodyText = payload;
+    }
+  }
+  return {
+    url,
+    method,
+    headers,
+    bodyJson,
+    bodyText
+  };
+}
+
+function parseOllamaRunIntent(cmd) {
+  const text = String(cmd || '').trim();
+  if (!/^ollama run\b/i.test(text)) return null;
+  if (/[;&`]/.test(text)) return null;
+  const promptMatch = text.match(/--prompt\s+(?:'([^']*)'|"([^"]*)")/i);
+  let prompt = promptMatch?.[1] ?? promptMatch?.[2] ?? null;
+  const modelFlagMatch = text.match(/--model-id\s+(\S+)|--model\s+(\S+)/i);
+  let model = modelFlagMatch?.[1] || modelFlagMatch?.[2] || '';
+  if (!model) {
+    const positional = text.match(/^ollama run\s+(\S+)/i);
+    model = positional?.[1] || '';
+  }
+  if (!model) return null;
+  if (prompt == null) {
+    const positionalPrompt = text.match(/^ollama run\s+\S+\s+(?:'([^']*)'|"([^"]*)"|(.+))$/i);
+    prompt = positionalPrompt?.[1] ?? positionalPrompt?.[2] ?? positionalPrompt?.[3] ?? null;
+  }
+  return { model, prompt: prompt == null ? null : String(prompt).trim() };
+}
+
+function parseOllamaListModelName(listOutput, ref) {
+  const target = String(ref || '').trim().toLowerCase();
+  if (!target) return null;
+  const lines = String(listOutput || '').split('\n').map((line) => line.trim()).filter(Boolean);
+  for (const line of lines.slice(1)) {
+    const parts = line.split(/\s{2,}/).filter(Boolean);
+    if (parts.length < 2) continue;
+    const [name, id] = parts;
+    if (String(id || '').trim().toLowerCase() === target) return name;
+  }
+  return null;
 }
 
 export class ToolRuntime {
@@ -183,6 +263,25 @@ export class ToolRuntime {
           name: 'browser_snapshot',
           description: 'List tabs and active tab metadata',
           parameters: { type: 'object', properties: {}, additionalProperties: false }
+        }
+      },
+      {
+        type: 'function',
+        function: {
+          name: 'http_request',
+          description: 'Make a bounded HTTP request and return status plus parsed response when possible',
+          parameters: {
+            type: 'object',
+            properties: {
+              url: { type: 'string' },
+              method: { type: 'string' },
+              headers: { type: 'object' },
+              bodyJson: { type: 'object' },
+              bodyText: { type: 'string' },
+              timeoutMs: { type: 'number' }
+            },
+            required: ['url']
+          }
         }
       },
       {
@@ -460,19 +559,44 @@ export class ToolRuntime {
     return result;
   }
 
-  async executeTool(name, args) {
+  async executeTool(name, args, context = {}) {
+    const deadlineAt = Number.isFinite(context?.deadlineAt) ? Number(context.deadlineAt) : null;
+    const remainingBudgetMs = () => {
+      if (deadlineAt == null) return null;
+      return deadlineAt - Date.now();
+    };
+    const ensureBudget = () => {
+      const ms = remainingBudgetMs();
+      if (ms != null && ms <= 0) {
+        return { ok: false, code: 1, error: 'turn_deadline_exceeded', stderr: 'Tool execution skipped because the turn budget was exhausted.', stdout: '' };
+      }
+      return null;
+    };
+    const shellTimeout = (defaultMs) => {
+      const ms = remainingBudgetMs();
+      if (ms == null) return defaultMs;
+      return Math.max(1000, Math.min(defaultMs, ms));
+    };
+    const retryOptions = deadlineAt == null ? {} : { deadlineAt };
+
     if (name === 'file_read') {
+      const budgetError = ensureBudget();
+      if (budgetError) return budgetError;
       const p = safePath(args.path, this.workspaceRoot);
       const content = fs.readFileSync(p, 'utf8');
       return { ok: true, path: p, content };
     }
     if (name === 'file_write') {
+      const budgetError = ensureBudget();
+      if (budgetError) return budgetError;
       const p = safePath(args.path, this.workspaceRoot);
       fs.mkdirSync(path.dirname(p), { recursive: true });
       fs.writeFileSync(p, args.content, 'utf8');
       return { ok: true, path: p, bytes: Buffer.byteLength(args.content, 'utf8') };
     }
     if (name === 'file_patch') {
+      const budgetError = ensureBudget();
+      if (budgetError) return budgetError;
       const p = safePath(args.path, this.workspaceRoot);
       const original = fs.readFileSync(p, 'utf8');
       const patched = applySimplePatch(original, args.find, args.replace);
@@ -480,7 +604,37 @@ export class ToolRuntime {
       return { ok: true, path: p };
     }
     if (name === 'shell_run') {
-      const cmd = String(args?.cmd || '').trim();
+      const budgetError = ensureBudget();
+      if (budgetError) return budgetError;
+      const rawCmd = String(args?.cmd || '').trim();
+      const ollamaRunIntent = parseOllamaRunIntent(rawCmd);
+      let cmd = rawCmd;
+      if (ollamaRunIntent?.model && ollamaRunIntent?.prompt) {
+        let modelRef = ollamaRunIntent.model;
+        const lookup = await this.executor.runShell('ollama list', shellTimeout(10000), { cwd: this.workspaceRoot, deadlineAt });
+        if (/^[a-f0-9]{12,}$/i.test(modelRef)) {
+          const resolvedName = lookup?.ok ? parseOllamaListModelName(lookup.stdout, modelRef) : null;
+          if (resolvedName) modelRef = resolvedName;
+        }
+        return this.executeTool('http_request', {
+          url: `${this.config.model?.ollamaBaseUrl || 'http://127.0.0.1:11434'}/api/generate`,
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          bodyJson: {
+            model: modelRef,
+            prompt: ollamaRunIntent.prompt,
+            stream: false
+          },
+          timeoutMs: shellTimeout(30000)
+        }, context);
+      }
+      const httpRequestArgs = tryParseCurlAsHttpRequest(cmd);
+      if (httpRequestArgs) {
+        return this.executeTool('http_request', {
+          ...httpRequestArgs,
+          timeoutMs: shellTimeout(20000)
+        }, context);
+      }
       const ownerMode = String(this.config.runtime?.ownerControlMode || 'safe').toLowerCase();
       if (!this.config.runtime?.shellEnabled) {
         return { ok: false, code: 1, error: 'shell_disabled', stderr: 'Shell execution is disabled by runtime config.', stdout: '' };
@@ -497,37 +651,57 @@ export class ToolRuntime {
       if (blocked) {
         return { ok: false, code: 1, error: 'shell_blocked', stderr: `Blocked dangerous command pattern: ${blocked}`, stdout: '' };
       }
-      return this.executor.runShell(cmd, 120000, { cwd: this.workspaceRoot });
+      const effectiveTimeoutMs = isLikelyInteractiveShellCommand(cmd)
+        ? Math.min(shellTimeout(120000), 15000)
+        : shellTimeout(120000);
+      return this.executor.runShell(cmd, effectiveTimeoutMs, { cwd: this.workspaceRoot, deadlineAt });
     }
     if (name === 'browser_status') {
-      return this.executor.runWithRetry(name, args, () => this.browser.status());
+      const budgetError = ensureBudget();
+      if (budgetError) return budgetError;
+      return this.executor.runWithRetry(name, args, () => this.browser.status(), retryOptions);
     }
     if (name === 'browser_navigate') {
-      return this.executor.runWithRetry(name, args, () => this.browser.navigate(args.url));
+      const budgetError = ensureBudget();
+      if (budgetError) return budgetError;
+      return this.executor.runWithRetry(name, args, () => this.browser.navigate(args.url), retryOptions);
     }
     if (name === 'browser_search') {
-      return this.executor.runWithRetry(name, args, () => this.browser.search(args.query));
+      const budgetError = ensureBudget();
+      if (budgetError) return budgetError;
+      return this.executor.runWithRetry(name, args, () => this.browser.search(args.query), retryOptions);
     }
     if (name === 'browser_type') {
-      return this.executor.runWithRetry(name, args, () => this.browser.type(args.selector, args.text, Boolean(args.submit)));
+      const budgetError = ensureBudget();
+      if (budgetError) return budgetError;
+      return this.executor.runWithRetry(name, args, () => this.browser.type(args.selector, args.text, Boolean(args.submit)), retryOptions);
     }
     if (name === 'browser_click') {
-      return this.executor.runWithRetry(name, args, () => this.browser.click(args.selector));
+      const budgetError = ensureBudget();
+      if (budgetError) return budgetError;
+      return this.executor.runWithRetry(name, args, () => this.browser.click(args.selector), retryOptions);
     }
     if (name === 'browser_extract') {
-      return this.executor.runWithRetry(name, args, () => this.browser.extractText(args.selector || 'body'));
+      const budgetError = ensureBudget();
+      if (budgetError) return budgetError;
+      return this.executor.runWithRetry(name, args, () => this.browser.extractText(args.selector || 'body'), retryOptions);
     }
     if (name === 'browser_snapshot') {
-      return this.executor.runWithRetry(name, args, () => this.browser.snapshot());
+      const budgetError = ensureBudget();
+      if (budgetError) return budgetError;
+      return this.executor.runWithRetry(name, args, () => this.browser.snapshot(), retryOptions);
     }
     if (name === 'http_download') {
+      const budgetError = ensureBudget();
+      if (budgetError) return budgetError;
       if (!this.config.runtime?.shellEnabled) {
         return { ok: false, code: 1, error: 'shell_disabled', stderr: 'http_download requires shell execution.', stdout: '' };
       }
       const outPath = safePath(args.outPath, this.workspaceRoot);
       fs.mkdirSync(path.dirname(outPath), { recursive: true });
-      const out = await this.executor.runShell(`curl -fL ${JSON.stringify(args.url)} -o ${JSON.stringify(outPath)}`, 600000, {
-        cwd: this.workspaceRoot
+      const out = await this.executor.runShell(`curl -fL ${JSON.stringify(args.url)} -o ${JSON.stringify(outPath)}`, shellTimeout(600000), {
+        cwd: this.workspaceRoot,
+        deadlineAt
       });
       const result = {
         ...out,
@@ -536,13 +710,55 @@ export class ToolRuntime {
       };
       return result;
     }
+    if (name === 'http_request') {
+      const budgetError = ensureBudget();
+      if (budgetError) return budgetError;
+      const method = String(args?.method || 'GET').trim().toUpperCase();
+      const timeoutMs = shellTimeout(Number(args?.timeoutMs || 20000));
+      const headers = { ...(args?.headers || {}) };
+      let body = undefined;
+      if (args?.bodyJson !== undefined) {
+        body = JSON.stringify(args.bodyJson);
+        if (!Object.keys(headers).some((key) => String(key).toLowerCase() === 'content-type')) {
+          headers['Content-Type'] = 'application/json';
+        }
+      } else if (typeof args?.bodyText === 'string') {
+        body = args.bodyText;
+      }
+      const response = await fetch(String(args?.url || ''), {
+        method,
+        headers,
+        body,
+        signal: AbortSignal.timeout(timeoutMs)
+      });
+      const rawText = await response.text();
+      let parsedJson = null;
+      try {
+        parsedJson = rawText ? JSON.parse(rawText) : null;
+      } catch {
+        parsedJson = null;
+      }
+      return {
+        ok: response.ok,
+        status: response.status,
+        statusText: response.statusText,
+        url: response.url || String(args?.url || ''),
+        headers: Object.fromEntries(response.headers.entries()),
+        json: parsedJson,
+        text: parsedJson ? '' : rawText
+      };
+    }
     if (name === 'desktop_open') {
+      const budgetError = ensureBudget();
+      if (budgetError) return budgetError;
       if (!this.config.runtime?.shellEnabled) {
         return { ok: false, code: 1, error: 'shell_disabled', stderr: 'desktop_open requires shell execution.', stdout: '' };
       }
-      return this.executor.runShell(`xdg-open ${JSON.stringify(args.target)}`, 15000, { cwd: this.workspaceRoot });
+      return this.executor.runShell(`xdg-open ${JSON.stringify(args.target)}`, shellTimeout(15000), { cwd: this.workspaceRoot, deadlineAt });
     }
     if (name === 'desktop_xdotool') {
+      const budgetError = ensureBudget();
+      if (budgetError) return budgetError;
       if (!this.config.runtime?.shellEnabled) {
         return { ok: false, code: 1, error: 'shell_disabled', stderr: 'desktop_xdotool requires shell execution.', stdout: '' };
       }
@@ -553,7 +769,7 @@ export class ToolRuntime {
       if (hasUnsafeShellMetacharacters(cmd)) {
         return { ok: false, code: 1, error: 'unsafe_xdotool_command', stderr: 'desktop_xdotool command contains blocked shell metacharacters.', stdout: '' };
       }
-      return this.executor.runShell(`xdotool ${cmd}`, 15000, { cwd: this.workspaceRoot });
+      return this.executor.runShell(`xdotool ${cmd}`, shellTimeout(15000), { cwd: this.workspaceRoot, deadlineAt });
     }
     if (name === 'skill_list') {
       return { ok: true, skills: this.skillManager.listSkills() };

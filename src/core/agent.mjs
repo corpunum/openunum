@@ -70,6 +70,36 @@ function summarizeResult(result) {
   };
 }
 
+function stripAnsi(text) {
+  return String(text || '').replace(/\u001b\[[0-9;?]*[ -/]*[@-~]/g, '');
+}
+
+function truncateText(text, maxChars = 1600) {
+  const clean = stripAnsi(String(text || ''));
+  if (clean.length <= maxChars) return clean;
+  return `${clean.slice(0, maxChars)}\n... [truncated ${clean.length - maxChars} chars]`;
+}
+
+function compactToolResult(result) {
+  const r = result || {};
+  const compact = {
+    ok: Boolean(r.ok)
+  };
+  if (Number.isFinite(r.code)) compact.code = r.code;
+  if (r.error) compact.error = truncateText(r.error, 400);
+  if (r.path || r.outPath) compact.path = r.path || r.outPath;
+  if (r.url) compact.url = r.url;
+  if (Number.isFinite(r.status)) compact.status = r.status;
+  if (r.statusText) compact.statusText = r.statusText;
+  if (r.jobId) compact.jobId = r.jobId;
+  if (Number.isFinite(r.attempts)) compact.attempts = r.attempts;
+  if (r.json != null) compact.json = truncateText(JSON.stringify(r.json), 2000);
+  if (r.stdout) compact.stdout = truncateText(r.stdout, 2000);
+  if (r.stderr) compact.stderr = truncateText(r.stderr, 1200);
+  if (r.text) compact.text = truncateText(r.text, 2000);
+  return compact;
+}
+
 function isLikelyCompletionText(text) {
   const t = String(text || '').toLowerCase();
   if (!t.trim()) return false;
@@ -150,6 +180,120 @@ function buildPivotHints({ executedTools = [], permissionDenials = [], timedOut 
     hints.push('Multiple providers failed. Prefer the healthiest provider path and reduce prompt complexity.');
   }
   return [...new Set(hints)].slice(0, 5);
+}
+
+const EXECUTION_PROFILES = [
+  {
+    match: ({ provider, model }) => provider === 'ollama' && /kimi|minimax|cloud/.test(model),
+    name: 'strict-shell-cloud',
+    turnBudgetMs: 60000,
+    maxIters: 3,
+    guidance: [
+      'Use a rigid shell-first workflow with one concrete substep at a time.',
+      'Keep tool arguments and conclusions short. Do not rely on long free-form reasoning after large tool output.',
+      'After each important tool call, verify state with one short follow-up command before moving on.',
+      'When a local or remote service exposes an HTTP API, prefer the `http_request` tool over shelling out to curl.'
+    ],
+    guardrails: [
+      'Prefer deterministic, non-interactive verification surfaces over REPL-style commands or long-running TTY sessions.',
+      'Do not spend multiple turns on metadata/blob inspection when a direct proof command is available.',
+      'If the same route consumes a full turn without decisive proof, shrink the step or change execution surface.'
+    ],
+    verificationHints: [
+      'For local services, prefer HTTP/JSON endpoints or one-shot CLI invocations over interactive shells when available.',
+      'Capture the smallest proof that confirms progress, then move on.'
+    ]
+  },
+  {
+    match: ({ provider, model }) => provider === 'ollama' && /qwen|llama|coder|8b|9b|14b/.test(model),
+    name: 'local-tool-runner',
+    turnBudgetMs: 180000,
+    maxIters: 6,
+    guidance: [
+      'Prefer direct local inspection and execution over browsing.',
+      'Use shell to probe hardware, processes, ports, and files before choosing a runtime.',
+      'When a long command succeeds, summarize proof and continue immediately.'
+    ],
+    guardrails: [
+      'Avoid interactive CLI loops when a non-interactive API or batch mode exists.',
+      'Reuse existing local artifacts and runtimes before creating duplicates.'
+    ],
+    verificationHints: [
+      'Choose verification commands that exit on their own and return compact output.',
+      'Use short prompts and bounded context for launch verification.'
+    ]
+  },
+  {
+    match: ({ provider }) => provider === 'nvidia' || provider === 'openrouter',
+    name: 'structured-api-cloud',
+    turnBudgetMs: 90000,
+    maxIters: 4,
+    guidance: [
+      'Work in short verified substeps and keep each turn narrowly scoped.',
+      'Prefer direct machine-readable verification over exploratory shell output.',
+      'When a local service is being controlled, choose its API surface before interactive CLI flows when both exist.',
+      'Prefer the `http_request` tool over `shell_run` with curl for JSON APIs.'
+    ],
+    guardrails: [
+      'Avoid spending turns on low-signal inspection after the correct target is already identified.',
+      'If a verification path is interactive or slow, switch to a bounded API or batch route.'
+    ],
+    verificationHints: [
+      'Prefer JSON/HTTP verification surfaces when the target service exposes one.',
+      'Keep verification prompts minimal and evidence-focused.'
+    ]
+  },
+  {
+    match: ({ provider }) => provider === 'openai',
+    name: 'structured-general',
+    turnBudgetMs: 120000,
+    maxIters: 4,
+    guidance: [
+      'Think in short verified checkpoints, not long narratives.',
+      'Use tools aggressively, but keep each turn scoped to one subgoal with proof.',
+      'Prefer `http_request` for API verification instead of `shell_run` with curl.'
+    ],
+    guardrails: [
+      'Prefer high-signal tool calls over repeated introspection.',
+      'If a tool output is noisy, extract only the proof and continue.'
+    ],
+    verificationHints: [
+      'Favor stable APIs and single-shot commands for verification.'
+    ]
+  }
+];
+
+function getExecutionProfile(provider, model) {
+  const normalized = {
+    provider: String(provider || '').trim().toLowerCase(),
+    model: String(model || '').trim().toLowerCase()
+  };
+  const matched = EXECUTION_PROFILES.find((item) => item.match(normalized));
+  if (matched) return matched;
+  return {
+    name: 'default-verified-steps',
+    turnBudgetMs: null,
+    maxIters: null,
+    guidance: [
+      'Work in single verified substeps.',
+      'Prefer the shortest reliable path.',
+      'If a route fails twice, pivot instead of repeating it.',
+      'Prefer `http_request` for HTTP/JSON services instead of `shell_run` with curl.'
+    ],
+    guardrails: [
+      'Prefer non-interactive, bounded execution paths over manual or REPL-style flows.',
+      'Do not repeat low-value inspection when a direct proof step is available.'
+    ],
+    verificationHints: [
+      'Verify through the most stable machine-readable surface available.'
+    ]
+  };
+}
+
+function detectLocalRuntimeTask(messages = []) {
+  const text = messages.map((m) => String(m?.content || '')).join('\n').toLowerCase();
+  return /autonomous mission goal|continue autonomous mission/.test(text) &&
+    /local|gguf|ollama|llama\.cpp|runtime|launch|server|model/.test(text);
 }
 
 export class OpenUnumAgent {
@@ -360,6 +504,8 @@ export class OpenUnumAgent {
   }
 
   async runOneProviderTurn({ provider, model, messages, sessionId, routedTools = [] }) {
+    const executionProfile = getExecutionProfile(provider, model);
+    const localRuntimeTask = detectLocalRuntimeTask(messages);
     const attemptConfig = {
       ...this.config,
       model: {
@@ -369,8 +515,24 @@ export class OpenUnumAgent {
       }
     };
     const runtimeProvider = buildProvider(attemptConfig);
-    const maxIters = this.config.runtime?.maxToolIterations ?? 4;
-    const turnBudgetMs = this.config.runtime?.agentTurnTimeoutMs ?? 420000;
+    messages = [
+      {
+        role: 'system',
+        content:
+          `Execution profile: ${executionProfile.name}.\n` +
+          `Guidance:\n${executionProfile.guidance.map((line, idx) => `${idx + 1}. ${line}`).join('\n')}\n` +
+          `Guardrails:\n${(executionProfile.guardrails || []).map((line, idx) => `${idx + 1}. ${line}`).join('\n')}\n` +
+          `Verification:\n${(executionProfile.verificationHints || []).map((line, idx) => `${idx + 1}. ${line}`).join('\n')}`
+      },
+      ...messages
+    ];
+    const maxIters = executionProfile.maxIters || this.config.runtime?.maxToolIterations || 4;
+    const baseTurnBudgetMs = executionProfile.turnBudgetMs || this.config.runtime?.agentTurnTimeoutMs || 420000;
+    const isCloudController = ['nvidia', 'openrouter', 'openai'].includes(String(provider || '').toLowerCase()) ||
+      (String(provider || '').toLowerCase() === 'ollama' && /cloud/.test(String(model || '').toLowerCase()));
+    const turnBudgetMs = localRuntimeTask && !isCloudController
+      ? Math.max(baseTurnBudgetMs, 180000)
+      : baseTurnBudgetMs;
     const turnStartedAt = Date.now();
     let finalText = '';
     let toolRuns = 0;
@@ -379,6 +541,8 @@ export class OpenUnumAgent {
     const trace = {
       provider,
       model,
+      executionProfile: executionProfile.name,
+      localRuntimeTask,
       routedTools,
       iterations: [],
       recoveryUsed: false,
@@ -444,11 +608,20 @@ export class OpenUnumAgent {
       }
 
       for (const tc of out.toolCalls) {
+        const toolRemainingMs = turnBudgetMs - (Date.now() - turnStartedAt);
+        if (toolRemainingMs <= 0) {
+          trace.timedOut = true;
+          trace.timeoutMs = turnBudgetMs;
+          break;
+        }
         const args = parseToolArgs(tc.arguments);
 
         let result;
         try {
-          result = await this.toolRuntime.run(tc.name, args, { sessionId });
+          result = await this.toolRuntime.run(tc.name, args, {
+            sessionId,
+            deadlineAt: turnStartedAt + turnBudgetMs
+          });
         } catch (error) {
           result = { ok: false, error: String(error.message || error) };
         }
@@ -475,15 +648,22 @@ export class OpenUnumAgent {
         messages.push({
           role: 'tool',
           tool_call_id: tc.id,
-          content: JSON.stringify(result)
+          content: JSON.stringify(compactToolResult(result))
         });
       }
       trace.iterations.push(iter);
+      if (trace.timedOut) break;
     }
 
     if (!finalText && toolRuns > 0) {
       try {
         trace.recoveryUsed = true;
+        const remainingMs = turnBudgetMs - (Date.now() - turnStartedAt);
+        if (remainingMs <= 0) {
+          trace.timedOut = true;
+          trace.timeoutMs = turnBudgetMs;
+          throw new Error('turn_deadline_exceeded');
+        }
         const recoveryMessages = [
           ...messages,
           {
@@ -493,7 +673,7 @@ export class OpenUnumAgent {
               'Do not call tools. Include what succeeded, what failed, and next concrete step.'
           }
         ];
-        const recovery = await runtimeProvider.chat({ messages: recoveryMessages, tools: [] });
+        const recovery = await runtimeProvider.chat({ messages: recoveryMessages, tools: [], timeoutMs: remainingMs });
         if (recovery?.content) {
           finalText = recovery.content;
         }
@@ -670,6 +850,12 @@ export class OpenUnumAgent {
           `You are OpenUnum, an Ubuntu operator agent. Current configured provider/model is ${this.config.model.provider}/${this.config.model.model}. ` +
           'If user asks which model/provider you are using, answer with exactly that runtime value and do not invent other providers.\n' +
           'Never claim an action was completed unless a tool result in this turn confirms it.\n' +
+          'Execution contract for every model:\n' +
+          '1. Break work into small verified substeps.\n' +
+          '2. Prefer shell-first local inspection for local-machine tasks.\n' +
+          '3. After a long or noisy tool result, summarize the proof internally and continue; do not depend on raw logs.\n' +
+          '4. If one route fails twice, pivot to a different route without asking for help.\n' +
+          '5. End each turn with either concrete proof-backed progress or a short next-step checkpoint.\n' +
           'For browser tasks: if browser flow is blocked, pivot to terminal/script strategy immediately (curl/wget/git/python/node) and continue.\n' +
           'Prefer the quickest reliable execution path and build short scripts when it improves completion.\n' +
           (routedTools.length ? `Heuristic tool routing hints for this request: ${routedTools.map((item) => `${item.tool}(score=${item.score})`).join(', ')}.\n` : '') +
@@ -701,6 +887,7 @@ export class OpenUnumAgent {
         });
         finalText = run.finalText;
         trace = run.trace;
+        if (failures.length) trace.providerFailures = [...failures];
         break;
       } catch (error) {
         failures.push(`${attempt.provider}: ${String(error.message || error)}`);

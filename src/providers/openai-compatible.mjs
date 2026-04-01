@@ -20,12 +20,13 @@ export class OpenAICompatibleProvider {
     const timer = setTimeout(() => controller.abort(new Error('provider_timeout')), effectiveTimeout);
     let res;
     try {
+      const headers = {
+        'Content-Type': 'application/json'
+      };
+      if (this.apiKey) headers.Authorization = `Bearer ${this.apiKey}`;
       res = await fetch(`${this.baseUrl}/chat/completions`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: this.apiKey ? `Bearer ${this.apiKey}` : ''
-        },
+        headers,
         body: JSON.stringify(body),
         signal: controller.signal
       });
@@ -33,7 +34,13 @@ export class OpenAICompatibleProvider {
       if (error?.name === 'AbortError') {
         throw new Error(`OpenAI-compatible provider timeout after ${effectiveTimeout}ms`);
       }
-      throw error;
+      const details = [
+        error?.name,
+        error?.message,
+        error?.cause?.code,
+        error?.cause?.message
+      ].filter(Boolean).join(' | ');
+      throw new Error(`OpenAI-compatible provider fetch failed${details ? `: ${details}` : ''}`);
     } finally {
       clearTimeout(timer);
     }

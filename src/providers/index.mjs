@@ -12,6 +12,18 @@ function prefersOpenAICodexTransport(model) {
   return /^gpt-5/.test(id) || id.includes('codex');
 }
 
+function normalizeProviderModelId(provider, model) {
+  const raw = String(model || '').trim();
+  if (!raw) return raw;
+  const prefix = `${provider}/`;
+  if (!raw.startsWith(prefix)) return raw;
+  const stripped = raw.slice(prefix.length);
+  if (provider === 'nvidia') {
+    return stripped.includes('/') ? stripped : raw;
+  }
+  return stripped;
+}
+
 export function buildProvider(config) {
   const model = config.model.model;
   const provider = normalizeProviderId(config.model.provider);
@@ -24,7 +36,7 @@ export function buildProvider(config) {
     return new OpenAICompatibleProvider({
       baseUrl: config.model.openrouterBaseUrl,
       apiKey: config.model.openrouterApiKey,
-      model: model.replace(/^openrouter\//, ''),
+      model: normalizeProviderModelId('openrouter', model),
       timeoutMs
     });
   }
@@ -32,7 +44,7 @@ export function buildProvider(config) {
     return new OpenAICompatibleProvider({
       baseUrl: config.model.nvidiaBaseUrl,
       apiKey: config.model.nvidiaApiKey,
-      model: model.replace(/^nvidia\//, ''),
+      model: normalizeProviderModelId('nvidia', model),
       timeoutMs
     });
   }

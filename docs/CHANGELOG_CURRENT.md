@@ -4,19 +4,28 @@ Date: 2026-04-01
 
 ## Current Flagship Pass
 
-1. Added `GET /api/capabilities` for capability-driven WebUI wiring.
-2. Added `GET /api/model-catalog` with canonical provider order:
+1. Hardened local-runtime mission execution and provider portability:
+   - tool/runtime turn budget enforcement now covers slow tool routes and nonproductive retries
+   - deterministic shell syntax/usage failures stop retrying early
+   - local-runtime missions detect prior proof and can complete from verified runtime output
+   - bounded `http_request` path is now preferred for API verification, including shell-to-API curl rewrites
+   - bad Ollama CLI forms (`invoke`, unsupported `run` flags) now produce explicit recovery steering instead of repeated dead-end attempts
+   - NVIDIA full model ids are normalized correctly for OpenAI-compatible transport
+   - local aggressive Qwen models now have explicit 16k context hints, with validation documenting that they still cannot serve as controllers over current Ollama tool-calling transport
+
+2. Added `GET /api/capabilities` for capability-driven WebUI wiring.
+3. Added `GET /api/model-catalog` with canonical provider order:
    - `ollama`
    - `nvidia`
    - `openrouter`
    - `openai`
-3. Normalized legacy `generic` provider state to canonical `openai` while preserving read compatibility.
-4. Upgraded `/api/config` to include:
+4. Normalized legacy `generic` provider state to canonical `openai` while preserving read compatibility.
+5. Upgraded `/api/config` to include:
    - `capabilities`
    - `modelCatalog`
    - `providerConfig`
-5. Upgraded `/api/providers/config` to expose `openaiBaseUrl` and `hasOpenaiApiKey`, with legacy `generic*` aliases preserved.
-6. Standardized WebUI shell markers for the cross-repo contract:
+6. Upgraded `/api/providers/config` to expose `openaiBaseUrl` and `hasOpenaiApiKey`, with legacy `generic*` aliases preserved.
+7. Standardized WebUI shell markers for the cross-repo contract:
    - stable status bar
    - session search
    - provider/model/fallback/autonomy controls
