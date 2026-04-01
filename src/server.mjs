@@ -710,8 +710,18 @@ function startResearchDailyLoop() {
   researchDailyTimer = setTimeout(run, msUntilNextHour(config.runtime.researchScheduleHour ?? 3));
 }
 
+function noCacheHeaders(contentType) {
+  return {
+    'Content-Type': contentType,
+    'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
+    'Pragma': 'no-cache',
+    'Expires': '0',
+    'Surrogate-Control': 'no-store'
+  };
+}
+
 function sendJson(res, code, obj) {
-  res.writeHead(code, { 'Content-Type': 'application/json' });
+  res.writeHead(code, noCacheHeaders('application/json'));
   res.end(JSON.stringify(obj));
 }
 
@@ -1653,11 +1663,11 @@ const server = http.createServer(async (req, res) => {
 
     if (req.method === 'GET' && (url.pathname === '/' || url.pathname === '/index.html')) {
       const html = fs.readFileSync(path.join(process.cwd(), 'src/ui/index.html'), 'utf8');
-      res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+      res.writeHead(200, noCacheHeaders('text/html; charset=utf-8'));
       return res.end(html);
     }
 
-    res.writeHead(404, { 'Content-Type': 'application/json' });
+    res.writeHead(404, noCacheHeaders('application/json'));
     res.end(JSON.stringify({ error: 'not_found' }));
   } catch (error) {
     logError('request_failed', { error: String(error.message || error) });
