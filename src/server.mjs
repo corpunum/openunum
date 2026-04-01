@@ -217,6 +217,20 @@ function providerConnectionOverrides(provider, body = {}) {
   };
 }
 
+function secretForService(service, providedSecret = '') {
+  const secret = String(providedSecret || '').trim();
+  if (secret) return secret;
+  const store = loadSecretStore();
+  const secrets = store.secrets || {};
+  if (service === 'github') return String(secrets.githubToken || '').trim();
+  if (service === 'huggingface') return String(secrets.huggingfaceApiKey || '').trim();
+  if (service === 'elevenlabs') return String(secrets.elevenlabsApiKey || '').trim();
+  if (service === 'telegram') return String(secrets.telegramBotToken || '').trim();
+  if (service === 'openai-oauth') return String(secrets.openaiOauthToken || '').trim();
+  if (service === 'github-copilot') return String(secrets.copilotGithubToken || '').trim();
+  return '';
+}
+
 async function testProviderConnection({ provider, baseUrl, apiKey }) {
   const normalized = normalizeProviderId(provider);
   let models = [];
@@ -996,7 +1010,7 @@ const server = http.createServer(async (req, res) => {
       try {
         return sendJson(res, 200, await testServiceConnection({
           service: body.service,
-          secret: String(body.secret || '').trim()
+          secret: secretForService(String(body.service || '').trim().toLowerCase(), body.secret)
         }));
       } catch (error) {
         return sendJson(res, 200, {

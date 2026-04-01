@@ -297,6 +297,28 @@
     .badge.good { border-color: rgba(34,197,94,.7); color: #c8f5d8; }
     .badge.warn { border-color: rgba(234,179,8,.7); color: #fde68a; }
     .badge.bad { border-color: rgba(239,68,68,.7); color: #fecaca; }
+    .compact-actions button {
+      padding: 7px 9px;
+      font-size: 12px;
+    }
+    .soft-panel {
+      border: 1px solid rgba(47,74,128,.45);
+      border-radius: 12px;
+      padding: 10px;
+      background: linear-gradient(180deg, rgba(17,31,60,.75), rgba(13,24,45,.72));
+    }
+    .summary-stack {
+      display: grid;
+      gap: 4px;
+    }
+    .summary-line {
+      font-size: 12px;
+      color: #d6e6ff;
+    }
+    .summary-sub {
+      font-size: 11px;
+      color: var(--muted);
+    }
     .messages {
       overflow: auto;
       padding: 8px;
@@ -620,10 +642,12 @@
           <div class="row" style="margin-top:10px;">
             <button id="prefillLocalAuth">Scan Local Sources</button>
             <button id="refreshAuthCatalog">Refresh Tables</button>
+            <button id="showAllProviderRows">Show All Providers</button>
             <select id="providerAddSelect">
               <option value="">Add model provider...</option>
             </select>
             <button id="addProviderRow">Add Provider</button>
+            <button id="showAllServiceRows">Show All Services</button>
             <select id="serviceAddSelect">
               <option value="">Add service...</option>
             </select>
@@ -942,8 +966,8 @@
     let fallbackSequence = [];
     let providerAdvancedOpen = {};
     let serviceAdvancedOpen = {};
-    let hiddenProviderRows = JSON.parse(localStorage.getItem('openunum_hidden_provider_rows') || '[]');
-    let hiddenServiceRows = JSON.parse(localStorage.getItem('openunum_hidden_service_rows') || '[]');
+    let hiddenProviderRows = [];
+    let hiddenServiceRows = [];
     q('chatMeta').textContent = sessionId;
     q('autoEscalateToggle').textContent = `Auto: ${autoEscalateEnabled ? 'On' : 'Off'}`;
     q('liveActivityToggle').textContent = `Live: ${liveActivityEnabled ? 'On' : 'Off'}`;
@@ -1615,7 +1639,19 @@
     function providerSummaryText(provider) {
       const parts = [];
       if (provider.top_model) parts.push(`#1 ${provider.top_model}`);
-      parts.push(`models=${Number(provider.model_count || 0)}`);
+      parts.push(`${Number(provider.model_count || 0)} models`);
+      if (provider.base_url) parts.push(provider.base_url.replace(/^https?:\/\//, ''));
+      return parts.join(' | ');
+    }
+
+    function serviceSummaryText(row) {
+      const parts = [];
+      if (row.cli?.account) parts.push(row.cli.account);
+      else if (row.stored_preview) parts.push(`stored ${row.stored_preview}`);
+      else if (row.discovered_source) parts.push('discovered locally');
+      else if (row.cli?.available) parts.push('cli available');
+      else parts.push('manual setup');
+      if (row.cli?.detail && !row.cli?.authenticated && !row.cli?.available) parts.push(row.cli.detail);
       return parts.join(' | ');
     }
 
@@ -1633,18 +1669,30 @@
             : provider.provider === 'openrouter'
               ? 'sk-or-...'
               : 'sk-...';
-        const inputValue = '';
+        const inputPlaceholder = provider.stored_preview
+          ? `current ${provider.stored_preview}`
+          : (provider.discovered_source ? 'discovered locally' : authPlaceholder);
         const mainRow = `
           <tr>
-            <td><strong>${escapeHtml(provider.display_name || provider.provider)}</strong></td>
+            <td>
+              <div class="summary-stack">
+                <div class="summary-line"><strong>${escapeHtml(provider.display_name || provider.provider)}</strong></div>
+                <div class="summary-sub">${escapeHtml(provider.provider)}</div>
+              </div>
+            </td>
             <td>${renderStatusBadge(provider.status || 'unknown')}</td>
             <td>
-              ${authField ? `<input class="provider-secret-input" data-provider="${provider.provider}" placeholder="${escapeHtml(authPlaceholder)}" value="${inputValue}" />` : '<span class="pill">local</span>'}
-              <div class="hint" style="margin-top:6px;">${provider.stored_preview ? `stored ${escapeHtml(provider.stored_preview)}` : (provider.provider === 'ollama' ? 'local endpoint only' : 'no stored secret')}</div>
+              ${authField ? `<input class="provider-secret-input" data-provider="${provider.provider}" placeholder="${escapeHtml(inputPlaceholder)}" value="" />` : '<span class="pill">local</span>'}
+              <div class="hint" style="margin-top:6px;">${provider.auth_ready ? 'ready' : 'not ready'}${provider.discovered_source ? ` | ${escapeHtml(provider.discovered_source)}` : ''}</div>
             </td>
-            <td>${escapeHtml(providerSummaryText(provider))}</td>
             <td>
-              <div class="row">
+              <div class="summary-stack">
+                <div class="summary-line">${escapeHtml(providerSummaryText(provider))}</div>
+                <div class="summary-sub">${provider.degraded_reason ? escapeHtml(provider.degraded_reason) : 'catalog available'}</div>
+              </div>
+            </td>
+            <td>
+              <div class="row compact-actions">
                 <button type="button" class="provider-save" data-provider="${provider.provider}">Save</button>
                 <button type="button" class="provider-test" data-provider="${provider.provider}">Test</button>
                 <button type="button" class="provider-use" data-provider="${provider.provider}">Use</button>
@@ -1656,7 +1704,7 @@
         const detailRow = advancedOpen ? `
           <tr>
             <td colspan="5">
-              <div class="grid two">
+              <div class="soft-panel grid two">
                 <div class="field">
                   <label>Resolved Base URL</label>
                   <input class="provider-base-input mono" data-provider="${provider.provider}" value="${escapeHtml(provider.base_url || '')}" />
@@ -1704,19 +1752,24 @@
         const advancedOpen = Boolean(serviceAdvancedOpen[row.id]);
         const secretField = SERVICE_SECRET_FIELD[row.id];
         const authCell = secretField
-          ? `<input class="service-secret-input" data-service="${row.id}" placeholder="${escapeHtml(row.auth_kind || 'credential')}" value="" />`
+          ? `<input class="service-secret-input" data-service="${row.id}" placeholder="${escapeHtml(row.stored_preview ? `current ${row.stored_preview}` : (row.auth_kind || 'credential'))}" value="" />`
           : `<span class="pill">${escapeHtml(row.cli?.authenticated ? 'oauth active' : row.auth_kind || 'oauth')}</span>`;
         const hasOauth = row.id === 'github' || row.id === 'google-workspace';
         const mainRow = `
           <tr>
-            <td><strong>${escapeHtml(row.display_name || row.id)}</strong></td>
+            <td>
+              <div class="summary-stack">
+                <div class="summary-line"><strong>${escapeHtml(row.display_name || row.id)}</strong></div>
+                <div class="summary-sub">${escapeHtml(row.id)}</div>
+              </div>
+            </td>
             <td>${renderStatusBadge(row.configured ? 'configured' : (row.cli?.authenticated ? 'authenticated' : (row.cli?.available ? 'available' : 'missing')))}</td>
             <td>
               ${authCell}
-              <div class="hint" style="margin-top:6px;">${escapeHtml(row.stored_preview || row.cli?.account || row.cli?.detail || 'manual')}</div>
+              <div class="hint" style="margin-top:6px;">${escapeHtml(serviceSummaryText(row))}</div>
             </td>
             <td>
-              <div class="row">
+              <div class="row compact-actions">
                 ${secretField ? `<button type="button" class="service-save" data-service="${row.id}">Save</button><button type="button" class="service-test" data-service="${row.id}">Test</button>` : `<button type="button" class="service-test" data-service="${row.id}">Test</button>`}
                 ${hasOauth ? `<button type="button" class="service-connect" data-service="${row.id}">Connect</button>` : ''}
                 <button type="button" class="service-advanced" data-service="${row.id}">${advancedOpen ? 'Hide' : 'Advanced'}</button>
@@ -1727,8 +1780,10 @@
         const detailRow = advancedOpen ? `
           <tr>
             <td colspan="4">
-              <div class="hint">mode=${escapeHtml(row.auth_kind || '-')} | source=${escapeHtml(row.discovered_source || '-')}</div>
-              <div class="hint">cli=${escapeHtml(row.cli?.cli || 'n/a')} | detail=${escapeHtml(row.cli?.detail || 'manual')}</div>
+              <div class="soft-panel">
+                <div class="hint">mode=${escapeHtml(row.auth_kind || '-')} | source=${escapeHtml(row.discovered_source || '-')}</div>
+                <div class="hint">cli=${escapeHtml(row.cli?.cli || 'n/a')} | detail=${escapeHtml(row.cli?.detail || 'manual')}</div>
+              </div>
             </td>
           </tr>` : '';
         return [mainRow, detailRow];
@@ -2175,6 +2230,20 @@
       await refreshProviderConfig();
       await refreshModelCatalog();
       await refreshRuntimeOverview();
+    };
+
+    q('showAllProviderRows').onclick = () => {
+      hiddenProviderRows = [];
+      normalizeHiddenRows();
+      refreshAddRowSelectors();
+      renderProviderMatrix(authCatalog?.providers || []);
+    };
+
+    q('showAllServiceRows').onclick = () => {
+      hiddenServiceRows = [];
+      normalizeHiddenRows();
+      refreshAddRowSelectors();
+      renderAuthMethodTable(authCatalog?.auth_methods || []);
     };
 
     q('addProviderRow').onclick = () => {
