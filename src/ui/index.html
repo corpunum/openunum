@@ -1451,6 +1451,11 @@
 
     function setSelectByValueOrFirst(id, value) {
       const el = q(id);
+      if (!el) return;
+      if (el.tagName !== 'SELECT') {
+        el.value = value ?? '';
+        return;
+      }
       const options = Array.from(el.options).map((o) => o.value);
       el.value = options.includes(value) ? value : options[0] || '';
     }
@@ -2510,20 +2515,28 @@
     }, 3000);
 
     (async () => {
-      showView('chat');
-      await ensureSessionExists(sessionId);
-      await refreshModel();
-      await refreshRuntime();
-      await refreshProviderConfig();
-      await refreshBrowserConfig();
-      await refreshRuntimeOverview();
-      await refreshTelegram();
-      await refreshSessionList();
-      await loadSession();
-      await refreshMission();
-      await refreshContextStatus();
-      await refreshTacticalLedger();
-      await refreshMissionTimeline();
+      try {
+        showView('chat');
+        await ensureSessionExists(sessionId);
+        await refreshModel();
+        await refreshRuntime();
+        await refreshProviderConfig();
+        await refreshBrowserConfig();
+        await refreshRuntimeOverview();
+        await refreshTelegram();
+        await refreshSessionList();
+        await loadSession();
+        await refreshMission();
+        await refreshContextStatus();
+        await refreshTacticalLedger();
+        await refreshMissionTimeline();
+      } catch (error) {
+        const msg = String(error?.message || error);
+        console.error('openunum_ui_init_failed', error);
+        topStatus.textContent = `init failed: ${msg}`;
+        const providerStatus = q('providerStatus');
+        if (providerStatus) providerStatus.textContent = `ui init failed: ${msg}`;
+      }
     })();
   </script>
 </body>
