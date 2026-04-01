@@ -29,17 +29,18 @@ function isModelInfoQuestion(text) {
 }
 
 function normalizeModelForProvider(provider, model) {
-  const raw = String(model || '').replace(/^(ollama|openrouter|nvidia|generic)\//, '');
-  return `${provider}/${raw}`;
+  const normalizedProvider = String(provider || 'ollama').trim().toLowerCase() === 'generic' ? 'openai' : String(provider || 'ollama').trim().toLowerCase();
+  const raw = String(model || '').replace(/^(ollama|openrouter|nvidia|generic|openai)\//, '');
+  return `${normalizedProvider}/${raw}`;
 }
 
 function providerModelLabel(provider, model) {
-  const p = String(provider || '').trim();
+  const p = String(provider || '').trim().toLowerCase() === 'generic' ? 'openai' : String(provider || '').trim();
   const m = String(model || '').trim();
   if (!p) return m;
   if (!m) return p;
   if (m.startsWith(`${p}/`)) return m;
-  if (/^(ollama|openrouter|nvidia|generic)\//.test(m)) return m;
+  if (/^(ollama|openrouter|nvidia|generic|openai)\//.test(m)) return m.replace(/^generic\//, 'openai/');
   return `${p}/${m}`;
 }
 
@@ -81,6 +82,76 @@ function isLikelyCompletionText(text) {
   );
 }
 
+const TOOL_ROUTING_HINTS = [
+  { tool: 'browser_search', terms: ['search', 'google', 'find online', 'web research', 'browse'] },
+  { tool: 'browser_navigate', terms: ['open website', 'navigate', 'visit', 'go to', 'browser'] },
+  { tool: 'browser_extract', terms: ['extract', 'scrape', 'read page', 'page text'] },
+  { tool: 'file_read', terms: ['read file', 'inspect file', 'open file', 'show file'] },
+  { tool: 'file_write', terms: ['create file', 'write file', 'save file'] },
+  { tool: 'file_patch', terms: ['patch file', 'edit file', 'replace text', 'modify file'] },
+  { tool: 'shell_run', terms: ['run command', 'terminal', 'shell', 'cli', 'install', 'build', 'test'] },
+  { tool: 'desktop_open', terms: ['open app', 'open folder', 'open target'] },
+  { tool: 'desktop_xdotool', terms: ['desktop', 'window', 'keyboard', 'mouse', 'xdotool'] },
+  { tool: 'email_list', terms: ['email', 'gmail', 'inbox'] },
+  { tool: 'research_run_daily', terms: ['research', 'daily research'] }
+];
+
+function inferRoutedTools(message) {
+  const text = String(message || '').toLowerCase();
+  const matches = [];
+  for (const hint of TOOL_ROUTING_HINTS) {
+    let score = 0;
+    for (const term of hint.terms) {
+      if (text.includes(term)) score += 1;
+    }
+    if (score > 0) matches.push({ tool: hint.tool, score });
+  }
+  matches.sort((a, b) => b.score - a.score || a.tool.localeCompare(b.tool));
+  return matches.slice(0, 5);
+}
+
+function parseSlashCommand(message) {
+  const text = String(message || '').trim();
+  if (!text.startsWith('/')) return null;
+  const [command, ...rest] = text.slice(1).split(/\s+/);
+  return {
+    name: String(command || '').toLowerCase(),
+    args: rest,
+    raw: text
+  };
+}
+
+function buildPivotHints({ executedTools = [], permissionDenials = [], timedOut = false, providerFailures = [] }) {
+  const hints = [];
+  const failedTools = executedTools.filter((item) => item?.result?.ok === false);
+  const repeatedFailures = new Map();
+  for (const item of failedTools) {
+    repeatedFailures.set(item.name, (repeatedFailures.get(item.name) || 0) + 1);
+  }
+
+  if (permissionDenials.some((item) => String(item.tool || '').includes('browser'))) {
+    hints.push('Browser path was blocked. Pivot to terminal or script execution immediately.');
+  }
+  if (permissionDenials.some((item) => ['shell_disabled', 'shell_blocked', 'owner_mode_restricted'].includes(item.reason))) {
+    hints.push('Shell path is restricted. Use non-shell tools or change owner mode before retrying.');
+  }
+  if (permissionDenials.some((item) => item.reason === 'tool_circuit_open')) {
+    hints.push('A tool circuit is open. Do not retry the same tool family immediately.');
+  }
+  for (const [toolName, count] of repeatedFailures.entries()) {
+    if (count >= 2) {
+      hints.push(`${toolName} failed repeatedly. Switch method instead of repeating the same call.`);
+    }
+  }
+  if (timedOut) {
+    hints.push('Turn timed out. Narrow the scope or switch to a faster provider/model.');
+  }
+  if (providerFailures.length >= 2) {
+    hints.push('Multiple providers failed. Prefer the healthiest provider path and reduce prompt complexity.');
+  }
+  return [...new Set(hints)].slice(0, 5);
+}
+
 export class OpenUnumAgent {
   constructor({ config, memoryStore }) {
     this.config = config;
@@ -102,10 +173,11 @@ export class OpenUnumAgent {
   }
 
   switchModel(provider, model) {
+    provider = String(provider || 'ollama').trim().toLowerCase() === 'generic' ? 'openai' : String(provider || 'ollama').trim().toLowerCase();
     this.config.model.provider = provider;
-    this.config.model.model = model;
+    this.config.model.model = providerModelLabel(provider, model);
     this.config.model.providerModels = this.config.model.providerModels || {};
-    this.config.model.providerModels[provider] = model;
+    this.config.model.providerModels[provider] = this.config.model.model;
     return this.getCurrentModel();
   }
 
@@ -195,6 +267,79 @@ export class OpenUnumAgent {
     return { ok: true, sessionId: sid, artifacts: this.memoryStore.getMemoryArtifacts(sid, limit) };
   }
 
+  handleSlashCommand(sessionId, slash) {
+    const sid = String(sessionId || '').trim();
+    const current = this.getCurrentModel();
+    if (slash.name === 'help') {
+      return [
+        'Available slash commands:',
+        '/status',
+        '/compact',
+        '/memory',
+        '/cost',
+        '/ledger',
+        '/session list'
+      ].join('\n');
+    }
+    if (slash.name === 'status') {
+      const status = this.getContextStatus(sid);
+      return [
+        `provider/model: ${providerModelLabel(current.activeProvider || current.provider, current.activeModel || current.model)}`,
+        `messages: ${status.messageCount}`,
+        `estimated_tokens: ${status.estimatedTokens}`,
+        `context_limit: ${status.budget.contextLimit}`,
+        `usage_pct: ${(status.budget.usagePct * 100).toFixed(1)}%`,
+        `latest_compaction: ${status.latestCompaction ? status.latestCompaction.createdAt : 'none'}`
+      ].join('\n');
+    }
+    if (slash.name === 'compact') {
+      const out = this.compactSessionContext({ sessionId: sid, dryRun: false });
+      return [
+        `compact ok=${out.ok}`,
+        `pre_tokens=${out.preTokens}`,
+        `post_tokens=${out.postTokens}`,
+        `cutoff_message_id=${out.cutoffMessageId}`,
+        `artifacts=${out.artifactsCount}`
+      ].join('\n');
+    }
+    if (slash.name === 'memory') {
+      const artifacts = this.memoryStore.getMemoryArtifacts(sid, 5);
+      const latestCompaction = this.memoryStore.getLatestSessionCompaction(sid);
+      return [
+        `artifacts: ${artifacts.length}`,
+        `latest_compaction: ${latestCompaction ? latestCompaction.createdAt : 'none'}`,
+        ...artifacts.slice(0, 5).map((item, index) => `${index + 1}. [${item.type}] ${String(item.content || '').slice(0, 120)}`)
+      ].join('\n');
+    }
+    if (slash.name === 'cost') {
+      const messages = this.memoryStore.getAllMessagesForSession(sid).map((m) => ({ role: m.role, content: m.content }));
+      const estimatedTokens = estimateMessagesTokens(messages);
+      return [
+        `session_messages=${messages.length}`,
+        `estimated_total_tokens=${estimatedTokens}`,
+        'cost_estimate=not provider-billed; token estimate only'
+      ].join('\n');
+    }
+    if (slash.name === 'ledger') {
+      const strategies = this.memoryStore.getStrategyLedger ? this.memoryStore.getStrategyLedger({ goal: '', limit: 6 }) : [];
+      const tools = this.memoryStore.getToolReliability ? this.memoryStore.getToolReliability(6) : [];
+      return [
+        `strategy_entries=${strategies.length}`,
+        ...strategies.map((item, index) => `${index + 1}. ${item.success ? 'SUCCESS' : 'FAIL'} | ${item.strategy} | ${String(item.evidence || '').slice(0, 100)}`),
+        `tool_reliability_entries=${tools.length}`,
+        ...tools.map((item, index) => `${index + 1}. ${item.toolName} success_rate=${(item.successRate * 100).toFixed(0)}% total=${item.total}`)
+      ].join('\n');
+    }
+    if (slash.name === 'session' && slash.args[0] === 'list') {
+      const sessions = this.memoryStore.listSessions(12);
+      return [
+        `sessions=${sessions.length}`,
+        ...sessions.map((item, index) => `${index + 1}. ${item.sessionId} | ${item.title} | ${item.messageCount} msgs`)
+      ].join('\n');
+    }
+    return null;
+  }
+
   getModelForProvider(provider) {
     const fallback = normalizeModelForProvider(provider, this.config.model.model);
     return this.config.model.providerModels?.[provider] || fallback;
@@ -214,7 +359,7 @@ export class OpenUnumAgent {
     }));
   }
 
-  async runOneProviderTurn({ provider, model, messages, sessionId }) {
+  async runOneProviderTurn({ provider, model, messages, sessionId, routedTools = [] }) {
     const attemptConfig = {
       ...this.config,
       model: {
@@ -234,8 +379,10 @@ export class OpenUnumAgent {
     const trace = {
       provider,
       model,
+      routedTools,
       iterations: [],
-      recoveryUsed: false
+      recoveryUsed: false,
+      permissionDenials: []
     };
     let forcedContinueCount = 0;
 
@@ -290,6 +437,13 @@ export class OpenUnumAgent {
           result = await this.toolRuntime.run(tc.name, args, { sessionId });
         } catch (error) {
           result = { ok: false, error: String(error.message || error) };
+        }
+        if (!result?.ok && ['shell_blocked', 'owner_mode_restricted', 'tool_circuit_open', 'shell_disabled', 'unsafe_xdotool_command'].includes(result?.error)) {
+          trace.permissionDenials.push({
+            tool: tc.name,
+            reason: result.error,
+            detail: result.stderr || result.error
+          });
         }
         toolRuns += 1;
         lastToolResult = result;
@@ -356,6 +510,17 @@ export class OpenUnumAgent {
       ].join('\n');
     }
     if (!finalText) finalText = 'No response generated.';
+    trace.pivotHints = buildPivotHints({
+      executedTools,
+      permissionDenials: trace.permissionDenials,
+      timedOut: Boolean(trace.timedOut)
+    });
+    trace.turnSummary = {
+      toolRuns,
+      iterationCount: trace.iterations.length,
+      permissionDenials: trace.permissionDenials.length,
+      routedTools: routedTools.map((item) => item.tool)
+    };
     this.lastRuntime = { provider, model };
     this.config.model.providerModels = this.config.model.providerModels || {};
     this.config.model.providerModels[provider] = model;
@@ -363,6 +528,34 @@ export class OpenUnumAgent {
   }
 
   async chat({ message, sessionId = crypto.randomUUID() }) {
+    const slash = parseSlashCommand(message);
+    if (slash) {
+      const slashReply = this.handleSlashCommand(sessionId, slash);
+      if (slashReply) {
+        this.memoryStore.addMessage(sessionId, 'user', message);
+        this.memoryStore.addMessage(sessionId, 'assistant', slashReply);
+        return {
+          sessionId,
+          reply: slashReply,
+          model: this.getCurrentModel(),
+          trace: {
+            provider: this.config.model.provider,
+            model: this.config.model.model,
+            routedTools: [],
+            iterations: [],
+            permissionDenials: [],
+            turnSummary: {
+              toolRuns: 0,
+              iterationCount: 0,
+              permissionDenials: 0,
+              routedTools: []
+            },
+            note: `slash_command:${slash.name}`
+          }
+        };
+      }
+    }
+
     if (isModelInfoQuestion(message)) {
       const configuredLabel = providerModelLabel(this.config.model.provider, this.config.model.model);
       const activeLabel = providerModelLabel(
@@ -392,6 +585,7 @@ export class OpenUnumAgent {
     }
 
     const skills = loadSkills();
+    const routedTools = inferRoutedTools(message);
 
     this.memoryStore.addMessage(sessionId, 'user', message);
 
@@ -464,6 +658,7 @@ export class OpenUnumAgent {
           'Never claim an action was completed unless a tool result in this turn confirms it.\n' +
           'For browser tasks: if browser flow is blocked, pivot to terminal/script strategy immediately (curl/wget/git/python/node) and continue.\n' +
           'Prefer the quickest reliable execution path and build short scripts when it improves completion.\n' +
+          (routedTools.length ? `Heuristic tool routing hints for this request: ${routedTools.map((item) => `${item.tool}(score=${item.score})`).join(', ')}.\n` : '') +
           `Owner control mode: ${this.config.runtime?.ownerControlMode || 'safe'}. ` +
           'In safe mode, avoid destructive operations without explicit owner approval. ' +
           'In unlocked modes, maximize completion while still requiring tool evidence.\n' +
@@ -487,7 +682,8 @@ export class OpenUnumAgent {
           provider: attempt.provider,
           model: attempt.model,
           messages: [...messages],
-          sessionId
+          sessionId,
+          routedTools
         });
         finalText = run.finalText;
         trace = run.trace;
@@ -502,8 +698,22 @@ export class OpenUnumAgent {
       trace = {
         provider: this.config.model.provider,
         model: this.config.model.model,
+        routedTools,
         iterations: [],
-        failures
+        failures,
+        permissionDenials: [],
+        pivotHints: buildPivotHints({
+          executedTools: [],
+          permissionDenials: [],
+          timedOut: false,
+          providerFailures: failures
+        }),
+        turnSummary: {
+          toolRuns: 0,
+          iterationCount: 0,
+          permissionDenials: 0,
+          routedTools: routedTools.map((item) => item.tool)
+        }
       };
     }
     this.memoryStore.addMessage(sessionId, 'assistant', finalText);

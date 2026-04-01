@@ -1,5 +1,57 @@
 # Changelog (Current Consolidated)
 
+Date: 2026-04-01
+
+## Current Flagship Pass
+
+1. Added `GET /api/capabilities` for capability-driven WebUI wiring.
+2. Added `GET /api/model-catalog` with canonical provider order:
+   - `ollama`
+   - `nvidia`
+   - `openrouter`
+   - `openai`
+3. Normalized legacy `generic` provider state to canonical `openai` while preserving read compatibility.
+4. Upgraded `/api/config` to include:
+   - `capabilities`
+   - `modelCatalog`
+   - `providerConfig`
+5. Upgraded `/api/providers/config` to expose `openaiBaseUrl` and `hasOpenaiApiKey`, with legacy `generic*` aliases preserved.
+6. Standardized WebUI shell markers for the cross-repo contract:
+   - stable status bar
+   - session search
+   - provider/model/fallback/autonomy controls
+   - trace panel
+   - iMessage-style chat area selectors
+7. Added `openunum` contract tests:
+   - `tests/phase10.e2e.mjs`
+   - `tests/phase11.e2e.mjs`
+8. Reset the live flagship runtime on `127.0.0.1:18880` back to `autonomy-first`.
+9. Harvested flagship features from the other products into `openunum`:
+   - OpenBat-style quick prompts and operator-friendly control surface
+   - Gemini-style browser telemetry/runtime cards
+   - Qwen-style Git/runtime visibility
+   - Codex/Claude-style provider health summary cards
+10. Added donor-inspired execution logic improvements after reviewing `OpenBat/source`:
+   - heuristic tool routing hints injected before model execution
+   - first-class permission denial tracking in execution trace
+   - explicit per-turn trace summaries for tool runs / iterations / denials
+11. Added operator-grade context/session controls to the flagship WebUI:
+   - session export via `GET /api/sessions/:sessionId/export`
+   - explicit context budget telemetry from `GET /api/context/status`
+   - one-click context compaction from the operator runtime view
+12. Added a tactical ledger and pivot surface after deeper donor review:
+   - `GET /api/autonomy/insights` to expose recent strategy outcomes, tool reliability, recent tool runs, and compactions
+   - operator-side tactical ledger panel in the WebUI
+   - per-turn `pivotHints` in execution trace based on denials, repeated tool failures, timeouts, and provider collapse
+   - new `/ledger` slash command for quick operator summaries
+13. Added replay import and filtered mission timeline tooling:
+   - `POST /api/sessions/import` for session replay import
+   - `POST /api/sessions/clone` for branchable replay from existing sessions
+   - `GET /api/missions/timeline` for merged mission/operator playback
+   - mission timeline filter/search controls in the WebUI
+   - artifact drill-down from mission timeline into operator output
+   - direct mission-session open/clone controls from the timeline
+
 Date: 2026-03-30
 
 ## Major Additions

@@ -17,6 +17,11 @@ Returns:
 - `GET /api/config`
 - `POST /api/config`
 
+`GET /api/config` now also returns:
+- `capabilities`
+- `modelCatalog`
+- `providerConfig`
+
 `POST` accepts (partial):
 - `runtime.shellEnabled: boolean`
 - `runtime.workspaceRoot: string`
@@ -53,7 +58,7 @@ Returns:
 
 Payload:
 ```json
-{"mode":"standard"}
+{"mode":"autonomy-first"}
 ```
 or
 ```json
@@ -70,12 +75,82 @@ or
 - `POST /api/autonomy/master/learn-skills`
 - `POST /api/autonomy/master/self-test`
 
+## Capabilities
+
+- `GET /api/capabilities`
+
+Returns:
+```json
+{
+  "contract_version": "2026-04-01.webui-capabilities.v1",
+  "menu": ["chat", "missions", "trace", "runtime", "settings"],
+  "provider_order": ["ollama", "nvidia", "openrouter", "openai"]
+}
+```
+
+## Runtime Overview
+
+- `GET /api/runtime/overview`
+- `GET /api/autonomy/insights?sessionId=...&goal=...`
+- `GET /api/missions/timeline?id=...`
+
+Returns a WebUI-oriented flagship summary:
+- `workspaceRoot`
+- `autonomyMode`
+- `browser`
+- `git`
+- `selectedModel`
+- `fallbackModel`
+- `providers[]` with `status`, `topModel`, and `modelCount`
+
+`GET /api/autonomy/insights` returns:
+- `sessionId`
+- `goal`
+- `context`
+- `recentStrategies[]`
+- `toolReliability[]`
+- `recentToolRuns[]`
+- `recentCompactions[]`
+
+`GET /api/missions/timeline` returns:
+- `mission`
+- `log[]`
+- `toolRuns[]`
+- `compactions[]`
+- `artifacts[]`
+- `recentStrategies[]`
+
 ## Provider Config + Discovery
 
 - `GET /api/providers/config`
 - `POST /api/providers/config`
 - `POST /api/providers/import-openclaw`
-- `GET /api/models?provider=ollama|openrouter|nvidia`
+- `GET /api/models?provider=ollama|nvidia|openrouter|openai`
+- `GET /api/model-catalog`
+
+`GET /api/providers/config` returns canonical OpenAI fields plus legacy aliases:
+- `openaiBaseUrl`
+- `genericBaseUrl`
+- `hasOpenaiApiKey`
+- `hasGenericApiKey`
+
+`GET /api/model-catalog` returns the canonical model-catalog contract:
+```json
+{
+  "contract_version": "2026-04-01.model-catalog.v1",
+  "provider_order": ["ollama", "nvidia", "openrouter", "openai"],
+  "selected": {
+    "provider": "ollama",
+    "model_id": "kimi-k2.5:cloud",
+    "canonical_key": "ollama/kimi-k2.5:cloud"
+  },
+  "fallback": {
+    "provider": "nvidia",
+    "model_id": "qwen/qwen3-coder-480b-a35b-instruct",
+    "canonical_key": "nvidia/qwen/qwen3-coder-480b-a35b-instruct"
+  }
+}
+```
 
 ## Model Runtime
 
@@ -102,6 +177,12 @@ Payload:
 - `replyHtml`
 - `model`
 - `trace` (iterations/tool calls/failures)
+
+`trace` now also carries flagship execution metadata:
+- `routedTools`
+- `permissionDenials`
+- `turnSummary`
+- `pivotHints`
 
 Long-running behavior:
 - When a turn is still running, `POST /api/chat` returns `202` with:
@@ -132,6 +213,39 @@ Payload:
 - `POST /api/context/compact`
 - `GET /api/context/compactions?sessionId=...`
 - `GET /api/context/artifacts?sessionId=...`
+
+`GET /api/context/status` returns:
+- `sessionId`
+- `messageCount`
+- `estimatedTokens`
+- `budget.contextLimit`
+- `budget.usagePct`
+- `latestCompaction`
+
+## Sessions
+
+- `POST /api/sessions`
+- `POST /api/sessions/import`
+- `POST /api/sessions/clone`
+- `GET /api/sessions?limit=120`
+- `GET /api/sessions/:sessionId`
+- `GET /api/sessions/:sessionId/activity?since=...`
+- `GET /api/sessions/:sessionId/export`
+
+`GET /api/sessions/:sessionId/export` returns:
+- `sessionId`
+- `summary`
+- `exportedAt`
+- `estimatedTokens`
+- `messages[]`
+
+`POST /api/sessions/import` accepts:
+- `sessionId`
+- `messages[]`
+
+`POST /api/sessions/clone` accepts:
+- `sourceSessionId`
+- `targetSessionId`
 
 ## Skills
 

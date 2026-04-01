@@ -86,7 +86,7 @@ async function testServerHealth() {
 async function testConfigAPI() {
   try {
     const res = await httpGet('/api/config');
-    if (res.status === 200 && res.data.model && res.data.runtime) {
+    if (res.status === 200 && res.data.model && res.data.runtime && res.data.capabilities && res.data.modelCatalog) {
       log('Config API', 'PASS', { provider: res.data.model.provider });
       return true;
     }
@@ -245,7 +245,7 @@ async function testAutonomyMode() {
     }
     
     // Switch to standard mode (safe)
-    const switchRes = await httpPost('/api/autonomy/mode', { mode: 'standard' });
+    const switchRes = await httpPost('/api/autonomy/mode', { mode: 'autonomy-first' });
     if (switchRes.status === 200 && switchRes.data.ok) {
       log('Autonomy Mode', 'PASS', { mode: switchRes.data.mode });
       return true;
@@ -254,6 +254,44 @@ async function testAutonomyMode() {
     return false;
   } catch (error) {
     log('Autonomy Mode', 'FAIL', { error: String(error.message || error) });
+    return false;
+  }
+}
+
+async function testCapabilitiesContract() {
+  try {
+    const res = await httpGet('/api/capabilities');
+    const expectedMenu = ['chat', 'missions', 'trace', 'runtime', 'settings'];
+    const expectedProviders = ['ollama', 'nvidia', 'openrouter', 'openai'];
+    if (
+      res.status === 200 &&
+      JSON.stringify(res.data.menu) === JSON.stringify(expectedMenu) &&
+      JSON.stringify(res.data.provider_order) === JSON.stringify(expectedProviders)
+    ) {
+      log('Capabilities Contract', 'PASS', { contract: res.data.contract_version });
+      return true;
+    }
+    log('Capabilities Contract', 'FAIL', { status: res.status, data: res.data });
+    return false;
+  } catch (error) {
+    log('Capabilities Contract', 'FAIL', { error: String(error.message || error) });
+    return false;
+  }
+}
+
+async function testModelCatalogContract() {
+  try {
+    const res = await httpGet('/api/model-catalog');
+    const providers = res.data?.provider_order || [];
+    const selected = res.data?.selected?.canonical_key;
+    if (res.status === 200 && providers.join(',') === 'ollama,nvidia,openrouter,openai' && selected) {
+      log('Model Catalog Contract', 'PASS', { selected });
+      return true;
+    }
+    log('Model Catalog Contract', 'FAIL', { status: res.status, data: res.data });
+    return false;
+  } catch (error) {
+    log('Model Catalog Contract', 'FAIL', { error: String(error.message || error) });
     return false;
   }
 }
@@ -309,6 +347,8 @@ async function runAllTests() {
   const tests = [
     testServerHealth,
     testConfigAPI,
+    testCapabilitiesContract,
+    testModelCatalogContract,
     testSelfHeal,
     testMemoryStore,
     testBrowserStatus,

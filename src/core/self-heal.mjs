@@ -419,7 +419,7 @@ export class SelfHealSystem {
         executorRetryBackoffMs: 700,
         providerRequestTimeoutMs: 120000,
         agentTurnTimeoutMs: 420000,
-        autonomyMode: 'standard'
+        autonomyMode: 'autonomy-first'
       },
       model: {
         provider: 'ollama',
@@ -428,19 +428,21 @@ export class SelfHealSystem {
           ollama: 'ollama/qwen3.5:9b-64k',
           openrouter: 'openrouter/openai/gpt-4o-mini',
           nvidia: 'nvidia/qwen/qwen3-coder-480b-a35b-instruct',
-          generic: 'generic/gpt-4o-mini'
+          openai: 'openai/gpt-4o-mini'
         },
         routing: {
           fallbackEnabled: true,
-          fallbackProviders: ['ollama', 'nvidia', 'openrouter', 'generic'],
+          fallbackProviders: ['ollama', 'nvidia', 'openrouter', 'openai'],
           forcePrimaryProvider: false
         },
         ollamaBaseUrl: 'http://127.0.0.1:11434',
         openrouterBaseUrl: 'https://openrouter.ai/api/v1',
         nvidiaBaseUrl: 'https://integrate.api.nvidia.com/v1',
-        genericBaseUrl: '',
+        openaiBaseUrl: 'https://api.openai.com/v1',
+        genericBaseUrl: 'https://api.openai.com/v1',
         openrouterApiKey: '',
         nvidiaApiKey: '',
+        openaiApiKey: '',
         genericApiKey: ''
       },
       channels: {

@@ -1,9 +1,13 @@
 import { OpenAICompatibleProvider } from './openai-compatible.mjs';
 import { OllamaProvider } from './ollama.mjs';
 
+function normalizeProviderId(provider) {
+  return String(provider || 'ollama').trim().toLowerCase() === 'generic' ? 'openai' : String(provider || 'ollama').trim().toLowerCase();
+}
+
 export function buildProvider(config) {
   const model = config.model.model;
-  const provider = config.model.provider;
+  const provider = normalizeProviderId(config.model.provider);
   const timeoutMs = config.runtime?.providerRequestTimeoutMs ?? 120000;
 
   if (provider === 'ollama') {
@@ -25,11 +29,11 @@ export function buildProvider(config) {
       timeoutMs
     });
   }
-  if (provider === 'generic') {
+  if (provider === 'openai') {
     return new OpenAICompatibleProvider({
-      baseUrl: config.model.genericBaseUrl,
-      apiKey: config.model.genericApiKey,
-      model: model.replace(/^generic\//, ''),
+      baseUrl: config.model.openaiBaseUrl || config.model.genericBaseUrl,
+      apiKey: config.model.openaiApiKey || config.model.genericApiKey,
+      model: model.replace(/^(generic|openai)\//, ''),
       timeoutMs
     });
   }

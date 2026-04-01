@@ -5,6 +5,53 @@ import dotenv from 'dotenv';
 
 dotenv.config();
 
+function normalizeProviderId(rawProvider) {
+  const provider = String(rawProvider || 'ollama').trim().toLowerCase();
+  if (provider === 'generic') return 'openai';
+  return provider;
+}
+
+function normalizeModelRef(provider, model) {
+  const normalizedProvider = normalizeProviderId(provider);
+  const raw = String(model || '').trim();
+  if (!raw) return raw;
+  return raw.replace(/^(ollama|openrouter|nvidia|generic|openai)\//, `${normalizedProvider}/`);
+}
+
+function normalizeModelConfig(model = {}) {
+  const providerModels = { ...(model.providerModels || {}) };
+  if (providerModels.generic && !providerModels.openai) {
+    providerModels.openai = normalizeModelRef('openai', providerModels.generic);
+  }
+  delete providerModels.generic;
+
+  const contextHints = { ...(model.contextHints || {}) };
+  if (Object.prototype.hasOwnProperty.call(contextHints, 'generic/gpt-4o-mini') && !Object.prototype.hasOwnProperty.call(contextHints, 'openai/gpt-4o-mini')) {
+    contextHints['openai/gpt-4o-mini'] = contextHints['generic/gpt-4o-mini'];
+  }
+  delete contextHints['generic/gpt-4o-mini'];
+
+  const provider = normalizeProviderId(model.provider || 'ollama');
+  const currentModel = normalizeModelRef(provider, model.model || providerModels[provider] || '');
+  const fallbackProviders = (model.routing?.fallbackProviders || [])
+    .map((item) => normalizeProviderId(item))
+    .filter((item, index, arr) => item && arr.indexOf(item) === index);
+
+  return {
+    ...model,
+    provider,
+    model: currentModel,
+    providerModels,
+    contextHints,
+    routing: {
+      ...(model.routing || {}),
+      fallbackProviders
+    },
+    openaiBaseUrl: model.openaiBaseUrl || model.genericBaseUrl || 'https://api.openai.com/v1',
+    openaiApiKey: model.openaiApiKey || model.genericApiKey || ''
+  };
+}
+
 export function getHomeDir() {
   return process.env.OPENUNUM_HOME || path.join(os.homedir(), '.openunum');
 }
@@ -44,7 +91,7 @@ export function defaultConfig() {
       executorRetryBackoffMs: 700,
       providerRequestTimeoutMs: 120000,
       agentTurnTimeoutMs: 420000,
-      autonomyMode: 'standard',
+      autonomyMode: 'autonomy-first',
       missionDefaultContinueUntilDone: true,
       missionDefaultHardStepCap: 120,
       missionDefaultMaxRetries: 3,
@@ -74,26 +121,28 @@ export function defaultConfig() {
         ollama: 'ollama/minimax-m2.7:cloud',
         openrouter: 'openrouter/openai/gpt-4o-mini',
         nvidia: 'nvidia/qwen/qwen3-coder-480b-a35b-instruct',
-        generic: 'generic/gpt-4o-mini'
+        openai: 'openai/gpt-4o-mini'
       },
       contextHints: {
         'ollama/qwen3.5:9b-64k': 64000,
         'ollama/minimax-m2.7:cloud': 32768,
         'openrouter/openai/gpt-4o-mini': 128000,
-        'generic/gpt-4o-mini': 128000
+        'openai/gpt-4o-mini': 128000
       },
       routing: {
         fallbackEnabled: true,
-        fallbackProviders: ['ollama', 'nvidia', 'openrouter', 'generic'],
+        fallbackProviders: ['ollama', 'nvidia', 'openrouter', 'openai'],
         forcePrimaryProvider: false
       },
       ollamaBaseUrl: process.env.OLLAMA_BASE_URL || 'http://127.0.0.1:11434',
       openrouterBaseUrl: process.env.OPENROUTER_BASE_URL || 'https://openrouter.ai/api/v1',
       nvidiaBaseUrl: process.env.NVIDIA_BASE_URL || 'https://integrate.api.nvidia.com/v1',
-      genericBaseUrl: process.env.GENERIC_BASE_URL || '',
+      openaiBaseUrl: process.env.OPENAI_BASE_URL || process.env.GENERIC_BASE_URL || 'https://api.openai.com/v1',
+      genericBaseUrl: process.env.GENERIC_BASE_URL || process.env.OPENAI_BASE_URL || 'https://api.openai.com/v1',
       openrouterApiKey: process.env.OPENROUTER_API_KEY || '',
       nvidiaApiKey: process.env.NVIDIA_API_KEY || '',
-      genericApiKey: process.env.GENERIC_API_KEY || ''
+      openaiApiKey: process.env.OPENAI_API_KEY || process.env.GENERIC_API_KEY || '',
+      genericApiKey: process.env.GENERIC_API_KEY || process.env.OPENAI_API_KEY || ''
     },
     channels: {
       telegram: { botToken: process.env.TELEGRAM_BOT_TOKEN || '', enabled: false }
@@ -141,10 +190,20 @@ export function loadConfig() {
     return cfg;
   }
   const raw = fs.readFileSync(configPath, 'utf8');
-  return withDefaults(JSON.parse(raw));
+  const config = withDefaults(JSON.parse(raw));
+  config.model = normalizeModelConfig(config.model);
+  if (!config.model.routing.fallbackProviders?.length) {
+    config.model.routing.fallbackProviders = ['ollama', 'nvidia', 'openrouter', 'openai'];
+  }
+  return config;
 }
 
 export function saveConfig(config) {
   ensureHome();
+  if (config?.model) {
+    config.model = normalizeModelConfig(config.model);
+    config.model.genericBaseUrl = config.model.openaiBaseUrl;
+    config.model.genericApiKey = config.model.openaiApiKey;
+  }
   fs.writeFileSync(getConfigPath(), JSON.stringify(config, null, 2));
 }

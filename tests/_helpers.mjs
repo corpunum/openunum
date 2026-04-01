@@ -16,24 +16,18 @@ export async function startServer() {
     }
   });
 
-  await new Promise((resolve, reject) => {
-    const t = setTimeout(() => reject(new Error('server start timeout')), 15000);
-    const onData = (buf) => {
-      const s = String(buf);
-      if (s.includes('openunum_server_started')) {
-        clearTimeout(t);
-        proc.stdout.off('data', onData);
-        resolve();
-      }
-    };
-    proc.stdout.on('data', onData);
-    proc.stderr.on('data', (d) => {
-      const s = String(d);
-      if (s.toLowerCase().includes('error')) {
-        // keep running; error may be noisy dependency logs
-      }
-    });
-  });
+  const deadline = Date.now() + 30000;
+  while (Date.now() < deadline) {
+    if (proc.exitCode != null) {
+      throw new Error(`server exited early: ${proc.exitCode}`);
+    }
+    try {
+      const res = await fetch(`http://127.0.0.1:${TEST_PORT}/health`);
+      if (res.ok) return proc;
+    } catch {}
+    await new Promise((resolve) => setTimeout(resolve, 250));
+  }
+  throw new Error('server start timeout');
 
   return proc;
 }

@@ -116,6 +116,40 @@ export class MemoryStore {
       .run(sessionId, role, content, new Date().toISOString());
   }
 
+  importSession({ sessionId, messages = [] }) {
+    const sid = String(sessionId || '').trim();
+    if (!sid) throw new Error('sessionId is required');
+    this.ensureSession(sid);
+    for (const message of messages) {
+      const role = ['system', 'user', 'assistant', 'tool'].includes(String(message?.role || ''))
+        ? String(message.role)
+        : 'assistant';
+      const content = String(message?.content || '');
+      const createdAt = String(message?.created_at || message?.createdAt || new Date().toISOString());
+      this.db
+        .prepare('INSERT INTO messages (session_id, role, content, created_at) VALUES (?, ?, ?, ?)')
+        .run(sid, role, content, createdAt);
+    }
+    return this.getSessionSummary(sid);
+  }
+
+  cloneSession({ sourceSessionId, targetSessionId }) {
+    const sourceId = String(sourceSessionId || '').trim();
+    const targetId = String(targetSessionId || '').trim();
+    if (!sourceId) throw new Error('sourceSessionId is required');
+    if (!targetId) throw new Error('targetSessionId is required');
+    const sourceMessages = this.getAllMessagesForSession(sourceId);
+    if (!sourceMessages.length) throw new Error('source_session_not_found_or_empty');
+    return this.importSession({
+      sessionId: targetId,
+      messages: sourceMessages.map((message) => ({
+        role: message.role,
+        content: message.content,
+        createdAt: message.created_at
+      }))
+    });
+  }
+
   getSessionSummary(sessionId) {
     const row = this.db
       .prepare(
@@ -436,5 +470,50 @@ export class MemoryStore {
       .filter((x) => x.score > 0)
       .sort((a, b) => b.score - a.score)
       .slice(0, limit);
+  }
+
+  getStrategyLedger({ goal = '', limit = 12 } = {}) {
+    const trimmed = String(goal || '').trim();
+    const rows = trimmed
+      ? this.db
+        .prepare(
+          'SELECT goal, strategy, success, evidence, created_at FROM strategy_outcomes WHERE goal LIKE ? ORDER BY id DESC LIMIT ?'
+        )
+        .all(`%${trimmed}%`, limit)
+      : this.db
+        .prepare('SELECT goal, strategy, success, evidence, created_at FROM strategy_outcomes ORDER BY id DESC LIMIT ?')
+        .all(limit);
+    return rows.map((r) => ({
+      goal: r.goal,
+      strategy: r.strategy,
+      success: Boolean(r.success),
+      evidence: r.evidence,
+      createdAt: r.created_at
+    }));
+  }
+
+  getToolReliability(limit = 12) {
+    const rows = this.db
+      .prepare(
+        `SELECT
+          tool_name,
+          COUNT(*) AS total,
+          SUM(CASE WHEN ok = 1 THEN 1 ELSE 0 END) AS success_count,
+          SUM(CASE WHEN ok = 0 THEN 1 ELSE 0 END) AS failure_count,
+          MAX(created_at) AS last_used_at
+         FROM tool_runs
+         GROUP BY tool_name
+         ORDER BY total DESC, tool_name ASC
+         LIMIT ?`
+      )
+      .all(limit);
+    return rows.map((r) => ({
+      toolName: r.tool_name,
+      total: Number(r.total || 0),
+      successCount: Number(r.success_count || 0),
+      failureCount: Number(r.failure_count || 0),
+      successRate: Number(r.total || 0) > 0 ? Number(r.success_count || 0) / Number(r.total || 1) : 0,
+      lastUsedAt: r.last_used_at || null
+    }));
   }
 }

@@ -12,17 +12,25 @@ import { OpenUnumAgent } from './core/agent.mjs';
 import { MissionRunner } from './core/missions.mjs';
 import { SelfHealMonitor } from './core/selfheal.mjs';
 import { getAutonomyMaster } from './core/autonomy-master.mjs';
+import { estimateMessagesTokens } from './core/context-budget.mjs';
 import { CDPBrowser } from './browser/cdp.mjs';
 import { TelegramChannel } from './channels/telegram.mjs';
 import { logInfo, logError } from './logger.mjs';
 import {
+  MODEL_CATALOG_CONTRACT_VERSION,
+  PROVIDER_ORDER,
+  buildLegacyProviderModels,
+  buildModelCatalog,
   fetchNvidiaModels,
   fetchOllamaModels,
   fetchOpenRouterModels,
-  importProviderSecretsFromOpenClaw
+  fetchOpenAIModels,
+  importProviderSecretsFromOpenClaw,
+  normalizeProviderId
 } from './models/catalog.mjs';
 
 const config = loadConfig();
+normalizeModelSettings();
 const memory = new MemoryStore();
 const agent = new OpenUnumAgent({ config, memoryStore: memory });
 const missions = new MissionRunner({ agent, memoryStore: memory, config });
@@ -35,8 +43,151 @@ let telegramLoopPromise = null;
 const pendingChats = new Map();
 let researchDailyTimer = null;
 
+function normalizeModelSettings() {
+  config.model.provider = normalizeProviderId(config.model.provider);
+  config.model.providerModels = config.model.providerModels || {};
+  if (config.model.providerModels.generic && !config.model.providerModels.openai) {
+    config.model.providerModels.openai = String(config.model.providerModels.generic).replace(/^generic\//, 'openai/');
+  }
+  delete config.model.providerModels.generic;
+  config.model.openaiBaseUrl = config.model.openaiBaseUrl || config.model.genericBaseUrl || 'https://api.openai.com/v1';
+  config.model.openaiApiKey = config.model.openaiApiKey || config.model.genericApiKey || '';
+  config.model.genericBaseUrl = config.model.openaiBaseUrl;
+  config.model.genericApiKey = config.model.openaiApiKey;
+  config.model.model = String(config.model.model || '').replace(/^generic\//, 'openai/');
+  config.model.routing = config.model.routing || {};
+  config.model.routing.fallbackProviders = (config.model.routing.fallbackProviders || PROVIDER_ORDER)
+    .map((provider) => normalizeProviderId(provider))
+    .filter((provider, index, arr) => provider && arr.indexOf(provider) === index);
+}
+
+function getProviderConfigPayload() {
+  return {
+    ollamaBaseUrl: config.model.ollamaBaseUrl,
+    openrouterBaseUrl: config.model.openrouterBaseUrl,
+    nvidiaBaseUrl: config.model.nvidiaBaseUrl,
+    openaiBaseUrl: config.model.openaiBaseUrl || config.model.genericBaseUrl,
+    genericBaseUrl: config.model.openaiBaseUrl || config.model.genericBaseUrl,
+    hasOpenrouterApiKey: Boolean(config.model.openrouterApiKey),
+    hasNvidiaApiKey: Boolean(config.model.nvidiaApiKey),
+    hasOpenaiApiKey: Boolean(config.model.openaiApiKey || config.model.genericApiKey),
+    hasGenericApiKey: Boolean(config.model.openaiApiKey || config.model.genericApiKey)
+  };
+}
+
+function buildCapabilitiesPayload() {
+  return {
+    contract_version: '2026-04-01.webui-capabilities.v1',
+    menu: ['chat', 'missions', 'trace', 'runtime', 'settings'],
+    features: {
+      chat: true,
+      sessions: true,
+      missions: true,
+      trace: true,
+      model_catalog: true,
+      provider_health: true,
+      self_heal: true,
+      browser_control: true,
+      git_runtime: true,
+      memory_inspection: true
+    },
+    provider_order: [...PROVIDER_ORDER],
+    model_catalog_contract_version: MODEL_CATALOG_CONTRACT_VERSION
+  };
+}
+
+function readGitOverview(workspaceRoot) {
+  const cwd = String(workspaceRoot || process.cwd());
+  try {
+    const statusText = execSync(`git -C "${cwd}" status --branch --porcelain=v1`, { encoding: 'utf8' }).trim();
+    const lines = statusText ? statusText.split('\n') : [];
+    const branchLine = lines[0] || '';
+    const branchMatch = branchLine.match(/^##\s+([^.\s]+)(?:\.\.\.[^\s]+)?(?:\s+\[ahead (\d+)\])?(?:,\s+behind (\d+))?/);
+    const branch = branchMatch?.[1] || 'unknown';
+    const ahead = Number(branchMatch?.[2] || 0);
+    const behind = Number(branchMatch?.[3] || 0);
+    const modified = lines.slice(1).filter((line) => /^[ MARCUD?!]/.test(line)).length;
+    const recentCommits = execSync(`git -C "${cwd}" log --oneline -5`, { encoding: 'utf8' })
+      .trim()
+      .split('\n')
+      .filter(Boolean)
+      .map((line) => {
+        const firstSpace = line.indexOf(' ');
+        return {
+          hash: firstSpace === -1 ? line : line.slice(0, firstSpace),
+          message: firstSpace === -1 ? '' : line.slice(firstSpace + 1)
+        };
+      });
+    return { ok: true, branch, ahead, behind, modified, recentCommits };
+  } catch (error) {
+    return { ok: false, error: String(error.message || error), branch: null, ahead: 0, behind: 0, modified: 0, recentCommits: [] };
+  }
+}
+
+async function buildRuntimeOverview() {
+  normalizeModelSettings();
+  const [browserStatus, catalog] = await Promise.all([
+    browser.status().catch((error) => ({ ok: false, error: String(error.message || error) })),
+    buildModelCatalog(config.model)
+  ]);
+  return {
+    workspaceRoot: config.runtime?.workspaceRoot || process.cwd(),
+    autonomyMode: config.runtime?.autonomyMode || 'autonomy-first',
+    browser: browserStatus,
+    git: readGitOverview(config.runtime?.workspaceRoot || process.cwd()),
+    selectedModel: catalog.selected,
+    fallbackModel: catalog.fallback,
+    providers: catalog.providers.map((provider) => ({
+      provider: provider.provider,
+      displayName: provider.display_name,
+      status: provider.status,
+      degradedReason: provider.degraded_reason,
+      topModel: provider.models?.[0]?.model_id || null,
+      modelCount: provider.models?.length || 0
+    }))
+  };
+}
+
+function buildAutonomyInsights({ sessionId = '', goal = '' } = {}) {
+  const sid = String(sessionId || '').trim();
+  const query = String(goal || '').trim();
+  return {
+    sessionId: sid || null,
+    goal: query || null,
+    context: sid ? agent.getContextStatus(sid) : null,
+    recentStrategies: memory.getStrategyLedger ? memory.getStrategyLedger({ goal: query, limit: 10 }) : [],
+    toolReliability: memory.getToolReliability ? memory.getToolReliability(10) : [],
+    recentToolRuns: sid ? memory.getRecentToolRuns(sid, 10) : [],
+    recentCompactions: sid ? memory.listSessionCompactions(sid, 5) : []
+  };
+}
+
+function buildMissionTimeline(mission) {
+  if (!mission) return null;
+  const sessionId = mission.sessionId;
+  return {
+    mission: {
+      id: mission.id,
+      goal: mission.goal,
+      status: mission.status,
+      step: mission.step,
+      maxSteps: mission.maxSteps,
+      hardStepCap: mission.hardStepCap,
+      retries: mission.retries,
+      startedAt: mission.startedAt,
+      finishedAt: mission.finishedAt,
+      sessionId
+    },
+    log: Array.isArray(mission.log) ? mission.log : [],
+    toolRuns: sessionId ? memory.getRecentToolRuns(sessionId, 20) : [],
+    compactions: sessionId ? memory.listSessionCompactions(sessionId, 10) : [],
+    artifacts: sessionId ? memory.getMemoryArtifacts(sessionId, 10) : [],
+    recentStrategies: memory.getStrategyLedger ? memory.getStrategyLedger({ goal: mission.goal, limit: 10 }) : []
+  };
+}
+
 function applyAutonomyMode(mode) {
-  const m = String(mode || 'standard').toLowerCase();
+  const m = String(mode || 'autonomy-first').toLowerCase();
   if (m === 'relentless') {
     config.runtime.autonomyMode = 'relentless';
     config.runtime.shellEnabled = true;
@@ -54,7 +205,7 @@ function applyAutonomyMode(mode) {
     return 'relentless';
   }
 
-  config.runtime.autonomyMode = 'standard';
+  config.runtime.autonomyMode = 'autonomy-first';
   config.runtime.maxToolIterations = 8;
   config.runtime.executorRetryAttempts = 3;
   config.runtime.executorRetryBackoffMs = 700;
@@ -63,10 +214,10 @@ function applyAutonomyMode(mode) {
   config.runtime.missionDefaultMaxRetries = 3;
   config.runtime.missionDefaultIntervalMs = 400;
   if (!config.model.routing.fallbackProviders?.length) {
-    config.model.routing.fallbackProviders = [config.model.provider];
+    config.model.routing.fallbackProviders = [...PROVIDER_ORDER];
   }
   autonomyMaster.stop();
-  return 'standard';
+  return 'autonomy-first';
 }
 
 function renderReplyHtml(text) {
@@ -415,14 +566,39 @@ const server = http.createServer(async (req, res) => {
       return sendJson(res, 200, status);
     }
 
+    if (req.method === 'GET' && url.pathname === '/api/capabilities') {
+      return sendJson(res, 200, buildCapabilitiesPayload());
+    }
+
+    if (req.method === 'GET' && url.pathname === '/api/runtime/overview') {
+      return sendJson(res, 200, await buildRuntimeOverview());
+    }
+
+    if (req.method === 'GET' && url.pathname === '/api/autonomy/insights') {
+      const sessionId = String(url.searchParams.get('sessionId') || '').trim();
+      const goal = String(url.searchParams.get('goal') || '').trim();
+      return sendJson(res, 200, buildAutonomyInsights({ sessionId, goal }));
+    }
+
+    if (req.method === 'GET' && url.pathname === '/api/model-catalog') {
+      normalizeModelSettings();
+      const catalog = await buildModelCatalog(config.model);
+      return sendJson(res, 200, catalog);
+    }
+
     if (req.method === 'GET' && url.pathname === '/api/config') {
+      normalizeModelSettings();
+      const catalog = await buildModelCatalog(config.model);
       return sendJson(res, 200, {
         model: config.model,
         runtime: config.runtime,
         research: config.research,
         integrations: config.integrations,
         browser: config.browser,
-        channels: { telegram: { enabled: Boolean(config.channels?.telegram?.enabled), hasToken: Boolean(config.channels?.telegram?.botToken) } }
+        channels: { telegram: { enabled: Boolean(config.channels?.telegram?.enabled), hasToken: Boolean(config.channels?.telegram?.botToken) } },
+        capabilities: buildCapabilitiesPayload(),
+        modelCatalog: catalog,
+        providerConfig: getProviderConfigPayload()
       });
     }
 
@@ -498,19 +674,23 @@ const server = http.createServer(async (req, res) => {
         config.runtime.missionDefaultIntervalMs = Number(body.runtime.missionDefaultIntervalMs);
       }
       if (body.model && typeof body.model.provider === 'string' && body.model.provider.trim()) {
-        config.model.provider = body.model.provider.trim().toLowerCase();
+        config.model.provider = normalizeProviderId(body.model.provider.trim());
       }
       if (body.model && typeof body.model.model === 'string' && body.model.model.trim()) {
-        config.model.model = body.model.model.trim();
+        config.model.model = body.model.model.trim().replace(/^generic\//, 'openai/');
         config.model.providerModels = config.model.providerModels || {};
         config.model.providerModels[config.model.provider] = config.model.model;
       }
       if (body.model && body.model.routing) {
         config.model.routing = { ...config.model.routing, ...body.model.routing };
+        if (Array.isArray(body.model.routing.fallbackProviders)) {
+          config.model.routing.fallbackProviders = body.model.routing.fallbackProviders.map((provider) => normalizeProviderId(provider));
+        }
       }
       if (body.integrations?.googleWorkspace && typeof body.integrations.googleWorkspace.cliCommand === 'string') {
         config.integrations.googleWorkspace.cliCommand = body.integrations.googleWorkspace.cliCommand.trim() || 'gws';
       }
+      normalizeModelSettings();
       saveConfig(config);
       agent.reloadTools();
       if (config.runtime.researchDailyEnabled) startResearchDailyLoop();
@@ -574,15 +754,8 @@ const server = http.createServer(async (req, res) => {
     }
 
     if (req.method === 'GET' && url.pathname === '/api/providers/config') {
-      return sendJson(res, 200, {
-        ollamaBaseUrl: config.model.ollamaBaseUrl,
-        openrouterBaseUrl: config.model.openrouterBaseUrl,
-        nvidiaBaseUrl: config.model.nvidiaBaseUrl,
-        genericBaseUrl: config.model.genericBaseUrl,
-        hasOpenrouterApiKey: Boolean(config.model.openrouterApiKey),
-        hasNvidiaApiKey: Boolean(config.model.nvidiaApiKey),
-        hasGenericApiKey: Boolean(config.model.genericApiKey)
-      });
+      normalizeModelSettings();
+      return sendJson(res, 200, getProviderConfigPayload());
     }
 
     if (req.method === 'POST' && url.pathname === '/api/providers/config') {
@@ -591,10 +764,13 @@ const server = http.createServer(async (req, res) => {
       if (typeof up.ollamaBaseUrl === 'string') config.model.ollamaBaseUrl = up.ollamaBaseUrl.trim();
       if (typeof up.openrouterBaseUrl === 'string') config.model.openrouterBaseUrl = up.openrouterBaseUrl.trim();
       if (typeof up.nvidiaBaseUrl === 'string') config.model.nvidiaBaseUrl = up.nvidiaBaseUrl.trim();
-      if (typeof up.genericBaseUrl === 'string') config.model.genericBaseUrl = up.genericBaseUrl.trim();
+      if (typeof up.openaiBaseUrl === 'string') config.model.openaiBaseUrl = up.openaiBaseUrl.trim();
+      if (typeof up.genericBaseUrl === 'string') config.model.openaiBaseUrl = up.genericBaseUrl.trim();
       if (typeof up.openrouterApiKey === 'string') config.model.openrouterApiKey = up.openrouterApiKey.trim();
       if (typeof up.nvidiaApiKey === 'string') config.model.nvidiaApiKey = up.nvidiaApiKey.trim();
-      if (typeof up.genericApiKey === 'string') config.model.genericApiKey = up.genericApiKey.trim();
+      if (typeof up.openaiApiKey === 'string') config.model.openaiApiKey = up.openaiApiKey.trim();
+      if (typeof up.genericApiKey === 'string') config.model.openaiApiKey = up.genericApiKey.trim();
+      normalizeModelSettings();
       saveConfig(config);
       return sendJson(res, 200, { ok: true });
     }
@@ -605,6 +781,7 @@ const server = http.createServer(async (req, res) => {
       if (imported.nvidiaApiKey) config.model.nvidiaApiKey = imported.nvidiaApiKey;
       if (imported.openrouterBaseUrl) config.model.openrouterBaseUrl = imported.openrouterBaseUrl;
       if (imported.nvidiaBaseUrl) config.model.nvidiaBaseUrl = imported.nvidiaBaseUrl;
+      normalizeModelSettings();
       saveConfig(config);
       return sendJson(res, 200, {
         ok: true,
@@ -618,20 +795,13 @@ const server = http.createServer(async (req, res) => {
     }
 
     if (req.method === 'GET' && url.pathname === '/api/models') {
-      const provider = (url.searchParams.get('provider') || config.model.provider || 'ollama').toLowerCase();
-      if (provider === 'ollama') {
-        const models = await fetchOllamaModels(config.model.ollamaBaseUrl);
-        return sendJson(res, 200, { provider, models });
+      normalizeModelSettings();
+      const provider = normalizeProviderId(url.searchParams.get('provider') || config.model.provider || 'ollama');
+      if (!PROVIDER_ORDER.includes(provider)) {
+        return sendJson(res, 400, { error: `unsupported_provider:${provider}` });
       }
-      if (provider === 'openrouter') {
-        const models = await fetchOpenRouterModels(config.model.openrouterBaseUrl, config.model.openrouterApiKey);
-        return sendJson(res, 200, { provider, models });
-      }
-      if (provider === 'nvidia') {
-        const models = await fetchNvidiaModels(config.model.nvidiaBaseUrl, config.model.nvidiaApiKey);
-        return sendJson(res, 200, { provider, models });
-      }
-      return sendJson(res, 400, { error: `unsupported_provider:${provider}` });
+      const models = await buildLegacyProviderModels(config.model, provider);
+      return sendJson(res, 200, { provider, models });
     }
 
     if (req.method === 'GET' && url.pathname === '/api/model/current') {
@@ -640,7 +810,8 @@ const server = http.createServer(async (req, res) => {
 
     if (req.method === 'POST' && url.pathname === '/api/model/switch') {
       const body = await parseBody(req);
-      const out = agent.switchModel(body.provider, body.model);
+      const out = agent.switchModel(normalizeProviderId(body.provider), String(body.model || '').replace(/^generic\//, 'openai/'));
+      normalizeModelSettings();
       saveConfig(config);
       return sendJson(res, 200, out);
     }
@@ -835,6 +1006,24 @@ const server = http.createServer(async (req, res) => {
       return sendJson(res, 200, { ok: true, session });
     }
 
+    if (req.method === 'POST' && url.pathname === '/api/sessions/import') {
+      const body = await parseBody(req);
+      const imported = memory.importSession({
+        sessionId: String(body?.sessionId || '').trim(),
+        messages: Array.isArray(body?.messages) ? body.messages : []
+      });
+      return sendJson(res, 200, { ok: true, session: imported });
+    }
+
+    if (req.method === 'POST' && url.pathname === '/api/sessions/clone') {
+      const body = await parseBody(req);
+      const session = memory.cloneSession({
+        sourceSessionId: String(body?.sourceSessionId || '').trim(),
+        targetSessionId: String(body?.targetSessionId || '').trim()
+      });
+      return sendJson(res, 200, { ok: true, session });
+    }
+
     if (req.method === 'GET' && url.pathname.startsWith('/api/sessions/')) {
       if (url.pathname.endsWith('/activity')) {
         const parts = url.pathname.split('/');
@@ -849,6 +1038,20 @@ const server = http.createServer(async (req, res) => {
           pending: Boolean(pending),
           pendingStartedAt: pending?.startedAt || null,
           toolRuns,
+          messages
+        });
+      }
+      if (url.pathname.endsWith('/export')) {
+        const parts = url.pathname.split('/');
+        const sessionId = decodeURIComponent(parts[3] || '');
+        const summary = memory.getSessionSummary(sessionId);
+        if (!summary) return sendJson(res, 404, { error: 'session_not_found' });
+        const messages = memory.getAllMessagesForSession(sessionId);
+        return sendJson(res, 200, {
+          sessionId,
+          summary,
+          exportedAt: new Date().toISOString(),
+          estimatedTokens: estimateMessagesTokens(messages.map((m) => ({ role: m.role, content: m.content }))),
           messages
         });
       }
@@ -870,6 +1073,13 @@ const server = http.createServer(async (req, res) => {
       const mission = missions.get(id);
       if (!mission) return sendJson(res, 404, { error: 'mission_not_found' });
       return sendJson(res, 200, { mission });
+    }
+
+    if (req.method === 'GET' && url.pathname === '/api/missions/timeline') {
+      const id = String(url.searchParams.get('id') || '').trim();
+      const mission = missions.get(id);
+      if (!mission) return sendJson(res, 404, { error: 'mission_not_found' });
+      return sendJson(res, 200, buildMissionTimeline(mission));
     }
 
     if (req.method === 'POST' && url.pathname === '/api/missions/start') {

@@ -190,9 +190,67 @@
     .chat-wrap {
       height: calc(100vh - 126px);
       display: grid;
-      grid-template-rows: 1fr auto;
+      grid-template-rows: auto 1fr auto;
       gap: 10px;
     }
+    .quick-prompts {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      padding: 4px 8px 0;
+    }
+    .quick-prompt {
+      border-radius: 999px;
+      border: 1px solid #35558e;
+      background: linear-gradient(180deg, #11233f, #0f1b31);
+      color: #dbe8ff;
+      padding: 8px 12px;
+      font-size: 12px;
+    }
+    .card-grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(180px, 1fr));
+      gap: 10px;
+      margin: 10px 0;
+    }
+    .card {
+      border: 1px solid #2f4a80;
+      background: linear-gradient(180deg, rgba(20,36,67,.95), rgba(14,25,47,.95));
+      border-radius: 12px;
+      padding: 10px;
+    }
+    .card h4 {
+      margin: 0 0 6px;
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: .5px;
+      color: #c9dcff;
+    }
+    .card .value {
+      font-size: 16px;
+      font-weight: 700;
+      color: #f1f6ff;
+      margin-bottom: 4px;
+    }
+    .card .meta {
+      font-size: 12px;
+      color: var(--muted);
+      word-break: break-word;
+    }
+    .provider-cards {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(220px, 1fr));
+      gap: 10px;
+      margin-top: 10px;
+    }
+    .provider-card {
+      border: 1px solid #35558e;
+      border-radius: 12px;
+      padding: 10px;
+      background: rgba(13, 26, 49, .88);
+    }
+    .provider-card.healthy { border-color: rgba(34,197,94,.7); }
+    .provider-card.degraded { border-color: rgba(234,179,8,.7); }
     .messages {
       overflow: auto;
       padding: 8px;
@@ -300,6 +358,30 @@
       margin: 2px 0;
       word-break: break-word;
     }
+    .ledger {
+      margin-top: 10px;
+      border: 1px solid #37558f;
+      border-radius: 12px;
+      background: rgba(8, 20, 38, .58);
+      padding: 10px;
+    }
+    .ledger h4 {
+      margin: 0 0 8px;
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: .5px;
+      color: #d6e6ff;
+    }
+    .ledger-section {
+      margin-top: 8px;
+      font-size: 12px;
+      color: #c9d7f3;
+    }
+    .ledger-item {
+      margin: 4px 0;
+      color: #a9c0e7;
+      word-break: break-word;
+    }
     .typing {
       display: inline-flex;
       align-items: center;
@@ -343,45 +425,48 @@
   <div class="layout">
     <aside class="menu">
       <div class="brand">OpenUnum Control</div>
-      <div class="status" id="topStatus">booting...</div>
+      <div class="status" id="topStatus" data-testid="status-bar">booting...</div>
 
       <details open>
-        <summary>Workspace</summary>
+        <summary>Chat</summary>
         <div class="submenu">
           <button class="menu-btn active" data-view="chat">Chat</button>
-          <button class="menu-btn" data-view="operator">Operator Tools</button>
+          <button class="menu-btn" data-view="operator">Trace</button>
         </div>
       </details>
 
       <details open>
-        <summary>Models</summary>
+        <summary>Settings</summary>
         <div class="submenu">
-          <button class="menu-btn" data-view="model-routing">Routing</button>
-          <button class="menu-btn" data-view="provider-config">Provider Config</button>
+          <button class="menu-btn" data-view="model-routing">Model Routing</button>
+          <button class="menu-btn" data-view="provider-config">Providers</button>
         </div>
       </details>
 
       <details open>
-        <summary>Sessions</summary>
+        <summary>Runtime</summary>
+        <div class="submenu">
+          <input id="sessionSearch" placeholder="Search sessions" data-testid="session-search" />
+        </div>
         <div class="sessions-list" id="sessionList"></div>
       </details>
 
       <details open>
-        <summary>Browser</summary>
+        <summary>Runtime</summary>
         <div class="submenu">
-          <button class="menu-btn" data-view="browser">Browser Control</button>
+          <button class="menu-btn" data-view="browser">Browser</button>
         </div>
       </details>
 
       <details>
-        <summary>Channels</summary>
+        <summary>Settings</summary>
         <div class="submenu">
           <button class="menu-btn" data-view="telegram">Telegram</button>
         </div>
       </details>
 
       <details>
-        <summary>Automation</summary>
+        <summary>Missions</summary>
         <div class="submenu">
           <button class="menu-btn" data-view="missions">Missions</button>
         </div>
@@ -396,6 +481,9 @@
         </div>
         <div class="row">
           <button id="newChat">New Chat</button>
+          <button id="exportSessionBtn">Export Session</button>
+          <button id="importSessionBtn">Import Session</button>
+          <input id="importSessionFile" type="file" accept="application/json" style="display:none;" />
           <button id="autoEscalateToggle">Auto: On</button>
           <button id="liveActivityToggle">Live: On</button>
           <span class="pill" id="chatMeta">session</span>
@@ -405,10 +493,19 @@
       <section class="center">
         <div class="view active" id="view-chat">
           <div class="chat-wrap">
-            <div class="messages" id="chat"></div>
+            <div class="quick-prompts" id="quickPrompts">
+              <button class="quick-prompt" data-prompt="Audit the current workspace and report the highest-risk issues.">Workspace Audit</button>
+              <button class="quick-prompt" data-prompt="Open the browser, inspect the target page, and summarize what blocks the mission.">Browser Inspect</button>
+              <button class="quick-prompt" data-prompt="Review the current git workspace, summarize changes, and propose the next safe step.">Git Review</button>
+              <button class="quick-prompt" data-prompt="/auto Complete the assigned task autonomously, verify the outcome, and report concrete proof.">Autonomous Mission</button>
+              <button class="quick-prompt" data-prompt="/status">/status</button>
+              <button class="quick-prompt" data-prompt="/compact">/compact</button>
+              <button class="quick-prompt" data-prompt="/cost">/cost</button>
+            </div>
+            <div class="messages" id="chat" data-testid="message-stream"></div>
             <div class="composer">
-              <textarea id="message" placeholder="Type a message. Enter sends, Shift+Enter adds a new line"></textarea>
-              <button class="primary" id="send">Send</button>
+              <textarea id="message" data-testid="composer-input" placeholder="Type a message. Enter sends, Shift+Enter adds a new line"></textarea>
+              <button class="primary" id="send" data-testid="send-message">Send</button>
             </div>
           </div>
         </div>
@@ -418,16 +515,16 @@
           <div class="grid two">
             <div class="field">
               <label>Primary Provider</label>
-              <select id="provider">
+              <select id="provider" data-testid="provider-select">
                 <option value="ollama">ollama</option>
                 <option value="nvidia">nvidia</option>
                 <option value="openrouter">openrouter</option>
-                <option value="generic">generic</option>
+                <option value="openai">openai</option>
               </select>
             </div>
             <div class="field">
               <label>Available Models (ranked)</label>
-              <select id="modelList"></select>
+              <select id="modelList" data-testid="model-select"></select>
             </div>
             <div class="field">
               <label>Fallback Mode</label>
@@ -438,7 +535,7 @@
             </div>
             <div class="field">
               <label>Fallback Profile</label>
-              <select id="fallbackProfile">
+              <select id="fallbackProfile" data-testid="fallback-model-select">
                 <option value="local_first">Local First</option>
                 <option value="cloud_first">Cloud First</option>
                 <option value="openrouter_first">OpenRouter First</option>
@@ -453,6 +550,7 @@
             <button id="importOpenclaw">Import OpenClaw Keys</button>
           </div>
           <div class="hint" id="modelCatalogStatus"></div>
+          <div class="provider-cards" id="providerCards"></div>
         </div>
 
         <div class="view" id="view-provider-config">
@@ -478,9 +576,8 @@
               </select>
             </div>
             <div class="field">
-              <label>Generic OpenAI-Compatible URL</label>
+              <label>OpenAI-Compatible URL</label>
               <select id="genericUrl">
-                <option value="">Disabled</option>
                 <option value="http://127.0.0.1:1234/v1">LM Studio local</option>
                 <option value="https://api.openai.com/v1">OpenAI API v1</option>
               </select>
@@ -494,18 +591,30 @@
               <input id="nvidiaKey" placeholder="nvapi-..." />
             </div>
             <div class="field">
-              <label>Generic API Key (user value)</label>
+              <label>OpenAI API Key (user value)</label>
               <input id="genericKey" placeholder="provider key" />
             </div>
           </div>
           <div class="row" style="margin-top:10px;">
             <button class="primary" id="saveProviders">Save Provider Config</button>
           </div>
-          <div class="hint" id="providerStatus"></div>
+          <div class="hint" id="providerStatus" data-testid="provider-health"></div>
         </div>
 
         <div class="view" id="view-browser">
           <h3 class="section-title">Browser Control</h3>
+          <div class="card-grid">
+            <div class="card">
+              <h4>Browser Health</h4>
+              <div class="value" id="browserHealthValue">Checking...</div>
+              <div class="meta" id="browserHealthMeta">CDP telemetry</div>
+            </div>
+            <div class="card">
+              <h4>CDP Endpoint</h4>
+              <div class="value" id="browserCdpValue">-</div>
+              <div class="meta" id="browserTabMeta">Awaiting status</div>
+            </div>
+          </div>
           <div class="grid two">
             <div class="field">
               <label>CDP Endpoint Preset</label>
@@ -598,15 +707,57 @@
             <button id="refreshMission">Refresh Status</button>
           </div>
           <div class="hint" id="missionStatus">idle</div>
+        <div class="ledger" id="missionTimeline">
+          <h4>Mission Timeline</h4>
+          <div class="row" style="margin-bottom:8px;">
+            <button id="openMissionSessionBtn">Open Mission Session</button>
+            <button id="cloneMissionSessionBtn">Clone Mission Session</button>
+            <select id="missionTimelineFilter">
+              <option value="all">All</option>
+              <option value="log">Mission Log</option>
+              <option value="tools">Tool Runs</option>
+              <option value="strategies">Strategies</option>
+              <option value="artifacts">Artifacts</option>
+              <option value="compactions">Compactions</option>
+            </select>
+            <input id="missionTimelineSearch" placeholder="Filter timeline text" />
+          </div>
+          <div class="ledger-section" id="missionTimelineSummary">No active mission.</div>
+          <div class="ledger-section" id="missionTimelineLog"></div>
+          <div class="ledger-section" id="missionTimelineTools"></div>
+          <div class="ledger-section" id="missionTimelineArtifacts"></div>
+        </div>
         </div>
 
         <div class="view" id="view-operator">
           <h3 class="section-title">Operator Runtime & Tools</h3>
+          <div class="card-grid" id="runtimeCards">
+            <div class="card">
+              <h4>Autonomy</h4>
+              <div class="value" id="runtimeAutonomyValue">-</div>
+              <div class="meta" id="runtimeWorkspaceMeta">workspace</div>
+            </div>
+            <div class="card">
+              <h4>Git Branch</h4>
+              <div class="value" id="gitBranchValue">-</div>
+              <div class="meta" id="gitBranchMeta">No git data</div>
+            </div>
+            <div class="card">
+              <h4>Provider Health</h4>
+              <div class="value" id="runtimeProviderValue">-</div>
+              <div class="meta" id="runtimeProviderMeta">No provider telemetry</div>
+            </div>
+            <div class="card">
+              <h4>Context Budget</h4>
+              <div class="value" id="contextBudgetValue">-</div>
+              <div class="meta" id="contextBudgetMeta">No context telemetry</div>
+            </div>
+          </div>
           <div class="grid three">
             <div class="field">
               <label>Autonomy Mode</label>
-              <select id="autonomyMode">
-                <option value="standard">Standard</option>
+              <select id="autonomyMode" data-testid="autonomy-mode-select">
+                <option value="autonomy-first">Autonomy First</option>
                 <option value="relentless">Relentless</option>
               </select>
             </div>
@@ -633,6 +784,8 @@
           <div class="row" style="margin-top:10px;">
             <button class="primary" id="applyAutonomyMode">Apply Mode</button>
             <button id="saveRuntime">Save Runtime</button>
+            <button id="compactContextBtn">Compact Context</button>
+            <button id="refreshLedgerBtn">Refresh Ledger</button>
           </div>
 
           <hr style="border:none;border-top:1px solid var(--line);margin:14px 0;" />
@@ -656,7 +809,13 @@
             <button id="openTargetBtn">Open Target</button>
             <button id="runXdotool">Run xdotool</button>
           </div>
-          <textarea id="pcOutput" placeholder="tool output..." readonly style="margin-top:10px; min-height:220px;"></textarea>
+          <textarea id="pcOutput" data-testid="trace-panel" placeholder="tool output..." readonly style="margin-top:10px; min-height:220px;"></textarea>
+          <div class="ledger" id="tacticalLedger">
+            <h4>Tactical Ledger</h4>
+            <div class="ledger-section" id="ledgerSummary">Loading tactical insights...</div>
+            <div class="ledger-section" id="ledgerStrategies"></div>
+            <div class="ledger-section" id="ledgerTools"></div>
+          </div>
           <div class="hint" id="runtimeStatus"></div>
         </div>
       </section>
@@ -665,20 +824,20 @@
 
   <script>
     const VIEW_META = {
-      chat: ['Chat', 'Messaging timeline'],
-      'operator': ['Operator Tools', 'Runtime and desktop/system tool control'],
-      'model-routing': ['Model Routing', 'Primary model selection and fallback strategy'],
-      'provider-config': ['Provider Config', 'Provider endpoints and keys'],
-      'browser': ['Browser Control', 'CDP and browser actions'],
-      'telegram': ['Telegram', 'Bot connectivity and polling control'],
+      chat: ['Chat', 'Autonomous agent conversation'],
+      'operator': ['Trace', 'Runtime, tools, and live execution state'],
+      'model-routing': ['Settings', 'Primary model selection and fallback strategy'],
+      'provider-config': ['Settings', 'Provider endpoints and keys'],
+      'browser': ['Runtime', 'Browser and hardware control'],
+      'telegram': ['Settings', 'Channel connectivity and polling control'],
       'missions': ['Missions', 'Autonomous execution loops']
     };
 
     const FALLBACK_PROFILES = {
-      local_first: ['ollama', 'nvidia', 'openrouter', 'generic'],
-      cloud_first: ['nvidia', 'openrouter', 'ollama', 'generic'],
-      openrouter_first: ['openrouter', 'nvidia', 'ollama', 'generic'],
-      nvidia_first: ['nvidia', 'openrouter', 'ollama', 'generic']
+      local_first: ['ollama', 'nvidia', 'openrouter', 'openai'],
+      cloud_first: ['nvidia', 'openrouter', 'ollama', 'openai'],
+      openrouter_first: ['openrouter', 'nvidia', 'ollama', 'openai'],
+      nvidia_first: ['nvidia', 'openrouter', 'ollama', 'openai']
     };
 
     let sessionId = localStorage.getItem('openunum_session') || crypto.randomUUID();
@@ -699,6 +858,9 @@
     const chat = q('chat');
     const sessionListEl = q('sessionList');
     let sessionCache = [];
+    let modelCatalog = null;
+    let runtimeOverview = null;
+    let missionTimelineCache = null;
     q('chatMeta').textContent = sessionId;
     q('autoEscalateToggle').textContent = `Auto: ${autoEscalateEnabled ? 'On' : 'Off'}`;
     q('liveActivityToggle').textContent = `Live: ${liveActivityEnabled ? 'On' : 'Off'}`;
@@ -808,14 +970,21 @@
     function renderSessionList() {
       if (!sessionListEl) return;
       sessionListEl.innerHTML = '';
-      if (!sessionCache.length) {
+      const query = String(q('sessionSearch')?.value || '').trim().toLowerCase();
+      const filteredSessions = !query
+        ? sessionCache
+        : sessionCache.filter((s) => {
+            const haystack = `${s.title || ''} ${s.preview || ''} ${s.sessionId || ''}`.toLowerCase();
+            return haystack.includes(query);
+          });
+      if (!filteredSessions.length) {
         const empty = document.createElement('div');
         empty.className = 'hint';
-        empty.textContent = 'No sessions yet';
+        empty.textContent = query ? 'No matching sessions' : 'No sessions yet';
         sessionListEl.appendChild(empty);
         return;
       }
-      for (const s of sessionCache) {
+      for (const s of filteredSessions) {
         const btn = document.createElement('button');
         btn.type = 'button';
         btn.className = `session-item${s.sessionId === sessionId ? ' active' : ''}`;
@@ -836,6 +1005,8 @@
         sessionListEl.appendChild(btn);
       }
     }
+
+    q('sessionSearch').addEventListener('input', () => renderSessionList());
 
     async function refreshSessionList() {
       const out = await jget('/api/sessions?limit=120');
@@ -915,6 +1086,36 @@
       meta.textContent = `provider/model: ${trace.provider || '-'} / ${trace.model || '-'}`;
       body.appendChild(meta);
 
+      if (Array.isArray(trace.routedTools) && trace.routedTools.length > 0) {
+        const routed = document.createElement('div');
+        routed.className = 'trace-line';
+        routed.textContent = `routed tools: ${trace.routedTools.map((item) => item.tool || item).join(', ')}`;
+        body.appendChild(routed);
+      }
+
+      if (trace.turnSummary) {
+        const summary = document.createElement('div');
+        summary.className = 'trace-line';
+        summary.textContent =
+          `summary: toolRuns=${trace.turnSummary.toolRuns || 0} iterations=${trace.turnSummary.iterationCount || 0} permissionDenials=${trace.turnSummary.permissionDenials || 0}`;
+        body.appendChild(summary);
+      }
+
+      if (Array.isArray(trace.pivotHints) && trace.pivotHints.length > 0) {
+        const pivot = document.createElement('div');
+        pivot.className = 'trace-step';
+        const title = document.createElement('h5');
+        title.textContent = 'Pivot hints';
+        pivot.appendChild(title);
+        for (const item of trace.pivotHints) {
+          const line = document.createElement('div');
+          line.className = 'trace-line';
+          line.textContent = item;
+          pivot.appendChild(line);
+        }
+        body.appendChild(pivot);
+      }
+
       for (const it of (trace.iterations || [])) {
         const step = document.createElement('div');
         step.className = 'trace-step';
@@ -954,6 +1155,21 @@
           fail.appendChild(l);
         }
         body.appendChild(fail);
+      }
+
+      if (Array.isArray(trace.permissionDenials) && trace.permissionDenials.length > 0) {
+        const denied = document.createElement('div');
+        denied.className = 'trace-step';
+        const title = document.createElement('h5');
+        title.textContent = 'Permission denials';
+        denied.appendChild(title);
+        for (const item of trace.permissionDenials) {
+          const line = document.createElement('div');
+          line.className = 'trace-line';
+          line.textContent = `${item.tool}: ${item.reason}${item.detail ? ` | ${item.detail}` : ''}`;
+          denied.appendChild(line);
+        }
+        body.appendChild(denied);
       }
 
       details.appendChild(body);
@@ -1133,13 +1349,19 @@
     }
 
     function formatProviderModel(provider, model) {
-      const p = String(provider || '').trim();
+      const p = String(provider || '').trim().replace(/^generic$/, 'openai');
       const m = String(model || '').trim();
       if (!p) return m;
       if (!m) return p;
       if (m.startsWith(`${p}/`)) return m;
-      if (/^(ollama|openrouter|nvidia|generic)\//.test(m)) return m;
+      if (/^(ollama|openrouter|nvidia|generic|openai)\//.test(m)) return m.replace(/^generic\//, 'openai/');
       return `${p}/${m}`;
+    }
+
+    function formatPct(value) {
+      const num = Number(value);
+      if (!Number.isFinite(num)) return '-';
+      return `${(num * 100).toFixed(1)}%`;
     }
 
     function profileFromProviders(list = []) {
@@ -1158,21 +1380,166 @@
       await loadModelsForProvider(m.provider, m.model);
     }
 
+    async function refreshModelCatalog() {
+      modelCatalog = await jget('/api/model-catalog');
+      q('modelCatalogStatus').textContent = `catalog ${modelCatalog.contract_version} | providers=${(modelCatalog.providers || []).length}`;
+      renderProviderCards(modelCatalog.providers || []);
+      return modelCatalog;
+    }
+
+    function renderProviderCards(providers = []) {
+      const host = q('providerCards');
+      if (!host) return;
+      host.innerHTML = providers.map((provider) => `
+        <div class="provider-card ${provider.status}">
+          <div class="row" style="justify-content:space-between;">
+            <strong>${escapeHtml(provider.display_name || provider.provider)}</strong>
+            <span class="pill">${escapeHtml(provider.status)}</span>
+          </div>
+          <div class="hint" style="margin-top:6px;">#1 ${escapeHtml(provider.models?.[0]?.model_id || '-')}</div>
+          <div class="hint">models=${Number(provider.models?.length || 0)}</div>
+          ${provider.degraded_reason ? `<div class="hint" style="color:#facc15;">${escapeHtml(provider.degraded_reason)}</div>` : ''}
+        </div>
+      `).join('');
+    }
+
+    async function refreshRuntimeOverview() {
+      runtimeOverview = await jget('/api/runtime/overview');
+      q('runtimeAutonomyValue').textContent = runtimeOverview.autonomyMode || 'autonomy-first';
+      q('runtimeWorkspaceMeta').textContent = runtimeOverview.workspaceRoot || '-';
+
+      const git = runtimeOverview.git || {};
+      q('gitBranchValue').textContent = git.branch || 'no-git';
+      q('gitBranchMeta').textContent = git.ok
+        ? `ahead=${git.ahead || 0} behind=${git.behind || 0} modified=${git.modified || 0}`
+        : (git.error || 'git unavailable');
+
+      const degraded = (runtimeOverview.providers || []).filter((p) => p.status !== 'healthy');
+      q('runtimeProviderValue').textContent = degraded.length ? `${degraded.length} degraded` : 'healthy';
+      q('runtimeProviderMeta').textContent = (runtimeOverview.providers || [])
+        .map((p) => `${p.provider}:${p.status}`)
+        .join(' | ') || 'No providers';
+
+      const browserInfo = runtimeOverview.browser || {};
+      q('browserHealthValue').textContent = browserInfo.ok ? 'Connected' : 'Degraded';
+      q('browserHealthMeta').textContent = browserInfo.error || browserInfo.hint || 'CDP reachable';
+      q('browserCdpValue').textContent = browserInfo.cdpUrl || q('cdpPreset').value || '-';
+      const tabCount = Array.isArray(browserInfo.targets) ? browserInfo.targets.length : 0;
+      q('browserTabMeta').textContent = tabCount ? `${tabCount} visible targets` : 'No live target list';
+      await refreshContextStatus();
+    }
+
+    async function refreshContextStatus() {
+      if (!sessionId) return;
+      const out = await jget(`/api/context/status?sessionId=${encodeURIComponent(sessionId)}`);
+      const budget = out.budget || {};
+      q('contextBudgetValue').textContent = `${formatPct(budget.usagePct)} used`;
+      q('contextBudgetMeta').textContent =
+        `tokens=${Number(out.estimatedTokens || 0)} / limit=${Number(budget.contextLimit || 0)} | msgs=${Number(out.messageCount || 0)} | latest=${out.latestCompaction?.createdAt || 'none'}`;
+    }
+
+    async function refreshTacticalLedger() {
+      const out = await jget(`/api/autonomy/insights?sessionId=${encodeURIComponent(sessionId)}`);
+      q('ledgerSummary').textContent =
+        `strategies=${Number(out.recentStrategies?.length || 0)} | tools=${Number(out.toolReliability?.length || 0)} | recentToolRuns=${Number(out.recentToolRuns?.length || 0)}`;
+      q('ledgerStrategies').innerHTML = `
+        <strong>Recent strategies</strong>
+        ${(out.recentStrategies || []).slice(0, 5).map((item) =>
+          `<div class="ledger-item">${escapeHtml(item.success ? 'SUCCESS' : 'FAIL')} | ${escapeHtml(item.strategy)} | ${escapeHtml(String(item.evidence || '').slice(0, 120))}</div>`
+        ).join('') || '<div class="ledger-item">No strategy history yet.</div>'}
+      `;
+      q('ledgerTools').innerHTML = `
+        <strong>Tool reliability</strong>
+        ${(out.toolReliability || []).slice(0, 5).map((item) =>
+          `<div class="ledger-item">${escapeHtml(item.toolName)} | success ${(Number(item.successRate || 0) * 100).toFixed(0)}% | total ${Number(item.total || 0)}</div>`
+        ).join('') || '<div class="ledger-item">No tool reliability data yet.</div>'}
+      `;
+    }
+
+    async function refreshMissionTimeline() {
+      if (!activeMissionId) {
+        q('missionTimelineSummary').textContent = 'No active mission.';
+        q('missionTimelineLog').innerHTML = '';
+        q('missionTimelineTools').innerHTML = '';
+        q('missionTimelineArtifacts').innerHTML = '';
+        missionTimelineCache = null;
+        return;
+      }
+      missionTimelineCache = await jget(`/api/missions/timeline?id=${encodeURIComponent(activeMissionId)}`);
+      renderMissionTimeline();
+    }
+
+    function renderMissionTimeline() {
+      const out = missionTimelineCache;
+      if (!out) return;
+      const filter = q('missionTimelineFilter')?.value || 'all';
+      const search = String(q('missionTimelineSearch')?.value || '').trim().toLowerCase();
+      const match = (text) => !search || String(text || '').toLowerCase().includes(search);
+
+      q('missionTimelineSummary').textContent =
+        `status=${out.mission.status} step=${out.mission.step}/${out.mission.hardStepCap || out.mission.maxSteps} retries=${Number(out.mission.retries || 0)} session=${out.mission.sessionId}`;
+
+      const logItems = (out.log || []).slice(-8).reverse()
+        .filter((item) => match(`${item.at} ${item.reply || ''} ${item.selfPoke || ''}`))
+        .map((item) => `<div class="ledger-item">step ${Number(item.step || 0)} | ${escapeHtml(item.at || '')} | ${escapeHtml(String(item.reply || item.selfPoke || '').slice(0, 180))}</div>`)
+        .join('');
+      q('missionTimelineLog').innerHTML = (filter === 'all' || filter === 'log')
+        ? `<strong>Mission log</strong>${logItems || '<div class="ledger-item">No mission log entries match.</div>'}`
+        : '';
+
+      const toolItems = (out.toolRuns || []).slice(-8).reverse()
+        .filter((item) => match(`${item.toolName} ${item.createdAt} ${JSON.stringify(item.result || {})}`))
+        .map((item) => `<div class="ledger-item">tool ${escapeHtml(item.toolName)} | ok=${escapeHtml(String(item.ok))} | ${escapeHtml(item.createdAt || '')}</div>`)
+        .join('');
+      const strategyItems = (out.recentStrategies || []).slice(0, 6)
+        .filter((item) => match(`${item.strategy} ${item.evidence} ${item.goal}`))
+        .map((item) => `<div class="ledger-item">${escapeHtml(item.success ? 'SUCCESS' : 'FAIL')} | ${escapeHtml(item.strategy)} | ${escapeHtml(String(item.evidence || '').slice(0, 100))}</div>`)
+        .join('');
+      const compactionItems = (out.compactions || []).slice(0, 5)
+        .filter((item) => match(`${item.model} ${item.createdAt} ${JSON.stringify(item.summary || {})}`))
+        .map((item) => `<div class="ledger-item">compaction | ${escapeHtml(item.model)} | pre=${Number(item.preTokens || 0)} post=${Number(item.postTokens || 0)} | ${escapeHtml(item.createdAt || '')}</div>`)
+        .join('');
+      q('missionTimelineTools').innerHTML = (filter === 'all' || filter === 'tools' || filter === 'strategies' || filter === 'compactions')
+        ? `<strong>Tool and strategy trail</strong>${filter === 'all' || filter === 'tools' ? (toolItems || '') : ''}${filter === 'all' || filter === 'strategies' ? (strategyItems || '') : ''}${filter === 'all' || filter === 'compactions' ? (compactionItems || '') : ''}${toolItems || strategyItems || compactionItems ? '' : '<div class="ledger-item">No matching trail entries.</div>'}`
+        : '';
+
+      const artifactItems = (out.artifacts || []).slice(0, 8)
+        .filter((item) => match(`${item.type} ${item.content} ${item.sourceRef || ''}`))
+        .map((item, index) => `<button type="button" class="menu-btn" data-artifact-index="${index}" style="width:100%;margin:4px 0;text-align:left;">${escapeHtml(item.type)} | ${escapeHtml(String(item.content || '').slice(0, 90))}</button>`)
+        .join('');
+      q('missionTimelineArtifacts').innerHTML = (filter === 'all' || filter === 'artifacts')
+        ? `<strong>Artifacts</strong>${artifactItems || '<div class="ledger-item">No matching artifacts.</div>'}`
+        : '';
+      q('missionTimelineArtifacts').querySelectorAll('[data-artifact-index]').forEach((btn) => {
+        btn.addEventListener('click', () => {
+          const item = out.artifacts?.[Number(btn.dataset.artifactIndex)];
+          if (!item) return;
+          q('pcOutput').value = JSON.stringify(item, null, 2);
+          showView('operator');
+        });
+      });
+    }
+
     async function loadModelsForProvider(provider, currentModel = '') {
       try {
-        const out = await jget(`/api/models?provider=${encodeURIComponent(provider)}`);
+        const catalog = modelCatalog || await refreshModelCatalog();
+        const out = catalog.providers.find((entry) => entry.provider === provider) || await jget(`/api/models?provider=${encodeURIComponent(provider)}`);
         const list = q('modelList');
         list.innerHTML = '';
         const models = out.models || [];
         for (const m of models) {
           const opt = document.createElement('option');
-          opt.value = m.id;
-          const params = (m.paramsB || m.paramsB === 0) ? `${m.paramsB.toFixed(1)}B` : '?';
-          const ctx = m.contextWindow || '?';
-          opt.textContent = `${m.id} | score=${m.score?.toFixed?.(1) ?? '?'} | ${params} | ctx=${ctx}`;
+          const modelId = m.model_id || m.id || '';
+          opt.value = modelId;
+          const score = m.capability_score ?? m.score ?? '?';
+          const ctx = m.context_window || m.contextWindow || '?';
+          const rank = m.rank ? `#${m.rank}` : '#?';
+          opt.textContent = `${rank} ${modelId} | score=${score} | ctx=${ctx}`;
           list.appendChild(opt);
         }
-        if (currentModel && models.some((m) => m.id === currentModel)) list.value = currentModel;
+        if (currentModel && models.some((m) => (m.model_id || m.id) === currentModel.replace(/^(ollama|nvidia|openrouter|openai|generic)\//, ''))) {
+          list.value = currentModel.replace(/^(ollama|nvidia|openrouter|openai|generic)\//, '');
+        }
         q('modelCatalogStatus').textContent = `loaded ${models.length} ${provider} models`;
       } catch (error) {
         q('modelCatalogStatus').textContent = `load failed: ${String(error.message || error)}`;
@@ -1181,13 +1548,13 @@
 
     async function refreshRuntime() {
       const c = await jget('/api/config');
-      setSelectByValueOrFirst('autonomyMode', c.runtime?.autonomyMode || 'standard');
+      setSelectByValueOrFirst('autonomyMode', c.runtime?.autonomyMode || 'autonomy-first');
       setSelectByValueOrFirst('shellEnabled', String(Boolean(c.runtime?.shellEnabled)));
       setSelectByValueOrFirst('maxIters', String(c.runtime?.maxToolIterations ?? 8));
       setSelectByValueOrFirst('fallbackEnabled', String(c.model?.routing?.fallbackEnabled !== false));
       setSelectByValueOrFirst('fallbackProfile', profileFromProviders(c.model?.routing?.fallbackProviders || []));
       q('runtimeStatus').textContent =
-        `mode=${c.runtime?.autonomyMode || 'standard'} shell=${c.runtime?.shellEnabled} maxIters=${c.runtime?.maxToolIterations}`;
+        `mode=${c.runtime?.autonomyMode || 'autonomy-first'} shell=${c.runtime?.shellEnabled} maxIters=${c.runtime?.maxToolIterations}`;
     }
 
     async function refreshProviderConfig() {
@@ -1195,8 +1562,9 @@
       setSelectByValueOrFirst('ollamaUrl', c.ollamaBaseUrl || 'http://127.0.0.1:11434');
       setSelectByValueOrFirst('openrouterUrl', c.openrouterBaseUrl || 'https://openrouter.ai/api/v1');
       setSelectByValueOrFirst('nvidiaUrl', c.nvidiaBaseUrl || 'https://integrate.api.nvidia.com/v1');
-      setSelectByValueOrFirst('genericUrl', c.genericBaseUrl || '');
-      q('providerStatus').textContent = `keys: openrouter=${c.hasOpenrouterApiKey} nvidia=${c.hasNvidiaApiKey} generic=${c.hasGenericApiKey}`;
+      setSelectByValueOrFirst('genericUrl', c.openaiBaseUrl || c.genericBaseUrl || 'https://api.openai.com/v1');
+      q('providerStatus').setAttribute('data-testid', 'provider-health');
+      q('providerStatus').textContent = `keys: openrouter=${c.hasOpenrouterApiKey} nvidia=${c.hasNvidiaApiKey} openai=${c.hasOpenaiApiKey}`;
     }
 
     async function refreshBrowserConfig() {
@@ -1204,6 +1572,10 @@
       setSelectByValueOrFirst('cdpPreset', c.cdpUrl || 'http://127.0.0.1:9222');
       const st = await jget('/api/browser/status');
       q('browserStatusLine').textContent = st.ok ? 'connected' : `${st.error}${st.hint ? ' | ' + st.hint : ''}`;
+      q('browserHealthValue').textContent = st.ok ? 'Connected' : 'Degraded';
+      q('browserHealthMeta').textContent = st.error || st.hint || 'CDP reachable';
+      q('browserCdpValue').textContent = c.cdpUrl || 'http://127.0.0.1:9222';
+      q('browserTabMeta').textContent = Array.isArray(st.targets) ? `${st.targets.length} visible targets` : 'No live target list';
     }
 
     async function refreshTelegram() {
@@ -1215,17 +1587,20 @@
     async function refreshMission() {
       if (!activeMissionId) {
         q('missionStatus').textContent = 'idle';
+        await refreshMissionTimeline();
         return;
       }
       const out = await jget(`/api/missions/status?id=${encodeURIComponent(activeMissionId)}`);
       if (out.error) {
         q('missionStatus').textContent = out.error;
+        await refreshMissionTimeline().catch(() => {});
         return;
       }
       const m = out.mission;
       q('missionStatus').textContent = `${m.status} step=${m.step}/${m.maxSteps}`;
       const latest = m.log?.[m.log.length - 1];
       if (latest) q('pcOutput').value = latest.reply;
+      await refreshMissionTimeline();
       if (m.status !== 'running' && m.status !== 'stopping') {
         localStorage.removeItem('openunum_mission');
         activeMissionId = '';
@@ -1238,7 +1613,49 @@
 
     q('newChat').onclick = async () => {
       await resetSession();
+      await refreshContextStatus();
     };
+    q('exportSessionBtn').onclick = async () => {
+      const out = await jget(`/api/sessions/${encodeURIComponent(sessionId)}/export`);
+      q('pcOutput').value = JSON.stringify(out, null, 2);
+      showView('operator');
+      const blob = new Blob([JSON.stringify(out, null, 2)], { type: 'application/json' });
+      const link = document.createElement('a');
+      link.href = URL.createObjectURL(blob);
+      link.download = `openunum-session-${sessionId}.json`;
+      link.click();
+      setTimeout(() => URL.revokeObjectURL(link.href), 1500);
+      q('runtimeStatus').textContent = `session export ready | messages=${Number(out.messages?.length || 0)} tokens=${Number(out.estimatedTokens || 0)}`;
+      await refreshTacticalLedger();
+    };
+    q('importSessionBtn').onclick = () => q('importSessionFile').click();
+    q('importSessionFile').onchange = async (event) => {
+      const file = event.target.files?.[0];
+      if (!file) return;
+      const text = await file.text();
+      const parsed = JSON.parse(text);
+      const importedSessionId = String(parsed.sessionId || crypto.randomUUID());
+      const out = await jpost('/api/sessions/import', {
+        sessionId: importedSessionId,
+        messages: Array.isArray(parsed.messages) ? parsed.messages : []
+      });
+      sessionId = out.session.sessionId;
+      localStorage.setItem('openunum_session', sessionId);
+      q('chatMeta').textContent = sessionId;
+      await loadSession();
+      await refreshSessionList();
+      await refreshContextStatus();
+      await refreshTacticalLedger();
+      q('runtimeStatus').textContent = `session imported | ${sessionId} | messages=${Number(out.session.messageCount || 0)}`;
+      showView('chat');
+      q('importSessionFile').value = '';
+    };
+    qa('.quick-prompt').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        q('message').value = btn.dataset.prompt || '';
+        q('message').focus();
+      });
+    });
     q('autoEscalateToggle').onclick = () => {
       autoEscalateEnabled = !autoEscalateEnabled;
       localStorage.setItem('openunum_auto_escalate', String(autoEscalateEnabled));
@@ -1263,6 +1680,7 @@
       if (!model) return;
       const out = await jpost('/api/model/switch', { provider: q('provider').value, model });
       topStatus.textContent = `cfg=${formatProviderModel(out.provider, out.model)} active=${formatProviderModel(out.activeProvider, out.activeModel)}`;
+      await refreshRuntimeOverview();
     };
 
     q('saveRouting').onclick = async () => {
@@ -1286,6 +1704,7 @@
       });
       q('modelCatalogStatus').textContent = `routing saved | primary=${formatProviderModel(provider, selectedModel || '')} | shell=${out.runtime?.shellEnabled} maxIters=${out.runtime?.maxToolIterations}`;
       await refreshModel();
+      await refreshRuntimeOverview();
     };
 
     q('importOpenclaw').onclick = async () => {
@@ -1309,6 +1728,7 @@
       q('genericKey').value = '';
       q('providerStatus').textContent = 'provider config saved';
       await refreshProviderConfig();
+      await refreshRuntimeOverview();
     };
 
     q('saveRuntime').onclick = async () => {
@@ -1327,7 +1747,21 @@
       });
       q('runtimeStatus').textContent =
         `saved mode=${out.runtime.autonomyMode || q('autonomyMode').value} shell=${out.runtime.shellEnabled} maxIters=${out.runtime.maxToolIterations}`;
+      await refreshRuntimeOverview();
     };
+
+    q('compactContextBtn').onclick = async () => {
+      const out = await jpost('/api/context/compact', { sessionId, dryRun: false });
+      q('runtimeStatus').textContent =
+        out.skipped
+          ? `compact skipped: ${out.reason}`
+          : `compacted pre=${Number(out.preTokens || 0)} post=${Number(out.postTokens || 0)} artifacts=${Number(out.artifactsCount || 0)}`;
+      await refreshContextStatus();
+      await loadSession();
+      await refreshSessionList();
+      await refreshTacticalLedger();
+    };
+    q('refreshLedgerBtn').onclick = refreshTacticalLedger;
 
     q('applyAutonomyMode').onclick = async () => {
       const out = await jpost('/api/autonomy/mode', { mode: q('autonomyMode').value });
@@ -1335,12 +1769,14 @@
         `applied mode=${out.mode} shell=${out.runtime?.shellEnabled} maxIters=${out.runtime?.maxToolIterations}`;
       await refreshRuntime();
       await refreshModel();
+      await refreshRuntimeOverview();
     };
 
     q('saveCdp').onclick = async () => {
       const out = await jpost('/api/browser/config', { cdpUrl: q('cdpPreset').value });
       q('browserStatusLine').textContent = `saved ${out.cdpUrl}`;
       await refreshBrowserConfig();
+      await refreshRuntimeOverview();
     };
 
     q('launchBrowser').onclick = async () => {
@@ -1348,6 +1784,7 @@
       q('browserStatusLine').textContent = out.ok ? `launched pid=${out.pid} at ${out.cdpUrl}` : 'launch failed';
       if (out.cdpUrl) setSelectByValueOrFirst('cdpPreset', out.cdpUrl);
       await refreshBrowserConfig();
+      await refreshRuntimeOverview();
     };
 
     q('navBtn').onclick = async () => {
@@ -1415,15 +1852,45 @@
       localStorage.setItem('openunum_mission', activeMissionId);
       q('missionStatus').textContent = `running id=${activeMissionId}`;
       await refreshMission();
+      await refreshMissionTimeline();
     };
 
     q('stopMission').onclick = async () => {
       if (!activeMissionId) return;
       await jpost('/api/missions/stop', { id: activeMissionId });
       await refreshMission();
+      await refreshMissionTimeline();
     };
 
     q('refreshMission').onclick = refreshMission;
+    q('openMissionSessionBtn').onclick = async () => {
+      if (!missionTimelineCache?.mission?.sessionId) return;
+      sessionId = missionTimelineCache.mission.sessionId;
+      localStorage.setItem('openunum_session', sessionId);
+      q('chatMeta').textContent = sessionId;
+      await loadSession();
+      await refreshSessionList();
+      await refreshContextStatus();
+      await refreshTacticalLedger();
+      showView('chat');
+    };
+    q('cloneMissionSessionBtn').onclick = async () => {
+      const sourceSessionId = missionTimelineCache?.mission?.sessionId;
+      if (!sourceSessionId) return;
+      const targetSessionId = crypto.randomUUID();
+      const out = await jpost('/api/sessions/clone', { sourceSessionId, targetSessionId });
+      sessionId = out.session.sessionId;
+      localStorage.setItem('openunum_session', sessionId);
+      q('chatMeta').textContent = sessionId;
+      await loadSession();
+      await refreshSessionList();
+      await refreshContextStatus();
+      await refreshTacticalLedger();
+      q('runtimeStatus').textContent = `mission session cloned | ${sourceSessionId} -> ${sessionId}`;
+      showView('chat');
+    };
+    q('missionTimelineFilter').onchange = () => renderMissionTimeline();
+    q('missionTimelineSearch').oninput = () => renderMissionTimeline();
 
     let chatPending = false;
     q('send').onclick = async () => {
@@ -1467,6 +1934,7 @@
           topStatus.textContent = `cfg=${formatProviderModel(out.model.provider, out.model.model)} active=${formatProviderModel(out.model.activeProvider, out.model.activeModel)}`;
         }
         await refreshSessionList();
+        await refreshTacticalLedger();
       } catch (error) {
         const msg = String(error.message || error);
         if (msg.includes('request_timeout')) {
@@ -1499,10 +1967,14 @@
       await refreshRuntime();
       await refreshProviderConfig();
       await refreshBrowserConfig();
+      await refreshRuntimeOverview();
       await refreshTelegram();
       await refreshSessionList();
       await loadSession();
       await refreshMission();
+      await refreshContextStatus();
+      await refreshTacticalLedger();
+      await refreshMissionTimeline();
     })();
   </script>
 </body>
