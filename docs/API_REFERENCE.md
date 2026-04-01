@@ -132,6 +132,8 @@ Returns a WebUI-oriented flagship summary:
 - `POST /api/provider/test`
 - `POST /api/service/test`
 - `POST /api/service/connect`
+- `GET /api/auth/job?id=...`
+- `POST /api/auth/job/input`
 - `GET /api/models?provider=ollama|nvidia|openrouter|openai`
 - `GET /api/model-catalog`
 
@@ -265,7 +267,7 @@ Supported service test rows:
 - `openai-oauth`
 - `github-copilot`
 
-`openai-oauth` reuses an existing OpenClaw Codex OAuth profile when one is discovered under `~/.openclaw/agents/*/agent/auth-profiles.json` and no token has been stored directly in `~/.openunum/secrets.json`.
+`openai-oauth` now has a native `openunum` OAuth flow. If a local `openunum` OAuth credential is not present yet, it can still import an existing OpenClaw Codex OAuth profile from `~/.openclaw/agents/*/agent/auth-profiles.json` as a compatibility discovery source.
 
 `POST /api/service/connect` accepts:
 ```json
@@ -277,9 +279,36 @@ Supported service test rows:
 OAuth kick-off is currently supported for:
 - `github` -> `gh auth login -w`
 - `google-workspace` -> `gcloud auth login --update-adc`
-- `openai-oauth` -> `openclaw models auth login --provider openai-codex`
+- `openai-oauth` -> native `openunum` browser/callback flow using ChatGPT Codex OAuth
 
 When the required CLI is missing, `POST /api/service/connect` returns `started: false` with a `prerequisite` hint instead of a generic failure.
+
+For `openai-oauth`, `POST /api/service/connect` now returns an auth job payload:
+```json
+{
+  "ok": true,
+  "started": true,
+  "job": {
+    "id": "uuid",
+    "service": "openai-oauth",
+    "status": "awaiting_browser",
+    "authUrl": "https://auth.openai.com/oauth/authorize?...",
+    "browserOpened": true
+  }
+}
+```
+
+`GET /api/auth/job?id=...` returns the current auth job state.
+
+`POST /api/auth/job/input` accepts:
+```json
+{
+  "id": "uuid",
+  "input": "http://localhost:1455/auth/callback?code=..."
+}
+```
+
+Use that endpoint only when the automatic callback/browser flow does not complete and the UI prompts for a pasted redirect URL or authorization code.
 
 ## Model Runtime
 

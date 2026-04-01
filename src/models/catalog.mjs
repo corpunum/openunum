@@ -1,5 +1,5 @@
 import fs from 'node:fs';
-import { scanLocalAuthSources } from '../secrets/store.mjs';
+import { getEffectiveOpenAICodexOAuthStatus, scanLocalAuthSources } from '../secrets/store.mjs';
 
 export const MODEL_CATALOG_CONTRACT_VERSION = '2026-04-01.model-catalog.v1';
 export const PROVIDER_ORDER = ['ollama', 'nvidia', 'openrouter', 'openai'];
@@ -249,9 +249,11 @@ function getProviderConnection(modelConfig, provider) {
   if (provider === 'ollama') return { baseUrl: modelConfig.ollamaBaseUrl, apiKey: '' };
   if (provider === 'nvidia') return { baseUrl: modelConfig.nvidiaBaseUrl, apiKey: modelConfig.nvidiaApiKey };
   if (provider === 'openrouter') return { baseUrl: modelConfig.openrouterBaseUrl, apiKey: modelConfig.openrouterApiKey };
+  const oauth = getEffectiveOpenAICodexOAuthStatus();
   return {
     baseUrl: modelConfig.openaiBaseUrl || modelConfig.genericBaseUrl || 'https://api.openai.com/v1',
-    apiKey: modelConfig.openaiApiKey || modelConfig.genericApiKey || ''
+    apiKey: modelConfig.openaiApiKey || modelConfig.genericApiKey || '',
+    oauth
   };
 }
 
@@ -290,6 +292,8 @@ export async function buildModelCatalog(modelConfig) {
       if (provider === 'ollama') discovered = await fetchOllamaModels(connection.baseUrl);
       else if (provider === 'nvidia') discovered = await fetchNvidiaModels(connection.baseUrl, connection.apiKey);
       else if (provider === 'openrouter') discovered = await fetchOpenRouterModels(connection.baseUrl, connection.apiKey);
+      else if (connection.apiKey) discovered = await fetchOpenAIModels(connection.baseUrl, connection.apiKey);
+      else if (connection.oauth?.active) discovered = [];
       else discovered = await fetchOpenAIModels(connection.baseUrl, connection.apiKey);
     } catch (error) {
       status = 'degraded';

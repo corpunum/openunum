@@ -87,9 +87,14 @@ Date: 2026-04-01
    - service OAuth kick-off currently supports GitHub and Google Workspace when their CLIs are installed
 22. Fixed service OAuth flows in the flagship Providers screen:
    - `openai-oauth` now discovers and reuses existing OpenClaw Codex OAuth profiles from `~/.openclaw/agents/*/agent/auth-profiles.json`
-   - `openai-oauth` `Connect` now launches `openclaw models auth login --provider openai-codex` in a terminal
+   - `openai-oauth` `Connect` now starts a native `openunum` OAuth job with browser/callback handling and optional manual code paste fallback
+   - native OpenAI OAuth credentials are now persisted in `~/.openunum/secrets.json` under `oauth.openaiCodex`
    - `google-workspace` now returns an explicit `gcloud` prerequisite/install hint instead of a dead generic error
    - the Providers UI now exposes `Connect` for OpenAI OAuth in the same row-level action model as the other OAuth-capable services
+23. Aligned auth and provider state for OpenAI OAuth:
+   - `GET /api/auth/job` and `POST /api/auth/job/input` added for browser-driven OAuth orchestration
+   - OpenAI provider auth readiness now recognizes native/compat OpenAI Codex OAuth even when no OpenAI API key is configured
+   - OpenAI model catalog stays available from seeded policy models while OAuth is present
 
 Date: 2026-03-30
 

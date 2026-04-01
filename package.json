@@ -29,6 +29,7 @@
     "smoke:check": "node scripts/smoke-check.mjs"
   },
   "dependencies": {
+    "@mariozechner/pi-ai": "0.64.0",
     "chrome-remote-interface": "^0.33.3",
     "dotenv": "^16.6.1",
     "marked": "^15.0.12",

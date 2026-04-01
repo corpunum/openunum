@@ -968,6 +968,7 @@
     let serviceAdvancedOpen = {};
     let hiddenProviderRows = [];
     let hiddenServiceRows = [];
+    let authJobPrompted = {};
     q('chatMeta').textContent = sessionId;
     q('autoEscalateToggle').textContent = `Auto: ${autoEscalateEnabled ? 'On' : 'Off'}`;
     q('liveActivityToggle').textContent = `Live: ${liveActivityEnabled ? 'On' : 'Off'}`;
@@ -1901,10 +1902,59 @@
 
     async function connectServiceRow(service) {
       const out = await jpost('/api/service/connect', { service });
+      if (out.job?.id) {
+        q('providerStatus').textContent = `oauth started ${service} | waiting for browser sign-in`;
+        if (out.job.authUrl) {
+          try {
+            window.open(out.job.authUrl, '_blank', 'noopener');
+          } catch {}
+        }
+        await pollAuthJob(out.job.id, service);
+        return;
+      }
       q('providerStatus').textContent = out.started
         ? `oauth started ${service} | launcher=${out.launcher || 'shell'} | command=${out.command}`
         : `oauth unavailable ${service} | ${out.prerequisite || out.error || 'not_supported'}`;
       await refreshAuthCatalog();
+    }
+
+    async function pollAuthJob(jobId, service) {
+      authJobPrompted[jobId] = false;
+      const deadline = Date.now() + 180000;
+      while (Date.now() < deadline) {
+        const out = await jget(`/api/auth/job?id=${encodeURIComponent(jobId)}`);
+        const job = out.job || {};
+        if (job.status === 'awaiting_browser') {
+          q('providerStatus').textContent = `oauth ${service}: waiting for browser completion`;
+          if (job.authUrl && !job.browserOpened) {
+            try {
+              window.open(job.authUrl, '_blank', 'noopener');
+            } catch {}
+          }
+        } else if (job.status === 'awaiting_input') {
+          q('providerStatus').textContent = `oauth ${service}: manual code input required`;
+          if (!authJobPrompted[jobId]) {
+            authJobPrompted[jobId] = true;
+            const input = window.prompt(job.promptMessage || 'Paste the authorization code or redirect URL');
+            if (input && input.trim()) {
+              await jpost('/api/auth/job/input', { id: jobId, input: input.trim() });
+            }
+          }
+        } else if (job.status === 'completed') {
+          q('providerStatus').textContent = `oauth complete ${service}${job.account ? ` | ${job.account}` : ''}`;
+          await refreshAuthCatalog();
+          await refreshRuntimeOverview();
+          return;
+        } else if (job.status === 'failed') {
+          q('providerStatus').textContent = `oauth failed ${service} | ${job.error || 'unknown'}`;
+          await refreshAuthCatalog();
+          return;
+        } else {
+          q('providerStatus').textContent = `oauth ${service}: ${job.progress || job.status || 'starting'}`;
+        }
+        await new Promise((resolve) => setTimeout(resolve, 1500));
+      }
+      q('providerStatus').textContent = `oauth ${service}: timeout waiting for completion`;
     }
 
     async function refreshRuntimeOverview() {

@@ -58,6 +58,16 @@ function defaultSecrets() {
       huggingfaceApiKey: '',
       elevenlabsApiKey: '',
       telegramBotToken: ''
+    },
+    oauth: {
+      openaiCodex: {
+        access: '',
+        refresh: '',
+        expires: 0,
+        accountId: '',
+        email: '',
+        source: 'openunum'
+      }
     }
   };
 }
@@ -70,6 +80,14 @@ function withSecretDefaults(store = {}) {
     secrets: {
       ...base.secrets,
       ...(store.secrets || {})
+    },
+    oauth: {
+      ...base.oauth,
+      ...(store.oauth || {}),
+      openaiCodex: {
+        ...base.oauth.openaiCodex,
+        ...(store.oauth?.openaiCodex || {})
+      }
     }
   };
 }
@@ -105,6 +123,50 @@ export function secretPreview(value) {
   if (!raw) return null;
   if (raw.length <= 8) return `${raw.slice(0, 2)}***${raw.slice(-1)}`;
   return `${raw.slice(0, 4)}***${raw.slice(-4)}`;
+}
+
+export function getStoredOpenAICodexOAuth(store = loadSecretStore()) {
+  const oauth = store?.oauth?.openaiCodex || {};
+  const access = String(oauth.access || '').trim();
+  const refresh = String(oauth.refresh || '').trim();
+  const expires = Number(oauth.expires || 0) || 0;
+  const accountId = String(oauth.accountId || '').trim();
+  const email = String(oauth.email || '').trim();
+  const source = String(oauth.source || 'openunum').trim();
+  if (!access || !refresh) return null;
+  return { access, refresh, expires, accountId, email, source };
+}
+
+export function saveOpenAICodexOAuth(credentials = {}) {
+  const current = loadSecretStore();
+  const next = withSecretDefaults(current);
+  next.oauth.openaiCodex = {
+    access: String(credentials.access || '').trim(),
+    refresh: String(credentials.refresh || '').trim(),
+    expires: Number(credentials.expires || 0) || 0,
+    accountId: String(credentials.accountId || '').trim(),
+    email: String(credentials.email || '').trim(),
+    source: String(credentials.source || 'openunum').trim()
+  };
+  if (next.oauth.openaiCodex.access) {
+    next.secrets.openaiOauthToken = next.oauth.openaiCodex.access;
+  }
+  return saveSecretStore(next);
+}
+
+export function clearOpenAICodexOAuth() {
+  const current = loadSecretStore();
+  const next = withSecretDefaults(current);
+  next.oauth.openaiCodex = {
+    access: '',
+    refresh: '',
+    expires: 0,
+    accountId: '',
+    email: '',
+    source: 'openunum'
+  };
+  next.secrets.openaiOauthToken = '';
+  return saveSecretStore(next);
 }
 
 function setIfMissing(target, key, value, source, sourceMap) {
@@ -179,6 +241,27 @@ export function getOpenClawOauthStatus() {
   };
 }
 
+export function getEffectiveOpenAICodexOAuthStatus() {
+  const store = loadSecretStore();
+  const stored = getStoredOpenAICodexOAuth(store);
+  const imported = getOpenClawOauthStatus();
+  if (stored && (!stored.expires || stored.expires > Date.now())) {
+    return {
+      source: 'openunum',
+      active: {
+        ...stored,
+        filePath: getSecretsPath(),
+        profileId: 'openai-codex:openunum',
+        agentId: 'openunum'
+      }
+    };
+  }
+  return {
+    source: imported.active ? 'openclaw' : null,
+    active: imported.active
+  };
+}
+
 export function scanLocalAuthSources() {
   const secrets = {};
   const providerBaseUrls = {};
@@ -244,12 +327,13 @@ export function scanLocalAuthSources() {
   for (const entry of openClawOauth.profiles) {
     if (!filesScanned.includes(entry.filePath)) filesScanned.push(entry.filePath);
   }
-  if (openClawOauth.active) {
+  const effectiveOpenAiOauth = getEffectiveOpenAICodexOAuthStatus();
+  if (effectiveOpenAiOauth.active) {
     setIfMissing(
       secrets,
       'openaiOauthToken',
-      openClawOauth.active.access,
-      `${openClawOauth.active.filePath}:${openClawOauth.active.profileId}`,
+      effectiveOpenAiOauth.active.access,
+      `${effectiveOpenAiOauth.active.filePath}:${effectiveOpenAiOauth.active.profileId}`,
       sourceMap
     );
   }
@@ -344,7 +428,7 @@ export function getCliAuthStatus() {
   const huggingface = execCapture('huggingface-cli whoami');
   const elevenlabs = execCapture('python3 -m elevenlabs --help');
   const openclawCli = execCapture('openclaw --version');
-  const openClawOauth = getOpenClawOauthStatus();
+  const openClawOauth = getEffectiveOpenAICodexOAuthStatus();
   return {
     github: {
       cli: 'gh',
@@ -383,7 +467,8 @@ export function getCliAuthStatus() {
         ? `oauth profile ${openClawOauth.active.profileId}`
         : (openclawCli.ok ? 'cli_available' : (openclawCli.output || 'not_available')),
       expires: openClawOauth.active?.expires || null,
-      source: openClawOauth.active?.filePath || null
+      source: openClawOauth.active?.filePath || null,
+      owner: openClawOauth.source || null
     }
   };
 }
