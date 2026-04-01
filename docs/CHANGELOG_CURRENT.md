@@ -85,6 +85,11 @@ Date: 2026-04-01
    - `POST /api/service/test`
    - `POST /api/service/connect`
    - service OAuth kick-off currently supports GitHub and Google Workspace when their CLIs are installed
+22. Fixed service OAuth flows in the flagship Providers screen:
+   - `openai-oauth` now discovers and reuses existing OpenClaw Codex OAuth profiles from `~/.openclaw/agents/*/agent/auth-profiles.json`
+   - `openai-oauth` `Connect` now launches `openclaw models auth login --provider openai-codex` in a terminal
+   - `google-workspace` now returns an explicit `gcloud` prerequisite/install hint instead of a dead generic error
+   - the Providers UI now exposes `Connect` for OpenAI OAuth in the same row-level action model as the other OAuth-capable services
 
 Date: 2026-03-30
 

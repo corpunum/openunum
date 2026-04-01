@@ -221,6 +221,7 @@ Returns a WebUI-oriented flagship summary:
 `POST /api/auth/prefill-local` scans local sources and securely saves discovered credentials without returning raw secret values:
 - `process.env`
 - `/home/corp-unum/.openclaw/openclaw.json`
+- `/home/corp-unum/.openclaw/agents/*/agent/auth-profiles.json`
 - `/home/corp-unum/.openclaw/workspace/.runtime-secrets.env`
 - `/home/corp-unum/.openclaw/workspace/.env.trading_agent`
 - `/home/corp-unum/openclaw/.env`
@@ -264,6 +265,8 @@ Supported service test rows:
 - `openai-oauth`
 - `github-copilot`
 
+`openai-oauth` reuses an existing OpenClaw Codex OAuth profile when one is discovered under `~/.openclaw/agents/*/agent/auth-profiles.json` and no token has been stored directly in `~/.openunum/secrets.json`.
+
 `POST /api/service/connect` accepts:
 ```json
 {
@@ -274,6 +277,9 @@ Supported service test rows:
 OAuth kick-off is currently supported for:
 - `github` -> `gh auth login -w`
 - `google-workspace` -> `gcloud auth login --update-adc`
+- `openai-oauth` -> `openclaw models auth login --provider openai-codex`
+
+When the required CLI is missing, `POST /api/service/connect` returns `started: false` with a `prerequisite` hint instead of a generic failure.
 
 ## Model Runtime
 

@@ -1759,7 +1759,7 @@
         const authCell = secretField
           ? `<input class="service-secret-input" data-service="${row.id}" placeholder="${escapeHtml(row.stored_preview ? `current ${row.stored_preview}` : (row.auth_kind || 'credential'))}" value="" />`
           : `<span class="pill">${escapeHtml(row.cli?.authenticated ? 'oauth active' : row.auth_kind || 'oauth')}</span>`;
-        const hasOauth = row.id === 'github' || row.id === 'google-workspace';
+        const hasOauth = row.id === 'github' || row.id === 'google-workspace' || row.id === 'openai-oauth';
         const mainRow = `
           <tr>
             <td>
@@ -1902,8 +1902,9 @@
     async function connectServiceRow(service) {
       const out = await jpost('/api/service/connect', { service });
       q('providerStatus').textContent = out.started
-        ? `oauth started ${service} | command=${out.command}`
-        : `oauth unavailable ${service} | ${out.error || 'not_supported'}`;
+        ? `oauth started ${service} | launcher=${out.launcher || 'shell'} | command=${out.command}`
+        : `oauth unavailable ${service} | ${out.prerequisite || out.error || 'not_supported'}`;
+      await refreshAuthCatalog();
     }
 
     async function refreshRuntimeOverview() {

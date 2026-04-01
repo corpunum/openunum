@@ -51,6 +51,7 @@ try {
   assert.equal(Boolean(authCatalog.json.secret_store_path), true);
   assert.equal(authCatalog.json.providers.some((row) => row.provider === 'openai'), true);
   assert.equal(authCatalog.json.auth_methods.some((row) => row.id === 'github'), true);
+  assert.equal(authCatalog.json.auth_methods.some((row) => row.id === 'openai-oauth'), true);
 
   const savedAuth = await jpost('/api/auth/catalog', {
     providerBaseUrls: {
@@ -105,11 +106,25 @@ try {
   assert.equal(serviceTest.json.service, 'github');
   assert.equal(typeof serviceTest.json.ok, 'boolean');
 
+  const openaiOauthTest = await jpost('/api/service/test', {
+    service: 'openai-oauth',
+    secret: ''
+  });
+  assert.equal(openaiOauthTest.status, 200);
+  assert.equal(openaiOauthTest.json.service, 'openai-oauth');
+  assert.equal(typeof openaiOauthTest.json.ok, 'boolean');
+
   const oauthKickoff = await jpost('/api/service/connect', {
     service: 'github'
   });
   assert.equal(oauthKickoff.status, 200);
   assert.equal(typeof oauthKickoff.json.started, 'boolean');
+
+  const googleKickoff = await jpost('/api/service/connect', {
+    service: 'google-workspace'
+  });
+  assert.equal(googleKickoff.status, 200);
+  assert.equal(typeof googleKickoff.json.started, 'boolean');
 
   const sessionId = `phase10-${Date.now()}`;
   const created = await jpost('/api/sessions', { sessionId });

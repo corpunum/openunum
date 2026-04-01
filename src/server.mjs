@@ -132,7 +132,8 @@ function buildAuthMethodRows(store, scan, cliStatus) {
       stored_preview: null,
       discovered: false,
       discovered_source: null,
-      cli: cliStatus.googleWorkspace
+      cli: cliStatus.googleWorkspace,
+      install_hint: cliStatus.googleWorkspace?.available ? null : 'Install Google Cloud CLI (`gcloud`) first, then rerun Connect.'
     },
     {
       id: 'huggingface',
@@ -171,12 +172,12 @@ function buildAuthMethodRows(store, scan, cliStatus) {
       id: 'openai-oauth',
       display_name: 'OpenAI OAuth',
       auth_kind: 'oauth_token',
-      configured: Boolean(secrets.openaiOauthToken),
+      configured: Boolean(secrets.openaiOauthToken || scan.secrets.openaiOauthToken || cliStatus.openclaw?.authenticated),
       stored: Boolean(secrets.openaiOauthToken),
       stored_preview: secretPreview(secrets.openaiOauthToken),
       discovered: Boolean(scan.secrets.openaiOauthToken),
       discovered_source: scan.sourceMap.openaiOauthToken || null,
-      cli: null
+      cli: cliStatus.openclaw
     },
     {
       id: 'github-copilot',
@@ -222,11 +223,12 @@ function secretForService(service, providedSecret = '') {
   if (secret) return secret;
   const store = loadSecretStore();
   const secrets = store.secrets || {};
+  const scan = scanLocalAuthSources();
   if (service === 'github') return String(secrets.githubToken || '').trim();
   if (service === 'huggingface') return String(secrets.huggingfaceApiKey || '').trim();
   if (service === 'elevenlabs') return String(secrets.elevenlabsApiKey || '').trim();
   if (service === 'telegram') return String(secrets.telegramBotToken || '').trim();
-  if (service === 'openai-oauth') return String(secrets.openaiOauthToken || '').trim();
+  if (service === 'openai-oauth') return String(secrets.openaiOauthToken || scan.secrets.openaiOauthToken || '').trim();
   if (service === 'github-copilot') return String(secrets.copilotGithubToken || '').trim();
   return '';
 }
@@ -277,7 +279,8 @@ async function testServiceConnection({ service, secret }) {
       service: id,
       status: cli.googleWorkspace?.authenticated ? 'authenticated' : (cli.googleWorkspace?.available ? 'available' : 'unavailable'),
       account: cli.googleWorkspace?.account || null,
-      detail: cli.googleWorkspace?.detail || null
+      detail: cli.googleWorkspace?.detail || null,
+      prerequisite: cli.googleWorkspace?.available ? null : 'Install Google Cloud CLI (`gcloud`) to start OAuth for Google Workspace.'
     };
   }
   if (id === 'huggingface') {
@@ -325,13 +328,19 @@ async function testServiceConnection({ service, secret }) {
   }
   if (id === 'openai-oauth') {
     if (!secret) throw new Error('openai_oauth_token_missing');
-    const res = await fetch('https://api.openai.com/v1/models', {
+    const res = await fetch('https://chatgpt.com/backend-api/wham/usage', {
       headers: { Authorization: `Bearer ${secret}` },
       signal: AbortSignal.timeout(8000)
     });
     if (!res.ok) throw new Error(`openai_oauth_test_failed:${res.status}`);
     const data = await res.json();
-    return { ok: true, service: id, status: 'authenticated', modelCount: Array.isArray(data.data) ? data.data.length : 0 };
+    return {
+      ok: true,
+      service: id,
+      status: 'authenticated',
+      account: data.plan_type || null,
+      detail: data.rate_limit?.primary_window ? 'usage endpoint reachable' : 'oauth token accepted'
+    };
   }
   if (id === 'github-copilot') {
     if (!secret) throw new Error('copilot_token_missing');
@@ -353,7 +362,31 @@ function oauthCommandForService(service) {
   const id = String(service || '').trim().toLowerCase();
   if (id === 'github') return 'gh auth login -w';
   if (id === 'google-workspace') return 'gcloud auth login --update-adc';
+  if (id === 'openai-oauth') return 'openclaw models auth login --provider openai-codex';
   return null;
+}
+
+function launchInTerminal(cmd) {
+  const wrapped = `${cmd}; printf '\\n'; read -r -p 'Press Enter to close...' _`;
+  const candidates = [
+    ['x-terminal-emulator', ['-e', 'bash', '-lc', wrapped]],
+    ['gnome-terminal', ['--', 'bash', '-lc', wrapped]]
+  ];
+  for (const [bin, args] of candidates) {
+    try {
+      execSync(`command -v ${bin}`, { stdio: 'ignore' });
+    } catch {
+      continue;
+    }
+    try {
+      const child = spawn(bin, args, { detached: true, stdio: 'ignore' });
+      child.unref();
+      return { ok: true, started: true, command: cmd, launcher: bin, pid: child.pid };
+    } catch {
+      continue;
+    }
+  }
+  return { ok: false, started: false, error: 'terminal_not_available', command: cmd };
 }
 
 function launchOauthCommand(service) {
@@ -361,13 +394,23 @@ function launchOauthCommand(service) {
   if (!cmd) return { ok: false, started: false, error: 'oauth_not_supported' };
   const cli = getCliAuthStatus();
   if (service === 'github' && !cli.github?.available) return { ok: false, started: false, error: 'gh_not_available' };
-  if (service === 'google-workspace' && !cli.googleWorkspace?.available) return { ok: false, started: false, error: 'gcloud_not_available' };
-  const child = spawn('bash', ['-lc', cmd], {
-    detached: true,
-    stdio: 'ignore'
-  });
-  child.unref();
-  return { ok: true, started: true, command: cmd, pid: child.pid };
+  if (service === 'google-workspace' && !cli.googleWorkspace?.available) {
+    return {
+      ok: false,
+      started: false,
+      error: 'gcloud_not_available',
+      prerequisite: 'Install Google Cloud CLI (`gcloud`) first, then rerun Connect.'
+    };
+  }
+  if (service === 'openai-oauth' && !cli.openclaw?.available) {
+    return {
+      ok: false,
+      started: false,
+      error: 'openclaw_not_available',
+      prerequisite: 'Install or expose the `openclaw` CLI to launch the OpenAI Codex OAuth flow.'
+    };
+  }
+  return launchInTerminal(cmd);
 }
 
 async function buildAuthCatalogPayload() {

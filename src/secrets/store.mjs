@@ -139,6 +139,46 @@ function readJson(filePath) {
   }
 }
 
+function collectOpenClawAuthProfiles() {
+  const root = '/home/corp-unum/.openclaw/agents';
+  if (!fs.existsSync(root)) return [];
+  const entries = [];
+  for (const agentId of fs.readdirSync(root)) {
+    const filePath = path.join(root, agentId, 'agent', 'auth-profiles.json');
+    const parsed = readJson(filePath);
+    if (!parsed || typeof parsed !== 'object') continue;
+    const profiles = parsed.profiles || {};
+    for (const [profileId, profile] of Object.entries(profiles)) {
+      if (!profile || typeof profile !== 'object') continue;
+      entries.push({
+        filePath,
+        agentId,
+        profileId,
+        provider: String(profile.provider || '').trim(),
+        type: String(profile.type || '').trim(),
+        access: String(profile.access || '').trim(),
+        refresh: String(profile.refresh || '').trim(),
+        expires: Number(profile.expires || 0) || 0,
+        email: String(profile.email || '').trim()
+      });
+    }
+  }
+  return entries;
+}
+
+export function getOpenClawOauthStatus() {
+  const profiles = collectOpenClawAuthProfiles().filter((entry) => entry.provider === 'openai-codex' && entry.type === 'oauth');
+  const now = Date.now();
+  const active = profiles
+    .filter((entry) => entry.access && (!entry.expires || entry.expires > now))
+    .sort((a, b) => (b.expires || 0) - (a.expires || 0))[0] || null;
+  return {
+    available: fs.existsSync('/home/corp-unum/.local/bin/openclaw') || Boolean(execCapture('which openclaw').ok),
+    active,
+    profiles
+  };
+}
+
 export function scanLocalAuthSources() {
   const secrets = {};
   const providerBaseUrls = {};
@@ -199,6 +239,20 @@ export function scanLocalAuthSources() {
   setIfMissing(providerBaseUrls, 'openrouterBaseUrl', process.env.OPENROUTER_BASE_URL, `${envSource}:OPENROUTER_BASE_URL`, sourceMap);
   setIfMissing(providerBaseUrls, 'nvidiaBaseUrl', process.env.NVIDIA_BASE_URL, `${envSource}:NVIDIA_BASE_URL`, sourceMap);
   setIfMissing(providerBaseUrls, 'openaiBaseUrl', process.env.OPENAI_BASE_URL || process.env.GENERIC_BASE_URL, `${envSource}:OPENAI_BASE_URL`, sourceMap);
+
+  const openClawOauth = getOpenClawOauthStatus();
+  for (const entry of openClawOauth.profiles) {
+    if (!filesScanned.includes(entry.filePath)) filesScanned.push(entry.filePath);
+  }
+  if (openClawOauth.active) {
+    setIfMissing(
+      secrets,
+      'openaiOauthToken',
+      openClawOauth.active.access,
+      `${openClawOauth.active.filePath}:${openClawOauth.active.profileId}`,
+      sourceMap
+    );
+  }
 
   return { secrets, providerBaseUrls, sourceMap, filesScanned };
 }
@@ -289,6 +343,8 @@ export function getCliAuthStatus() {
   }
   const huggingface = execCapture('huggingface-cli whoami');
   const elevenlabs = execCapture('python3 -m elevenlabs --help');
+  const openclawCli = execCapture('openclaw --version');
+  const openClawOauth = getOpenClawOauthStatus();
   return {
     github: {
       cli: 'gh',
@@ -317,6 +373,17 @@ export function getCliAuthStatus() {
       authenticated: false,
       account: null,
       detail: elevenlabs.ok ? 'cli_available' : (elevenlabs.output || 'not_available')
+    },
+    openclaw: {
+      cli: 'openclaw',
+      available: openclawCli.ok || openclawCli.code !== 127,
+      authenticated: Boolean(openClawOauth.active),
+      account: openClawOauth.active?.email || openClawOauth.active?.agentId || null,
+      detail: openClawOauth.active
+        ? `oauth profile ${openClawOauth.active.profileId}`
+        : (openclawCli.ok ? 'cli_available' : (openclawCli.output || 'not_available')),
+      expires: openClawOauth.active?.expires || null,
+      source: openClawOauth.active?.filePath || null
     }
   };
 }
