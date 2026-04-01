@@ -558,7 +558,7 @@
 
         <div class="view" id="view-model-routing">
           <h3 class="section-title">Model Routing</h3>
-          <div class="grid two">
+          <div class="grid two" style="align-items:end;">
             <div class="field">
               <label>Primary Provider</label>
               <select id="provider" data-testid="provider-select">
@@ -569,154 +569,94 @@
               </select>
             </div>
             <div class="field">
-              <label>Available Models (ranked)</label>
+              <label>Primary Model</label>
               <select id="modelList" data-testid="model-select"></select>
             </div>
             <div class="field">
-              <label>Fallback Mode</label>
+              <label>Fallback Enabled</label>
               <select id="fallbackEnabled">
                 <option value="true">Enabled</option>
                 <option value="false">Disabled</option>
               </select>
             </div>
             <div class="field">
-              <label>Fallback Profile</label>
-              <select id="fallbackProfile" data-testid="fallback-model-select">
-                <option value="local_first">Local First</option>
-                <option value="cloud_first">Cloud First</option>
-                <option value="openrouter_first">OpenRouter First</option>
-                <option value="nvidia_first">NVIDIA First</option>
+              <label>Add Fallback Provider</label>
+              <select id="fallbackProviderPicker" data-testid="fallback-model-select">
+                <option value="">Select provider</option>
+                <option value="ollama">ollama</option>
+                <option value="nvidia">nvidia</option>
+                <option value="openrouter">openrouter</option>
+                <option value="openai">openai</option>
               </select>
             </div>
           </div>
           <div class="row" style="margin-top:10px;">
-            <button id="loadModels">Load Models</button>
-            <button class="primary" id="switchModel">Use Selected Model</button>
-            <button id="saveRouting">Save Routing</button>
-            <button id="importOpenclaw">Import OpenClaw Keys</button>
+            <button id="loadModels">Refresh Primary Models</button>
+            <button id="addFallbackRow">Add Fallback</button>
+            <button id="autoFillFallbacks">Auto Fill Best Sequence</button>
+            <button class="primary" id="saveRouting">Save Routing</button>
+            <button id="switchModel">Use Primary Now</button>
           </div>
           <div class="hint" id="modelCatalogStatus"></div>
+          <div class="table-wrap" style="margin-top:12px;">
+            <table>
+              <thead>
+                <tr>
+                  <th>Order</th>
+                  <th>Provider</th>
+                  <th>Model</th>
+                  <th>Action</th>
+                </tr>
+              </thead>
+              <tbody id="fallbackSequenceBody"></tbody>
+            </table>
+          </div>
           <div class="provider-cards" id="providerCards"></div>
         </div>
 
         <div class="view" id="view-provider-config">
-          <h3 class="section-title">Provider & Auth Console</h3>
-          <div class="hint">Models stay limited to `ollama`, `nvidia`, `openrouter`, `openai`. This screen manages endpoints, ranked availability, and secure auth storage for provider and adjacent service credentials.</div>
+          <h3 class="section-title">Providers</h3>
+          <div class="hint">Use compact rows by default. Expand advanced only when you need endpoint details, discovery sources, or deeper diagnostics.</div>
           <div class="row" style="margin-top:10px;">
-            <button id="prefillLocalAuth">Scan Local Auth Sources</button>
-            <button id="refreshAuthCatalog">Refresh Provider/Auth State</button>
-            <select id="authTargetSelect">
-              <option value="openrouterKey">OpenRouter</option>
-              <option value="nvidiaKey">NVIDIA</option>
-              <option value="genericKey">OpenAI</option>
-              <option value="openaiOauthKey">OpenAI OAuth</option>
-              <option value="githubKey">GitHub API</option>
-              <option value="copilotGithubKey">GitHub Copilot</option>
-              <option value="huggingfaceKey">HuggingFace</option>
-              <option value="elevenlabsKey">ElevenLabs</option>
-              <option value="tgToken">Telegram</option>
+            <button id="prefillLocalAuth">Scan Local Sources</button>
+            <button id="refreshAuthCatalog">Refresh Tables</button>
+            <select id="providerAddSelect">
+              <option value="">Add model provider...</option>
             </select>
-            <button id="focusAuthTarget">Focus Credential Field</button>
+            <button id="addProviderRow">Add Provider</button>
+            <select id="serviceAddSelect">
+              <option value="">Add service...</option>
+            </select>
+            <button id="addServiceRow">Add Service</button>
           </div>
+          <h4 class="section-title" style="margin-top:14px;">Model Providers</h4>
           <div class="table-wrap" data-testid="provider-matrix">
             <table>
               <thead>
                 <tr>
                   <th>Provider</th>
-                  <th>Endpoint</th>
+                  <th>Status</th>
                   <th>Auth</th>
-                  <th>Models</th>
-                  <th>Top Model</th>
+                  <th>Summary</th>
                   <th>Action</th>
                 </tr>
               </thead>
               <tbody id="providerMatrixBody"></tbody>
             </table>
           </div>
-          <div class="table-wrap" style="margin-top:12px;" data-testid="auth-vault">
+          <h4 class="section-title" style="margin-top:14px;">Service Providers</h4>
+          <div class="table-wrap" data-testid="auth-vault">
             <table>
               <thead>
                 <tr>
                   <th>Service</th>
-                  <th>Mode</th>
-                  <th>Stored</th>
-                  <th>CLI / OAuth</th>
-                  <th>Source</th>
+                  <th>Status</th>
+                  <th>Auth</th>
+                  <th>Action</th>
                 </tr>
               </thead>
               <tbody id="authMethodBody"></tbody>
             </table>
-          </div>
-          <div class="grid two">
-            <div class="field">
-              <label>Ollama Base URL</label>
-              <select id="ollamaUrl">
-                <option value="http://127.0.0.1:11434">Local Ollama (11434)</option>
-                <option value="http://localhost:11434">Localhost Ollama</option>
-              </select>
-            </div>
-            <div class="field">
-              <label>OpenRouter Base URL</label>
-              <select id="openrouterUrl">
-                <option value="https://openrouter.ai/api/v1">OpenRouter API v1</option>
-              </select>
-            </div>
-            <div class="field">
-              <label>NVIDIA Base URL</label>
-              <select id="nvidiaUrl">
-                <option value="https://integrate.api.nvidia.com/v1">NVIDIA Integrate API v1</option>
-              </select>
-            </div>
-            <div class="field">
-              <label>OpenAI-Compatible URL</label>
-              <select id="genericUrl">
-                <option value="http://127.0.0.1:1234/v1">LM Studio local</option>
-                <option value="https://api.openai.com/v1">OpenAI API v1</option>
-              </select>
-            </div>
-            <div class="field">
-              <label>OpenRouter API Key (user value)</label>
-              <input id="openrouterKey" placeholder="sk-or-..." />
-              <div class="hint" id="openrouterKeyMeta"></div>
-            </div>
-            <div class="field">
-              <label>NVIDIA API Key (user value)</label>
-              <input id="nvidiaKey" placeholder="nvapi-..." />
-              <div class="hint" id="nvidiaKeyMeta"></div>
-            </div>
-            <div class="field">
-              <label>OpenAI API Key (user value)</label>
-              <input id="genericKey" placeholder="provider key" />
-              <div class="hint" id="genericKeyMeta"></div>
-            </div>
-            <div class="field">
-              <label>OpenAI OAuth Token</label>
-              <input id="openaiOauthKey" placeholder="oauth token" />
-              <div class="hint" id="openaiOauthKeyMeta"></div>
-            </div>
-            <div class="field">
-              <label>GitHub Token</label>
-              <input id="githubKey" placeholder="ghp_..." />
-              <div class="hint" id="githubKeyMeta"></div>
-            </div>
-            <div class="field">
-              <label>GitHub Copilot Token</label>
-              <input id="copilotGithubKey" placeholder="copilot token" />
-              <div class="hint" id="copilotGithubKeyMeta"></div>
-            </div>
-            <div class="field">
-              <label>HuggingFace API Key</label>
-              <input id="huggingfaceKey" placeholder="hf_..." />
-              <div class="hint" id="huggingfaceKeyMeta"></div>
-            </div>
-            <div class="field">
-              <label>ElevenLabs API Key</label>
-              <input id="elevenlabsKey" placeholder="xi_..." />
-              <div class="hint" id="elevenlabsKeyMeta"></div>
-            </div>
-          </div>
-          <div class="row" style="margin-top:10px;">
-            <button class="primary" id="saveProviders">Save Secure Provider/Auth Config</button>
           </div>
           <div class="hint" id="providerStatus" data-testid="provider-health"></div>
         </div>
@@ -953,11 +893,28 @@
       'missions': ['Missions', 'Autonomous execution loops']
     };
 
-    const FALLBACK_PROFILES = {
-      local_first: ['ollama', 'nvidia', 'openrouter', 'openai'],
-      cloud_first: ['nvidia', 'openrouter', 'ollama', 'openai'],
-      openrouter_first: ['openrouter', 'nvidia', 'ollama', 'openai'],
-      nvidia_first: ['nvidia', 'openrouter', 'ollama', 'openai']
+    const MODEL_PROVIDER_IDS = ['ollama', 'nvidia', 'openrouter', 'openai'];
+    const SERVICE_PROVIDER_IDS = ['github', 'google-workspace', 'huggingface', 'elevenlabs', 'telegram', 'openai-oauth', 'github-copilot'];
+    const SERVICE_SECRET_FIELD = {
+      github: 'githubToken',
+      'google-workspace': '',
+      huggingface: 'huggingfaceApiKey',
+      elevenlabs: 'elevenlabsApiKey',
+      telegram: 'telegramBotToken',
+      'openai-oauth': 'openaiOauthToken',
+      'github-copilot': 'copilotGithubToken'
+    };
+    const PROVIDER_SECRET_FIELD = {
+      ollama: '',
+      nvidia: 'nvidiaApiKey',
+      openrouter: 'openrouterApiKey',
+      openai: 'openaiApiKey'
+    };
+    const PROVIDER_BASE_FIELD = {
+      ollama: 'ollamaBaseUrl',
+      nvidia: 'nvidiaBaseUrl',
+      openrouter: 'openrouterBaseUrl',
+      openai: 'openaiBaseUrl'
     };
 
     let sessionId = localStorage.getItem('openunum_session') || crypto.randomUUID();
@@ -982,6 +939,11 @@
     let authCatalog = null;
     let runtimeOverview = null;
     let missionTimelineCache = null;
+    let fallbackSequence = [];
+    let providerAdvancedOpen = {};
+    let serviceAdvancedOpen = {};
+    let hiddenProviderRows = JSON.parse(localStorage.getItem('openunum_hidden_provider_rows') || '[]');
+    let hiddenServiceRows = JSON.parse(localStorage.getItem('openunum_hidden_service_rows') || '[]');
     q('chatMeta').textContent = sessionId;
     q('autoEscalateToggle').textContent = `Auto: ${autoEscalateEnabled ? 'On' : 'Off'}`;
     q('liveActivityToggle').textContent = `Live: ${liveActivityEnabled ? 'On' : 'Off'}`;
@@ -1485,13 +1447,120 @@
       return `${(num * 100).toFixed(1)}%`;
     }
 
-    function profileFromProviders(list = []) {
-      const key = list.join(',');
-      if (key === FALLBACK_PROFILES.local_first.join(',')) return 'local_first';
-      if (key === FALLBACK_PROFILES.cloud_first.join(',')) return 'cloud_first';
-      if (key === FALLBACK_PROFILES.openrouter_first.join(',')) return 'openrouter_first';
-      if (key === FALLBACK_PROFILES.nvidia_first.join(',')) return 'nvidia_first';
-      return 'local_first';
+    function normalizeHiddenRows() {
+      hiddenProviderRows = hiddenProviderRows.filter((id, index, arr) => MODEL_PROVIDER_IDS.includes(id) && arr.indexOf(id) === index);
+      hiddenServiceRows = hiddenServiceRows.filter((id, index, arr) => SERVICE_PROVIDER_IDS.includes(id) && arr.indexOf(id) === index);
+      localStorage.setItem('openunum_hidden_provider_rows', JSON.stringify(hiddenProviderRows));
+      localStorage.setItem('openunum_hidden_service_rows', JSON.stringify(hiddenServiceRows));
+    }
+
+    function providerCatalogRow(provider) {
+      return (authCatalog?.providers || []).find((row) => row.provider === provider) || null;
+    }
+
+    function catalogModelsForProvider(provider) {
+      return modelCatalog?.providers?.find((row) => row.provider === provider)?.models || [];
+    }
+
+    function preferredModelForProvider(provider) {
+      const fromConfig = runtimeOverview?.selectedModel?.provider === provider
+        ? runtimeOverview.selectedModel.model_id
+        : null;
+      if (fromConfig) return fromConfig;
+      const row = providerCatalogRow(provider);
+      if (row?.top_model) return row.top_model;
+      return catalogModelsForProvider(provider)?.[0]?.model_id || '';
+    }
+
+    function ensureFallbackSequence(primaryProvider) {
+      const normalizedPrimary = String(primaryProvider || q('provider')?.value || 'ollama');
+      fallbackSequence = (fallbackSequence || [])
+        .map((item) => ({
+          provider: item.provider,
+          model: item.model || preferredModelForProvider(item.provider)
+        }))
+        .filter((item, index, arr) => item.provider && item.provider !== normalizedPrimary && arr.findIndex((entry) => entry.provider === item.provider) === index);
+    }
+
+    function buildFallbackModelOptions(provider, selectedModel = '') {
+      const models = catalogModelsForProvider(provider);
+      return models.map((model) => {
+        const modelId = model.model_id || model.id || '';
+        return `<option value="${escapeHtml(modelId)}" ${modelId === selectedModel ? 'selected' : ''}>#${Number(model.rank || 0)} ${escapeHtml(modelId)}</option>`;
+      }).join('');
+    }
+
+    function renderFallbackSequence() {
+      ensureFallbackSequence(q('provider')?.value);
+      const body = q('fallbackSequenceBody');
+      if (!body) return;
+      body.innerHTML = fallbackSequence.map((entry, index) => `
+        <tr>
+          <td>${index + 1}</td>
+          <td>
+            <select class="fallback-provider" data-index="${index}">
+              ${MODEL_PROVIDER_IDS.filter((provider) => provider === entry.provider || !fallbackSequence.some((item, itemIndex) => item.provider === provider && itemIndex !== index) && provider !== q('provider').value)
+                .map((provider) => `<option value="${provider}" ${provider === entry.provider ? 'selected' : ''}>${provider}</option>`).join('')}
+            </select>
+          </td>
+          <td>
+            <select class="fallback-model" data-index="${index}">
+              ${buildFallbackModelOptions(entry.provider, entry.model)}
+            </select>
+          </td>
+          <td>
+            <div class="row">
+              <button type="button" class="fallback-up" data-index="${index}">Up</button>
+              <button type="button" class="fallback-down" data-index="${index}">Down</button>
+              <button type="button" class="fallback-remove" data-index="${index}">Remove</button>
+            </div>
+          </td>
+        </tr>
+      `).join('');
+      if (!fallbackSequence.length) {
+        body.innerHTML = '<tr><td colspan="4" class="hint">No explicit fallback rows yet. Use `Auto Fill Best Sequence` or `Add Fallback`.</td></tr>';
+      }
+      qa('.fallback-provider').forEach((el) => {
+        el.onchange = () => {
+          const index = Number(el.dataset.index);
+          const provider = el.value;
+          fallbackSequence[index] = { provider, model: preferredModelForProvider(provider) };
+          renderFallbackSequence();
+        };
+      });
+      qa('.fallback-model').forEach((el) => {
+        el.onchange = () => {
+          const index = Number(el.dataset.index);
+          fallbackSequence[index].model = el.value;
+        };
+      });
+      qa('.fallback-up').forEach((btn) => {
+        btn.onclick = () => {
+          const index = Number(btn.dataset.index);
+          if (index <= 0) return;
+          const current = fallbackSequence[index];
+          fallbackSequence[index] = fallbackSequence[index - 1];
+          fallbackSequence[index - 1] = current;
+          renderFallbackSequence();
+        };
+      });
+      qa('.fallback-down').forEach((btn) => {
+        btn.onclick = () => {
+          const index = Number(btn.dataset.index);
+          if (index >= fallbackSequence.length - 1) return;
+          const current = fallbackSequence[index];
+          fallbackSequence[index] = fallbackSequence[index + 1];
+          fallbackSequence[index + 1] = current;
+          renderFallbackSequence();
+        };
+      });
+      qa('.fallback-remove').forEach((btn) => {
+        btn.onclick = () => {
+          const index = Number(btn.dataset.index);
+          fallbackSequence.splice(index, 1);
+          renderFallbackSequence();
+        };
+      });
     }
 
     async function refreshModel() {
@@ -1505,6 +1574,7 @@
       modelCatalog = await jget('/api/model-catalog');
       q('modelCatalogStatus').textContent = `catalog ${modelCatalog.contract_version} | providers=${(modelCatalog.providers || []).length}`;
       renderProviderCards(modelCatalog.providers || []);
+      renderFallbackSequence();
       return modelCatalog;
     }
 
@@ -1542,35 +1612,86 @@
       if (el) el.textContent = info;
     }
 
+    function providerSummaryText(provider) {
+      const parts = [];
+      if (provider.top_model) parts.push(`#1 ${provider.top_model}`);
+      parts.push(`models=${Number(provider.model_count || 0)}`);
+      return parts.join(' | ');
+    }
+
     function renderProviderMatrix(providers = []) {
       const host = q('providerMatrixBody');
       if (!host) return;
-      host.innerHTML = providers.map((provider) => `
-        <tr>
-          <td>
-            <strong>${escapeHtml(provider.display_name || provider.provider)}</strong><br />
-            <span class="pill">${escapeHtml(provider.provider)}</span>
-          </td>
-          <td class="mono">${escapeHtml(provider.base_url || '-')}</td>
-          <td>
-            ${renderStatusBadge(provider.provider === 'ollama' ? 'configured' : (provider.auth_ready ? 'configured' : 'missing'))}
-            <div class="hint" style="margin-top:6px;">${provider.stored_preview ? `stored ${escapeHtml(provider.stored_preview)}` : 'no stored secret'}</div>
-          </td>
-          <td>${Number(provider.model_count || 0)}</td>
-          <td class="mono">${escapeHtml(provider.top_model || '-')}</td>
-          <td>
-            ${renderStatusBadge(provider.status || 'unknown')}
-            <div class="row" style="margin-top:6px;">
-              <button type="button" class="provider-matrix-select" data-provider="${escapeHtml(provider.provider)}">Use Provider</button>
-            </div>
-          </td>
-        </tr>
-      `).join('');
-      qa('.provider-matrix-select').forEach((btn) => {
+      const visibleRows = providers.filter((provider) => !hiddenProviderRows.includes(provider.provider));
+      host.innerHTML = visibleRows.flatMap((provider) => {
+        const authField = PROVIDER_SECRET_FIELD[provider.provider];
+        const advancedOpen = Boolean(providerAdvancedOpen[provider.provider]);
+        const authPlaceholder = provider.provider === 'ollama'
+          ? 'local/no key'
+          : provider.provider === 'nvidia'
+            ? 'nvapi-...'
+            : provider.provider === 'openrouter'
+              ? 'sk-or-...'
+              : 'sk-...';
+        const inputValue = '';
+        const mainRow = `
+          <tr>
+            <td><strong>${escapeHtml(provider.display_name || provider.provider)}</strong></td>
+            <td>${renderStatusBadge(provider.status || 'unknown')}</td>
+            <td>
+              ${authField ? `<input class="provider-secret-input" data-provider="${provider.provider}" placeholder="${escapeHtml(authPlaceholder)}" value="${inputValue}" />` : '<span class="pill">local</span>'}
+              <div class="hint" style="margin-top:6px;">${provider.stored_preview ? `stored ${escapeHtml(provider.stored_preview)}` : (provider.provider === 'ollama' ? 'local endpoint only' : 'no stored secret')}</div>
+            </td>
+            <td>${escapeHtml(providerSummaryText(provider))}</td>
+            <td>
+              <div class="row">
+                <button type="button" class="provider-save" data-provider="${provider.provider}">Save</button>
+                <button type="button" class="provider-test" data-provider="${provider.provider}">Test</button>
+                <button type="button" class="provider-use" data-provider="${provider.provider}">Use</button>
+                <button type="button" class="provider-advanced" data-provider="${provider.provider}">${advancedOpen ? 'Hide' : 'Advanced'}</button>
+                <button type="button" class="provider-hide" data-provider="${provider.provider}">Hide</button>
+              </div>
+            </td>
+          </tr>`;
+        const detailRow = advancedOpen ? `
+          <tr>
+            <td colspan="5">
+              <div class="grid two">
+                <div class="field">
+                  <label>Resolved Base URL</label>
+                  <input class="provider-base-input mono" data-provider="${provider.provider}" value="${escapeHtml(provider.base_url || '')}" />
+                </div>
+                <div class="field">
+                  <label>Discovery / State</label>
+                  <div class="hint">auth_ready=${provider.auth_ready} | source=${escapeHtml(provider.discovered_source || provider.base_url_source || '-')}</div>
+                  <div class="hint">${provider.degraded_reason ? escapeHtml(provider.degraded_reason) : 'No degradation detail.'}</div>
+                </div>
+              </div>
+            </td>
+          </tr>` : '';
+        return [mainRow, detailRow];
+      }).join('');
+      qa('.provider-save').forEach((btn) => { btn.onclick = () => saveProviderRow(btn.dataset.provider); });
+      qa('.provider-test').forEach((btn) => { btn.onclick = () => testProviderRow(btn.dataset.provider); });
+      qa('.provider-use').forEach((btn) => {
         btn.onclick = async () => {
           setSelectByValueOrFirst('provider', btn.dataset.provider || 'ollama');
           await loadModelsForProvider(q('provider').value);
           showView('model-routing');
+        };
+      });
+      qa('.provider-advanced').forEach((btn) => {
+        btn.onclick = () => {
+          providerAdvancedOpen[btn.dataset.provider] = !providerAdvancedOpen[btn.dataset.provider];
+          renderProviderMatrix(authCatalog?.providers || []);
+        };
+      });
+      qa('.provider-hide').forEach((btn) => {
+        btn.onclick = () => {
+          if (!hiddenProviderRows.includes(btn.dataset.provider)) hiddenProviderRows.push(btn.dataset.provider);
+          normalizeHiddenRows();
+          refreshAddRowSelectors();
+          renderProviderMatrix(authCatalog?.providers || []);
         };
       });
     }
@@ -1578,21 +1699,57 @@
     function renderAuthMethodTable(rows = []) {
       const host = q('authMethodBody');
       if (!host) return;
-      host.innerHTML = rows.map((row) => `
-        <tr>
-          <td><strong>${escapeHtml(row.display_name || row.id)}</strong></td>
-          <td>${escapeHtml(row.auth_kind || '-')}</td>
-          <td>
-            ${row.stored ? renderStatusBadge('configured') : renderStatusBadge(row.configured ? 'partial' : 'missing')}
-            <div class="hint" style="margin-top:6px;">${row.stored_preview ? escapeHtml(row.stored_preview) : 'no stored secret'}</div>
-          </td>
-          <td>
-            ${row.cli ? renderStatusBadge(row.cli.authenticated ? 'authenticated' : (row.cli.available ? 'available' : 'unavailable')) : '<span class="pill">n/a</span>'}
-            <div class="hint" style="margin-top:6px;">${escapeHtml(row.cli?.account || row.cli?.detail || 'manual')}</div>
-          </td>
-          <td class="mono">${escapeHtml(row.discovered_source || '-')}</td>
-        </tr>
-      `).join('');
+      const visibleRows = rows.filter((row) => !hiddenServiceRows.includes(row.id));
+      host.innerHTML = visibleRows.flatMap((row) => {
+        const advancedOpen = Boolean(serviceAdvancedOpen[row.id]);
+        const secretField = SERVICE_SECRET_FIELD[row.id];
+        const authCell = secretField
+          ? `<input class="service-secret-input" data-service="${row.id}" placeholder="${escapeHtml(row.auth_kind || 'credential')}" value="" />`
+          : `<span class="pill">${escapeHtml(row.cli?.authenticated ? 'oauth active' : row.auth_kind || 'oauth')}</span>`;
+        const hasOauth = row.id === 'github' || row.id === 'google-workspace';
+        const mainRow = `
+          <tr>
+            <td><strong>${escapeHtml(row.display_name || row.id)}</strong></td>
+            <td>${renderStatusBadge(row.configured ? 'configured' : (row.cli?.authenticated ? 'authenticated' : (row.cli?.available ? 'available' : 'missing')))}</td>
+            <td>
+              ${authCell}
+              <div class="hint" style="margin-top:6px;">${escapeHtml(row.stored_preview || row.cli?.account || row.cli?.detail || 'manual')}</div>
+            </td>
+            <td>
+              <div class="row">
+                ${secretField ? `<button type="button" class="service-save" data-service="${row.id}">Save</button><button type="button" class="service-test" data-service="${row.id}">Test</button>` : `<button type="button" class="service-test" data-service="${row.id}">Test</button>`}
+                ${hasOauth ? `<button type="button" class="service-connect" data-service="${row.id}">Connect</button>` : ''}
+                <button type="button" class="service-advanced" data-service="${row.id}">${advancedOpen ? 'Hide' : 'Advanced'}</button>
+                <button type="button" class="service-hide" data-service="${row.id}">Hide</button>
+              </div>
+            </td>
+          </tr>`;
+        const detailRow = advancedOpen ? `
+          <tr>
+            <td colspan="4">
+              <div class="hint">mode=${escapeHtml(row.auth_kind || '-')} | source=${escapeHtml(row.discovered_source || '-')}</div>
+              <div class="hint">cli=${escapeHtml(row.cli?.cli || 'n/a')} | detail=${escapeHtml(row.cli?.detail || 'manual')}</div>
+            </td>
+          </tr>` : '';
+        return [mainRow, detailRow];
+      }).join('');
+      qa('.service-save').forEach((btn) => { btn.onclick = () => saveServiceRow(btn.dataset.service); });
+      qa('.service-test').forEach((btn) => { btn.onclick = () => testServiceRow(btn.dataset.service); });
+      qa('.service-connect').forEach((btn) => { btn.onclick = () => connectServiceRow(btn.dataset.service); });
+      qa('.service-advanced').forEach((btn) => {
+        btn.onclick = () => {
+          serviceAdvancedOpen[btn.dataset.service] = !serviceAdvancedOpen[btn.dataset.service];
+          renderAuthMethodTable(authCatalog?.auth_methods || []);
+        };
+      });
+      qa('.service-hide').forEach((btn) => {
+        btn.onclick = () => {
+          if (!hiddenServiceRows.includes(btn.dataset.service)) hiddenServiceRows.push(btn.dataset.service);
+          normalizeHiddenRows();
+          refreshAddRowSelectors();
+          renderAuthMethodTable(authCatalog?.auth_methods || []);
+        };
+      });
     }
 
     function authMethodById(id) {
@@ -1601,21 +1758,92 @@
 
     async function refreshAuthCatalog() {
       authCatalog = await jget('/api/auth/catalog');
+      normalizeHiddenRows();
+      refreshAddRowSelectors();
       renderProviderMatrix(authCatalog.providers || []);
       renderAuthMethodTable(authCatalog.auth_methods || []);
-      const providerById = Object.fromEntries((authCatalog.providers || []).map((row) => [row.provider, row]));
       const authById = Object.fromEntries((authCatalog.auth_methods || []).map((row) => [row.id, row]));
-      setFieldMeta('openrouterKeyMeta', providerById.openrouter ? `stored=${providerById.openrouter.stored} preview=${providerById.openrouter.stored_preview || 'none'} source=${providerById.openrouter.discovered_source || '-'}` : '');
-      setFieldMeta('nvidiaKeyMeta', providerById.nvidia ? `stored=${providerById.nvidia.stored} preview=${providerById.nvidia.stored_preview || 'none'} source=${providerById.nvidia.discovered_source || '-'}` : '');
-      setFieldMeta('genericKeyMeta', providerById.openai ? `stored=${providerById.openai.stored} preview=${providerById.openai.stored_preview || 'none'} source=${providerById.openai.discovered_source || '-'}` : '');
-      setFieldMeta('openaiOauthKeyMeta', authById['openai-oauth'] ? `stored=${authById['openai-oauth'].stored} preview=${authById['openai-oauth'].stored_preview || 'none'} source=${authById['openai-oauth'].discovered_source || '-'}` : '');
-      setFieldMeta('githubKeyMeta', authById.github ? `stored=${authById.github.stored} preview=${authById.github.stored_preview || 'none'} oauth=${authById.github.cli?.authenticated ? 'active' : 'inactive'}` : '');
-      setFieldMeta('copilotGithubKeyMeta', authById['github-copilot'] ? `stored=${authById['github-copilot'].stored} preview=${authById['github-copilot'].stored_preview || 'none'} source=${authById['github-copilot'].discovered_source || '-'}` : '');
-      setFieldMeta('huggingfaceKeyMeta', authById.huggingface ? `stored=${authById.huggingface.stored} preview=${authById.huggingface.stored_preview || 'none'} cli=${authById.huggingface.cli?.authenticated ? 'active' : (authById.huggingface.cli?.available ? 'available' : 'missing')}` : '');
-      setFieldMeta('elevenlabsKeyMeta', authById.elevenlabs ? `stored=${authById.elevenlabs.stored} preview=${authById.elevenlabs.stored_preview || 'none'} cli=${authById.elevenlabs.cli?.available ? 'available' : 'missing'}` : '');
       q('providerStatus').setAttribute('data-testid', 'provider-health');
       q('providerStatus').textContent = `secure store=${authCatalog.secret_store_path} | scanned=${Number(authCatalog.scanned_files?.length || 0)} | github_oauth=${authById.github?.cli?.authenticated ? 'active' : 'inactive'}`;
       return authCatalog;
+    }
+
+    function refreshAddRowSelectors() {
+      const providerSelect = q('providerAddSelect');
+      const serviceSelect = q('serviceAddSelect');
+      if (providerSelect) {
+        providerSelect.innerHTML = '<option value="">Add model provider...</option>' +
+          MODEL_PROVIDER_IDS.filter((id) => hiddenProviderRows.includes(id))
+            .map((id) => `<option value="${id}">${id}</option>`).join('');
+      }
+      if (serviceSelect) {
+        serviceSelect.innerHTML = '<option value="">Add service...</option>' +
+          SERVICE_PROVIDER_IDS.filter((id) => hiddenServiceRows.includes(id))
+            .map((id) => `<option value="${id}">${id}</option>`).join('');
+      }
+    }
+
+    async function saveProviderRow(provider) {
+      const row = providerCatalogRow(provider);
+      if (!row) return;
+      const secretField = PROVIDER_SECRET_FIELD[provider];
+      const baseField = PROVIDER_BASE_FIELD[provider];
+      const secretInput = document.querySelector(`.provider-secret-input[data-provider="${provider}"]`);
+      const baseInput = document.querySelector(`.provider-base-input[data-provider="${provider}"]`);
+      const payload = {
+        providerBaseUrls: {
+          [baseField]: baseInput?.value?.trim() || row.base_url || ''
+        },
+        secrets: secretField && secretInput?.value?.trim() ? { [secretField]: secretInput.value.trim() } : {}
+      };
+      await jpost('/api/auth/catalog', payload);
+      q('providerStatus').textContent = `saved ${provider}`;
+      await refreshProviderConfig();
+      await refreshModelCatalog();
+      await refreshRuntimeOverview();
+    }
+
+    async function testProviderRow(provider) {
+      const row = providerCatalogRow(provider);
+      if (!row) return;
+      const secretInput = document.querySelector(`.provider-secret-input[data-provider="${provider}"]`);
+      const baseInput = document.querySelector(`.provider-base-input[data-provider="${provider}"]`);
+      const out = await jpost('/api/provider/test', {
+        provider,
+        baseUrl: baseInput?.value?.trim() || row.base_url || '',
+        apiKey: secretInput?.value?.trim() || ''
+      });
+      q('providerStatus').textContent = out.ok
+        ? `test ok ${provider} | models=${Number(out.modelCount || 0)} | top=${out.topModel || '-'}`
+        : `test failed ${provider} | ${out.error || 'unknown'}`;
+    }
+
+    async function saveServiceRow(service) {
+      const authRow = authMethodById(service);
+      if (!authRow) return;
+      const secretField = SERVICE_SECRET_FIELD[service];
+      if (!secretField) return;
+      const input = document.querySelector(`.service-secret-input[data-service="${service}"]`);
+      const secret = input?.value?.trim() || '';
+      await jpost('/api/auth/catalog', { secrets: { [secretField]: secret } });
+      q('providerStatus').textContent = `saved ${service}`;
+      await refreshProviderConfig();
+      await refreshRuntimeOverview();
+    }
+
+    async function testServiceRow(service) {
+      const input = document.querySelector(`.service-secret-input[data-service="${service}"]`);
+      const out = await jpost('/api/service/test', { service, secret: input?.value?.trim() || '' });
+      q('providerStatus').textContent = out.ok
+        ? `test ok ${service}${out.account ? ` | ${out.account}` : ''}${out.modelCount ? ` | models=${Number(out.modelCount)}` : ''}`
+        : `test failed ${service} | ${out.error || out.detail || 'unknown'}`;
+    }
+
+    async function connectServiceRow(service) {
+      const out = await jpost('/api/service/connect', { service });
+      q('providerStatus').textContent = out.started
+        ? `oauth started ${service} | command=${out.command}`
+        : `oauth unavailable ${service} | ${out.error || 'not_supported'}`;
     }
 
     async function refreshRuntimeOverview() {
@@ -1767,7 +1995,13 @@
       setSelectByValueOrFirst('shellEnabled', String(Boolean(c.runtime?.shellEnabled)));
       setSelectByValueOrFirst('maxIters', String(c.runtime?.maxToolIterations ?? 8));
       setSelectByValueOrFirst('fallbackEnabled', String(c.model?.routing?.fallbackEnabled !== false));
-      setSelectByValueOrFirst('fallbackProfile', profileFromProviders(c.model?.routing?.fallbackProviders || []));
+      fallbackSequence = (c.model?.routing?.fallbackProviders || [])
+        .filter((provider) => provider && provider !== c.model?.provider)
+        .map((provider) => ({
+          provider,
+          model: c.model?.providerModels?.[provider]?.replace(/^(ollama|nvidia|openrouter|openai)\//, '') || preferredModelForProvider(provider)
+        }));
+      renderFallbackSequence();
       q('runtimeStatus').textContent =
         `mode=${c.runtime?.autonomyMode || 'autonomy-first'} shell=${c.runtime?.shellEnabled} maxIters=${c.runtime?.maxToolIterations}`;
     }
@@ -1894,21 +2128,29 @@
       if (!model) return;
       const out = await jpost('/api/model/switch', { provider: q('provider').value, model });
       topStatus.textContent = `cfg=${formatProviderModel(out.provider, out.model)} active=${formatProviderModel(out.activeProvider, out.activeModel)}`;
+      await refreshModelCatalog();
       await refreshRuntimeOverview();
     };
 
     q('saveRouting').onclick = async () => {
       const enabled = q('fallbackEnabled').value === 'true';
-      const profile = q('fallbackProfile').value;
       const provider = q('provider').value;
       const selectedModel = q('modelList').value;
+      ensureFallbackSequence(provider);
+      const providerModels = {
+        [provider]: `${provider}/${selectedModel}`
+      };
+      for (const entry of fallbackSequence) {
+        if (entry.provider && entry.model) providerModels[entry.provider] = `${entry.provider}/${entry.model}`;
+      }
       const out = await jpost('/api/config', {
         model: {
           provider,
           ...(selectedModel ? { model: selectedModel } : {}),
+          providerModels,
           routing: {
             fallbackEnabled: enabled,
-            fallbackProviders: FALLBACK_PROFILES[profile] || FALLBACK_PROFILES.local_first
+            fallbackProviders: fallbackSequence.map((entry) => entry.provider)
           }
         },
         runtime: {
@@ -1916,49 +2158,8 @@
           maxToolIterations: Number(q('maxIters').value || 8)
         }
       });
-      q('modelCatalogStatus').textContent = `routing saved | primary=${formatProviderModel(provider, selectedModel || '')} | shell=${out.runtime?.shellEnabled} maxIters=${out.runtime?.maxToolIterations}`;
+      q('modelCatalogStatus').textContent = `routing saved | primary=${formatProviderModel(provider, selectedModel || '')} | fallbacks=${fallbackSequence.map((entry) => entry.provider).join(' -> ') || 'none'}`;
       await refreshModel();
-      await refreshRuntimeOverview();
-    };
-
-    q('importOpenclaw').onclick = async () => {
-      const out = await jpost('/api/providers/import-openclaw', {});
-      q('modelCatalogStatus').textContent = `imported keys: openrouter=${out.imported?.openrouterApiKey} nvidia=${out.imported?.nvidiaApiKey} openai=${out.imported?.openaiApiKey}`;
-      await refreshProviderConfig();
-      await refreshModelCatalog();
-      await refreshRuntimeOverview();
-    };
-
-    q('saveProviders').onclick = async () => {
-      await jpost('/api/auth/catalog', {
-        providerBaseUrls: {
-          ollamaBaseUrl: q('ollamaUrl').value,
-          openrouterBaseUrl: q('openrouterUrl').value,
-          nvidiaBaseUrl: q('nvidiaUrl').value,
-          openaiBaseUrl: q('genericUrl').value
-        },
-        secrets: {
-          openrouterApiKey: q('openrouterKey').value.trim(),
-          nvidiaApiKey: q('nvidiaKey').value.trim(),
-          openaiApiKey: q('genericKey').value.trim(),
-          openaiOauthToken: q('openaiOauthKey').value.trim(),
-          githubToken: q('githubKey').value.trim(),
-          copilotGithubToken: q('copilotGithubKey').value.trim(),
-          huggingfaceApiKey: q('huggingfaceKey').value.trim(),
-          elevenlabsApiKey: q('elevenlabsKey').value.trim()
-        }
-      });
-      q('openrouterKey').value = '';
-      q('nvidiaKey').value = '';
-      q('genericKey').value = '';
-      q('openaiOauthKey').value = '';
-      q('githubKey').value = '';
-      q('copilotGithubKey').value = '';
-      q('huggingfaceKey').value = '';
-      q('elevenlabsKey').value = '';
-      q('providerStatus').textContent = 'secure provider/auth config saved';
-      await refreshProviderConfig();
-      await refreshModelCatalog();
       await refreshRuntimeOverview();
     };
 
@@ -1976,13 +2177,38 @@
       await refreshRuntimeOverview();
     };
 
-    q('focusAuthTarget').onclick = () => {
-      const target = q('authTargetSelect').value;
-      const el = q(target);
-      if (!el) return;
-      showView(target === 'tgToken' ? 'telegram' : 'provider-config');
-      el.focus();
-      el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    q('addProviderRow').onclick = () => {
+      const id = q('providerAddSelect').value;
+      if (!id) return;
+      hiddenProviderRows = hiddenProviderRows.filter((row) => row !== id);
+      normalizeHiddenRows();
+      refreshAddRowSelectors();
+      renderProviderMatrix(authCatalog?.providers || []);
+    };
+
+    q('addServiceRow').onclick = () => {
+      const id = q('serviceAddSelect').value;
+      if (!id) return;
+      hiddenServiceRows = hiddenServiceRows.filter((row) => row !== id);
+      normalizeHiddenRows();
+      refreshAddRowSelectors();
+      renderAuthMethodTable(authCatalog?.auth_methods || []);
+    };
+
+    q('addFallbackRow').onclick = () => {
+      const provider = q('fallbackProviderPicker').value;
+      if (!provider || provider === q('provider').value || fallbackSequence.some((entry) => entry.provider === provider)) return;
+      fallbackSequence.push({ provider, model: preferredModelForProvider(provider) });
+      q('fallbackProviderPicker').value = '';
+      renderFallbackSequence();
+    };
+
+    q('autoFillFallbacks').onclick = () => {
+      const primary = q('provider').value;
+      fallbackSequence = MODEL_PROVIDER_IDS
+        .filter((provider) => provider !== primary)
+        .map((provider) => ({ provider, model: preferredModelForProvider(provider) }));
+      renderFallbackSequence();
     };
 
     q('saveRuntime').onclick = async () => {
@@ -1995,7 +2221,7 @@
         model: {
           routing: {
             fallbackEnabled: q('fallbackEnabled').value === 'true',
-            fallbackProviders: FALLBACK_PROFILES[q('fallbackProfile').value] || FALLBACK_PROFILES.local_first
+            fallbackProviders: fallbackSequence.map((entry) => entry.provider)
           }
         }
       });

@@ -71,6 +71,20 @@ Date: 2026-04-01
    - secure secret persistence and scrubbed config writes
    - auth catalog contract
    - provider matrix and auth vault WebUI markers
+19. Simplified the provider UX after operator review:
+   - split the screen into compact `Model Providers` and `Service Providers` tables
+   - reduced default row content to status, auth, summary, and action
+   - moved endpoint/discovery details behind per-row `Advanced` toggles
+   - added row hide/add controls to keep the default screen smaller
+20. Simplified model routing:
+   - retained all four providers in the shared catalog
+   - replaced fallback profiles with an explicit ordered fallback sequence editor
+   - primary provider/model selection now sits above a concrete per-provider fallback list
+21. Added row-level test/connect actions:
+   - `POST /api/provider/test`
+   - `POST /api/service/test`
+   - `POST /api/service/connect`
+   - service OAuth kick-off currently supports GitHub and Google Workspace when their CLIs are installed
 
 Date: 2026-03-30
 

@@ -192,6 +192,170 @@ function buildAuthMethodRows(store, scan, cliStatus) {
   ];
 }
 
+const PROVIDER_SECRET_FIELD = {
+  ollama: null,
+  nvidia: 'nvidiaApiKey',
+  openrouter: 'openrouterApiKey',
+  openai: 'openaiApiKey'
+};
+
+const PROVIDER_BASE_FIELD = {
+  ollama: 'ollamaBaseUrl',
+  nvidia: 'nvidiaBaseUrl',
+  openrouter: 'openrouterBaseUrl',
+  openai: 'openaiBaseUrl'
+};
+
+function providerConnectionOverrides(provider, body = {}) {
+  const normalized = normalizeProviderId(provider);
+  const baseField = PROVIDER_BASE_FIELD[normalized];
+  const secretField = PROVIDER_SECRET_FIELD[normalized];
+  return {
+    provider: normalized,
+    baseUrl: String(body.baseUrl || config.model?.[baseField] || '').trim(),
+    apiKey: secretField ? String(body.apiKey || config.model?.[secretField] || '').trim() : ''
+  };
+}
+
+async function testProviderConnection({ provider, baseUrl, apiKey }) {
+  const normalized = normalizeProviderId(provider);
+  let models = [];
+  if (normalized === 'ollama') models = await fetchOllamaModels(baseUrl);
+  else if (normalized === 'nvidia') models = await fetchNvidiaModels(baseUrl, apiKey);
+  else if (normalized === 'openrouter') models = await fetchOpenRouterModels(baseUrl, apiKey);
+  else models = await fetchOpenAIModels(baseUrl, apiKey);
+  return {
+    ok: true,
+    provider: normalized,
+    modelCount: models.length,
+    topModel: models[0]?.model_id || null,
+    status: 'healthy'
+  };
+}
+
+async function testServiceConnection({ service, secret }) {
+  const id = String(service || '').trim().toLowerCase();
+  const cli = getCliAuthStatus();
+  if (id === 'github') {
+    if (secret) {
+      const res = await fetch('https://api.github.com/user', {
+        headers: {
+          Authorization: `Bearer ${secret}`,
+          'User-Agent': 'openunum'
+        },
+        signal: AbortSignal.timeout(8000)
+      });
+      if (!res.ok) throw new Error(`github_test_failed:${res.status}`);
+      const data = await res.json();
+      return { ok: true, service: id, status: 'authenticated', account: data.login || null };
+    }
+    return {
+      ok: Boolean(cli.github?.authenticated),
+      service: id,
+      status: cli.github?.authenticated ? 'authenticated' : (cli.github?.available ? 'available' : 'unavailable'),
+      account: cli.github?.account || null,
+      detail: cli.github?.detail || null
+    };
+  }
+  if (id === 'google-workspace') {
+    return {
+      ok: Boolean(cli.googleWorkspace?.authenticated),
+      service: id,
+      status: cli.googleWorkspace?.authenticated ? 'authenticated' : (cli.googleWorkspace?.available ? 'available' : 'unavailable'),
+      account: cli.googleWorkspace?.account || null,
+      detail: cli.googleWorkspace?.detail || null
+    };
+  }
+  if (id === 'huggingface') {
+    if (secret) {
+      const res = await fetch('https://huggingface.co/api/whoami-v2', {
+        headers: { Authorization: `Bearer ${secret}` },
+        signal: AbortSignal.timeout(8000)
+      });
+      if (!res.ok) throw new Error(`huggingface_test_failed:${res.status}`);
+      const data = await res.json();
+      return { ok: true, service: id, status: 'authenticated', account: data.name || data.fullname || null };
+    }
+    return {
+      ok: Boolean(cli.huggingface?.authenticated),
+      service: id,
+      status: cli.huggingface?.authenticated ? 'authenticated' : (cli.huggingface?.available ? 'available' : 'unavailable'),
+      account: cli.huggingface?.account || null,
+      detail: cli.huggingface?.detail || null
+    };
+  }
+  if (id === 'elevenlabs') {
+    if (!secret) {
+      return {
+        ok: false,
+        service: id,
+        status: cli.elevenlabs?.available ? 'available' : 'unavailable',
+        detail: cli.elevenlabs?.detail || 'secret_required'
+      };
+    }
+    const res = await fetch('https://api.elevenlabs.io/v1/user', {
+      headers: { 'xi-api-key': secret },
+      signal: AbortSignal.timeout(8000)
+    });
+    if (!res.ok) throw new Error(`elevenlabs_test_failed:${res.status}`);
+    const data = await res.json();
+    return { ok: true, service: id, status: 'authenticated', account: data.subscription?.tier || data.email || null };
+  }
+  if (id === 'telegram') {
+    if (!secret) throw new Error('telegram_token_missing');
+    const res = await fetch(`https://api.telegram.org/bot${secret}/getMe`, { signal: AbortSignal.timeout(8000) });
+    if (!res.ok) throw new Error(`telegram_test_failed:${res.status}`);
+    const data = await res.json();
+    if (!data.ok) throw new Error(`telegram_test_failed:${data.description || 'unknown'}`);
+    return { ok: true, service: id, status: 'authenticated', account: data.result?.username || data.result?.first_name || null };
+  }
+  if (id === 'openai-oauth') {
+    if (!secret) throw new Error('openai_oauth_token_missing');
+    const res = await fetch('https://api.openai.com/v1/models', {
+      headers: { Authorization: `Bearer ${secret}` },
+      signal: AbortSignal.timeout(8000)
+    });
+    if (!res.ok) throw new Error(`openai_oauth_test_failed:${res.status}`);
+    const data = await res.json();
+    return { ok: true, service: id, status: 'authenticated', modelCount: Array.isArray(data.data) ? data.data.length : 0 };
+  }
+  if (id === 'github-copilot') {
+    if (!secret) throw new Error('copilot_token_missing');
+    const res = await fetch('https://api.github.com/user', {
+      headers: {
+        Authorization: `Bearer ${secret}`,
+        'User-Agent': 'openunum'
+      },
+      signal: AbortSignal.timeout(8000)
+    });
+    if (!res.ok) throw new Error(`github_copilot_test_failed:${res.status}`);
+    const data = await res.json();
+    return { ok: true, service: id, status: 'authenticated', account: data.login || null };
+  }
+  throw new Error(`unsupported_service:${id}`);
+}
+
+function oauthCommandForService(service) {
+  const id = String(service || '').trim().toLowerCase();
+  if (id === 'github') return 'gh auth login -w';
+  if (id === 'google-workspace') return 'gcloud auth login --update-adc';
+  return null;
+}
+
+function launchOauthCommand(service) {
+  const cmd = oauthCommandForService(service);
+  if (!cmd) return { ok: false, started: false, error: 'oauth_not_supported' };
+  const cli = getCliAuthStatus();
+  if (service === 'github' && !cli.github?.available) return { ok: false, started: false, error: 'gh_not_available' };
+  if (service === 'google-workspace' && !cli.googleWorkspace?.available) return { ok: false, started: false, error: 'gcloud_not_available' };
+  const child = spawn('bash', ['-lc', cmd], {
+    detached: true,
+    stdio: 'ignore'
+  });
+  child.unref();
+  return { ok: true, started: true, command: cmd, pid: child.pid };
+}
+
 async function buildAuthCatalogPayload() {
   reloadConfigSecrets();
   const [catalog] = await Promise.all([buildModelCatalog(config.model)]);
@@ -812,6 +976,43 @@ const server = http.createServer(async (req, res) => {
       });
     }
 
+    if (req.method === 'POST' && url.pathname === '/api/provider/test') {
+      const body = await parseBody(req);
+      const connection = providerConnectionOverrides(body.provider, body);
+      try {
+        return sendJson(res, 200, await testProviderConnection(connection));
+      } catch (error) {
+        return sendJson(res, 200, {
+          ok: false,
+          provider: connection.provider,
+          status: 'degraded',
+          error: String(error.message || error)
+        });
+      }
+    }
+
+    if (req.method === 'POST' && url.pathname === '/api/service/test') {
+      const body = await parseBody(req);
+      try {
+        return sendJson(res, 200, await testServiceConnection({
+          service: body.service,
+          secret: String(body.secret || '').trim()
+        }));
+      } catch (error) {
+        return sendJson(res, 200, {
+          ok: false,
+          service: String(body.service || '').trim().toLowerCase(),
+          status: 'degraded',
+          error: String(error.message || error)
+        });
+      }
+    }
+
+    if (req.method === 'POST' && url.pathname === '/api/service/connect') {
+      const body = await parseBody(req);
+      return sendJson(res, 200, launchOauthCommand(body.service));
+    }
+
     if (req.method === 'GET' && url.pathname === '/api/config') {
       reloadConfigSecrets();
       normalizeModelSettings();
@@ -909,6 +1110,15 @@ const server = http.createServer(async (req, res) => {
         config.model.model = body.model.model.trim().replace(/^generic\//, 'openai/');
         config.model.providerModels = config.model.providerModels || {};
         config.model.providerModels[config.model.provider] = config.model.model;
+      }
+      if (body.model && body.model.providerModels && typeof body.model.providerModels === 'object') {
+        config.model.providerModels = config.model.providerModels || {};
+        for (const [provider, model] of Object.entries(body.model.providerModels)) {
+          const normalizedProvider = normalizeProviderId(provider);
+          if (typeof model === 'string' && model.trim()) {
+            config.model.providerModels[normalizedProvider] = model.trim().replace(/^generic\//, 'openai/');
+          }
+        }
       }
       if (body.model && body.model.routing) {
         config.model.routing = { ...config.model.routing, ...body.model.routing };

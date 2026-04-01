@@ -1,11 +1,29 @@
 import { spawn } from 'node:child_process';
+import { execSync } from 'node:child_process';
+import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
 const TEST_PORT = Number(process.env.OPENUNUM_TEST_PORT || 18881);
 const TEST_HOME = path.join(os.tmpdir(), `openunum-test-home-${TEST_PORT}`);
 
+function clearTestPort() {
+  try {
+    const out = execSync(`ss -ltnp 'sport = :${TEST_PORT}'`, { encoding: 'utf8' });
+    const pids = [...out.matchAll(/pid=(\d+)/g)].map((match) => Number(match[1])).filter(Number.isFinite);
+    for (const pid of [...new Set(pids)]) {
+      try {
+        process.kill(pid, 'SIGTERM');
+      } catch {}
+    }
+  } catch {
+    // port not in use
+  }
+}
+
 export async function startServer() {
+  clearTestPort();
+  fs.rmSync(TEST_HOME, { recursive: true, force: true });
   const proc = spawn('node', ['src/server.mjs'], {
     cwd: process.cwd(),
     stdio: ['ignore', 'pipe', 'pipe'],

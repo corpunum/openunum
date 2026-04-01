@@ -129,6 +129,9 @@ Returns a WebUI-oriented flagship summary:
 - `GET /api/auth/catalog`
 - `POST /api/auth/catalog`
 - `POST /api/auth/prefill-local`
+- `POST /api/provider/test`
+- `POST /api/service/test`
+- `POST /api/service/connect`
 - `GET /api/models?provider=ollama|nvidia|openrouter|openai`
 - `GET /api/model-catalog`
 
@@ -226,6 +229,51 @@ Returns a WebUI-oriented flagship summary:
 - `/home/corp-unum/openunumQwen/.env`
 
 Secrets are no longer returned from `GET /api/config` or persisted in `openunum.json`.
+
+`POST /api/provider/test` accepts:
+```json
+{
+  "provider": "openrouter",
+  "baseUrl": "https://openrouter.ai/api/v1",
+  "apiKey": "sk-or-..."
+}
+```
+
+It returns a row-level provider test summary:
+- `ok`
+- `provider`
+- `status`
+- `modelCount`
+- `topModel`
+- `error` when degraded
+
+`POST /api/service/test` accepts:
+```json
+{
+  "service": "github",
+  "secret": "ghp_..."
+}
+```
+
+Supported service test rows:
+- `github`
+- `google-workspace`
+- `huggingface`
+- `elevenlabs`
+- `telegram`
+- `openai-oauth`
+- `github-copilot`
+
+`POST /api/service/connect` accepts:
+```json
+{
+  "service": "github"
+}
+```
+
+OAuth kick-off is currently supported for:
+- `github` -> `gh auth login -w`
+- `google-workspace` -> `gcloud auth login --update-adc`
 
 ## Model Runtime
 

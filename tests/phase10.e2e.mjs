@@ -88,6 +88,29 @@ try {
   assert.equal(prefill.json.ok, true);
   assert.equal(Array.isArray(prefill.json.scannedFiles), true);
 
+  const providerTest = await jpost('/api/provider/test', {
+    provider: 'openrouter',
+    baseUrl: 'https://openrouter.ai/api/v1',
+    apiKey: 'invalid-openrouter-key'
+  });
+  assert.equal(providerTest.status, 200);
+  assert.equal(typeof providerTest.json.ok, 'boolean');
+  assert.equal(providerTest.json.provider, 'openrouter');
+
+  const serviceTest = await jpost('/api/service/test', {
+    service: 'github',
+    secret: ''
+  });
+  assert.equal(serviceTest.status, 200);
+  assert.equal(serviceTest.json.service, 'github');
+  assert.equal(typeof serviceTest.json.ok, 'boolean');
+
+  const oauthKickoff = await jpost('/api/service/connect', {
+    service: 'github'
+  });
+  assert.equal(oauthKickoff.status, 200);
+  assert.equal(typeof oauthKickoff.json.started, 'boolean');
+
   const sessionId = `phase10-${Date.now()}`;
   const created = await jpost('/api/sessions', { sessionId });
   assert.equal(created.status, 200);
