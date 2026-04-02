@@ -13,6 +13,7 @@ import { MissionRunner } from './core/missions.mjs';
 import { SelfHealMonitor } from './core/selfheal.mjs';
 import { getAutonomyMaster } from './core/autonomy-master.mjs';
 import { estimateMessagesTokens } from './core/context-budget.mjs';
+import { resolveExecutionEnvelope } from './core/model-execution-envelope.mjs';
 import { CDPBrowser } from './browser/cdp.mjs';
 import { TelegramChannel } from './channels/telegram.mjs';
 import { logInfo, logError } from './logger.mjs';
@@ -310,6 +311,13 @@ function normalizeModelSettings() {
   config.model.routing.fallbackProviders = (config.model.routing.fallbackProviders || PROVIDER_ORDER)
     .map((provider) => normalizeProviderId(provider))
     .filter((provider, index, arr) => provider && arr.indexOf(provider) === index);
+  config.model.behaviorOverrides = config.model.behaviorOverrides || {};
+}
+
+function behaviorOverrideKey(provider, model) {
+  const p = normalizeProviderId(provider || 'ollama');
+  const m = String(model || '').trim().toLowerCase();
+  return `${p}::${m}`;
 }
 
 function reloadConfigSecrets() {
@@ -722,6 +730,20 @@ async function buildAuthCatalogPayload() {
 }
 
 function buildCapabilitiesPayload() {
+  const dynamicProviders = [...new Set([
+    ...PROVIDER_ORDER,
+    ...Object.keys(config.model?.providerModels || {})
+      .map((provider) => normalizeProviderId(provider))
+      .filter(Boolean)
+  ])];
+  const services = AUTH_TARGET_DEFS
+    .map((item) => String(item?.id || '').trim().toLowerCase())
+    .filter(Boolean);
+  const executionEnvelope = resolveExecutionEnvelope({
+    provider: config.model?.provider,
+    model: config.model?.model,
+    runtime: config.runtime
+  });
   return {
     contract_version: '2026-04-01.webui-capabilities.v1',
     menu: ['chat', 'missions', 'trace', 'runtime', 'settings'],
@@ -737,8 +759,19 @@ function buildCapabilitiesPayload() {
       git_runtime: true,
       memory_inspection: true
     },
-    provider_order: [...PROVIDER_ORDER],
-    model_catalog_contract_version: MODEL_CATALOG_CONTRACT_VERSION
+    provider_order: dynamicProviders,
+    services,
+    model_catalog_contract_version: MODEL_CATALOG_CONTRACT_VERSION,
+    model_execution: {
+      active: executionEnvelope,
+      enforce_profiles: config.runtime?.enforceModelExecutionProfiles !== false,
+      profiles: config.runtime?.modelExecutionProfiles || {}
+    },
+    autonomy_policy: {
+      enabled: config.runtime?.autonomyPolicy?.enabled !== false,
+      mode: String(config.runtime?.autonomyPolicy?.mode || 'execute'),
+      enforce_self_protection: config.runtime?.autonomyPolicy?.enforceSelfProtection !== false
+    }
   };
 }
 
@@ -779,6 +812,16 @@ async function buildRuntimeOverview() {
   return {
     workspaceRoot: config.runtime?.workspaceRoot || process.cwd(),
     autonomyMode: config.runtime?.autonomyMode || 'autonomy-first',
+    executionEnvelope: resolveExecutionEnvelope({
+      provider: config.model?.provider,
+      model: config.model?.model,
+      runtime: config.runtime
+    }),
+    autonomyPolicy: {
+      enabled: config.runtime?.autonomyPolicy?.enabled !== false,
+      mode: String(config.runtime?.autonomyPolicy?.mode || 'execute'),
+      enforceSelfProtection: config.runtime?.autonomyPolicy?.enforceSelfProtection !== false
+    },
     browser: browserStatus,
     git: readGitOverview(config.runtime?.workspaceRoot || process.cwd()),
     selectedModel: catalog.selected,
@@ -790,7 +833,10 @@ async function buildRuntimeOverview() {
       degradedReason: provider.degraded_reason,
       topModel: provider.models?.[0]?.model_id || null,
       modelCount: provider.models?.length || 0
-    }))
+    })),
+    providerAvailability: agent.getProviderAvailabilitySnapshot
+      ? agent.getProviderAvailabilitySnapshot()
+      : []
   };
 }
 
@@ -820,6 +866,9 @@ function buildMissionTimeline(mission) {
       maxSteps: mission.maxSteps,
       hardStepCap: mission.hardStepCap,
       retries: mission.retries,
+      contract: mission.contract || null,
+      contractFailures: Number(mission.contractFailures || 0),
+      rollbackAttempts: Number(mission.rollbackAttempts || 0),
       startedAt: mission.startedAt,
       finishedAt: mission.finishedAt,
       sessionId
@@ -844,6 +893,12 @@ function applyAutonomyMode(mode) {
     config.runtime.missionDefaultHardStepCap = 300;
     config.runtime.missionDefaultMaxRetries = 8;
     config.runtime.missionDefaultIntervalMs = 250;
+    config.runtime.autonomyPolicy = {
+      ...(config.runtime.autonomyPolicy || {}),
+      enabled: true,
+      mode: 'execute',
+      enforceSelfProtection: true
+    };
     config.model.routing.forcePrimaryProvider = true;
     config.model.routing.fallbackEnabled = false;
     config.model.routing.fallbackProviders = [config.model.provider];
@@ -859,6 +914,12 @@ function applyAutonomyMode(mode) {
   config.runtime.missionDefaultHardStepCap = 120;
   config.runtime.missionDefaultMaxRetries = 3;
   config.runtime.missionDefaultIntervalMs = 400;
+  config.runtime.autonomyPolicy = {
+    ...(config.runtime.autonomyPolicy || {}),
+    enabled: true,
+    mode: 'execute',
+    enforceSelfProtection: true
+  };
   if (!config.model.routing.fallbackProviders?.length) {
     config.model.routing.fallbackProviders = [...PROVIDER_ORDER];
   }
@@ -1245,6 +1306,64 @@ const server = http.createServer(async (req, res) => {
       });
     }
 
+    if (req.method === 'GET' && url.pathname === '/api/controller/behavior-classes') {
+      return sendJson(res, 200, {
+        ok: true,
+        classes: agent.getBehaviorClasses()
+      });
+    }
+
+    if (req.method === 'POST' && url.pathname === '/api/controller/behavior/reset') {
+      const body = await parseBody(req);
+      const providerRaw = String(body?.provider || '').trim();
+      const provider = normalizeProviderId(providerRaw);
+      const model = String(body?.model || '').trim().toLowerCase();
+      if (!providerRaw || !model) return sendJson(res, 400, { error: 'provider and model are required' });
+      const out = agent.resetControllerBehavior({ provider, model });
+      return sendJson(res, 200, { ok: true, ...out });
+    }
+
+    if (req.method === 'POST' && url.pathname === '/api/controller/behavior/reset-all') {
+      const out = agent.resetAllControllerBehaviors();
+      return sendJson(res, 200, { ok: true, ...out });
+    }
+
+    if (req.method === 'POST' && url.pathname === '/api/controller/behavior/override') {
+      const body = await parseBody(req);
+      const providerRaw = String(body?.provider || '').trim();
+      const provider = normalizeProviderId(providerRaw);
+      const model = String(body?.model || '').trim().toLowerCase();
+      const classId = String(body?.classId || '').trim();
+      const tuning = body?.tuning && typeof body.tuning === 'object' ? body.tuning : {};
+      const needs = body?.needs && typeof body.needs === 'object' ? body.needs : {};
+      if (!providerRaw || !model || !classId) {
+        return sendJson(res, 400, { error: 'provider, model, and classId are required' });
+      }
+      const key = behaviorOverrideKey(provider, model);
+      config.model.behaviorOverrides = config.model.behaviorOverrides || {};
+      config.model.behaviorOverrides[key] = { classId, tuning, needs };
+      saveConfig(config);
+      return sendJson(res, 200, {
+        ok: true,
+        key,
+        override: config.model.behaviorOverrides[key]
+      });
+    }
+
+    if (req.method === 'POST' && url.pathname === '/api/controller/behavior/override/remove') {
+      const body = await parseBody(req);
+      const providerRaw = String(body?.provider || '').trim();
+      const provider = normalizeProviderId(providerRaw);
+      const model = String(body?.model || '').trim().toLowerCase();
+      if (!providerRaw || !model) return sendJson(res, 400, { error: 'provider and model are required' });
+      const key = behaviorOverrideKey(provider, model);
+      config.model.behaviorOverrides = config.model.behaviorOverrides || {};
+      const removed = Boolean(config.model.behaviorOverrides[key]);
+      delete config.model.behaviorOverrides[key];
+      saveConfig(config);
+      return sendJson(res, 200, { ok: true, removed, key });
+    }
+
     if (req.method === 'GET' && url.pathname === '/api/model-catalog') {
       normalizeModelSettings();
       const catalog = await buildModelCatalog(config.model);
@@ -1505,6 +1624,37 @@ const server = http.createServer(async (req, res) => {
       }
       if (body.runtime && Number.isFinite(body.runtime.missionDefaultIntervalMs)) {
         config.runtime.missionDefaultIntervalMs = Number(body.runtime.missionDefaultIntervalMs);
+      }
+      if (body.runtime && typeof body.runtime.enforceModelExecutionProfiles === 'boolean') {
+        config.runtime.enforceModelExecutionProfiles = body.runtime.enforceModelExecutionProfiles;
+      }
+      if (body.runtime && body.runtime.modelExecutionProfiles && typeof body.runtime.modelExecutionProfiles === 'object') {
+        const nextProfiles = {};
+        for (const tier of ['compact', 'balanced', 'full']) {
+          const source = body.runtime.modelExecutionProfiles?.[tier];
+          if (!source || typeof source !== 'object') continue;
+          const out = {};
+          if (Number.isFinite(source.maxHistoryMessages)) out.maxHistoryMessages = Number(source.maxHistoryMessages);
+          if (Number.isFinite(source.maxToolIterations)) out.maxToolIterations = Number(source.maxToolIterations);
+          if (Array.isArray(source.allowedTools)) {
+            out.allowedTools = source.allowedTools.map((tool) => String(tool || '').trim()).filter(Boolean);
+          }
+          nextProfiles[tier] = out;
+        }
+        config.runtime.modelExecutionProfiles = {
+          ...(config.runtime.modelExecutionProfiles || {}),
+          ...nextProfiles
+        };
+      }
+      if (body.runtime && body.runtime.autonomyPolicy && typeof body.runtime.autonomyPolicy === 'object') {
+        const nextPolicy = { ...(config.runtime.autonomyPolicy || {}) };
+        if (typeof body.runtime.autonomyPolicy.enabled === 'boolean') nextPolicy.enabled = body.runtime.autonomyPolicy.enabled;
+        if (typeof body.runtime.autonomyPolicy.mode === 'string') nextPolicy.mode = body.runtime.autonomyPolicy.mode.trim().toLowerCase() === 'plan' ? 'plan' : 'execute';
+        if (typeof body.runtime.autonomyPolicy.enforceSelfProtection === 'boolean') nextPolicy.enforceSelfProtection = body.runtime.autonomyPolicy.enforceSelfProtection;
+        if (typeof body.runtime.autonomyPolicy.blockShellSelfDestruct === 'boolean') nextPolicy.blockShellSelfDestruct = body.runtime.autonomyPolicy.blockShellSelfDestruct;
+        if (typeof body.runtime.autonomyPolicy.denyMutatingToolsInPlan === 'boolean') nextPolicy.denyMutatingToolsInPlan = body.runtime.autonomyPolicy.denyMutatingToolsInPlan;
+        if (typeof body.runtime.autonomyPolicy.allowRecoveryToolsInPlan === 'boolean') nextPolicy.allowRecoveryToolsInPlan = body.runtime.autonomyPolicy.allowRecoveryToolsInPlan;
+        config.runtime.autonomyPolicy = nextPolicy;
       }
       if (body.model && typeof body.model.provider === 'string' && body.model.provider.trim()) {
         config.model.provider = normalizeProviderId(body.model.provider.trim());

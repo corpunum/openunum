@@ -33,6 +33,43 @@ function trimLine(text, maxChars = 220) {
   return `${clean.slice(0, maxChars)}...`;
 }
 
+function normalizeCmdSignature(cmd = '') {
+  return String(cmd || '')
+    .toLowerCase()
+    .replace(/\s+/g, ' ')
+    .replace(/["'`]/g, '')
+    .replace(/\b\d+\b/g, '#')
+    .trim()
+    .slice(0, 220);
+}
+
+function normalizeHttpSignature(run = {}) {
+  const method = String(run?.args?.method || 'GET').toUpperCase();
+  const url = String(run?.args?.url || '').toLowerCase();
+  const m = url.match(/^https?:\/\/[^/]+(\/[^?#]*)?/);
+  const p = m ? m[1] || '/' : url.slice(0, 120);
+  return `${method} ${p}`.trim().slice(0, 220);
+}
+
+function routeSignatureFromRun(run = {}) {
+  const tool = String(run?.toolName || '').toLowerCase();
+  if (tool === 'shell_run') return `shell:${normalizeCmdSignature(run?.args?.cmd || '')}`;
+  if (tool === 'http_request') return `http:${normalizeHttpSignature(run)}`;
+  if (tool.startsWith('browser_')) {
+    return `browser:${tool}:${String(run?.args?.url || run?.args?.query || '').toLowerCase().slice(0, 140)}`;
+  }
+  return `tool:${tool}:${Object.keys(run?.args || {}).sort().join(',')}`.slice(0, 220);
+}
+
+function routeSurfaceFromRun(run = {}) {
+  const tool = String(run?.toolName || '').toLowerCase();
+  if (tool === 'shell_run') return 'shell';
+  if (tool === 'http_request') return 'http';
+  if (tool.startsWith('browser_')) return 'browser';
+  if (tool.startsWith('file_')) return 'file';
+  return 'tool';
+}
+
 function buildMissionPrompt(mission, { firstTurn = false, workspaceRoot = '', runtimeHints = [], providerHint = '' } = {}) {
   const lastCheckpoint = mission.lastCheckpoint ? `Previous checkpoint: ${mission.lastCheckpoint}\n` : '';
   const recoveryHint = mission.recoveryHint ? `Recovery directive: ${mission.recoveryHint}\n` : '';
@@ -54,8 +91,11 @@ function buildMissionPrompt(mission, { firstTurn = false, workspaceRoot = '', ru
     : '';
   const providerSurfaceHint = providerHint ? `Provider path hint:\n- ${providerHint}\n` : '';
   const goalLine = firstTurn ? `Autonomous mission goal: ${mission.goal}` : `Continue autonomous mission: ${mission.goal}`;
+  const contract = mission.contract || inferMissionContract(mission.goal);
+  const contractLine = `Mission completion contract: ${contract.id}. DONE is valid only when checkpoint + proof requirements are satisfied.`;
   return `${goalLine}
-${lastCheckpoint}${recoveryHint}${stallHint}${workspaceHint}${localRuntimeHint}${providerSurfaceHint}${dynamicHints}Execution contract:
+${lastCheckpoint}${recoveryHint}${stallHint}${workspaceHint}${localRuntimeHint}${providerSurfaceHint}${dynamicHints}${contractLine}
+Execution contract:
 - Do exactly one verified substep per turn.
 - Prefer shell-first local inspection for local-machine tasks.
 - If uncertain, inspect current state before choosing a tool.
@@ -80,11 +120,57 @@ function hasProviderFailureSignal(text) {
   return /all configured providers failed|provider failed|unauthorized|401|api key|authentication|invalid api key|model .* not found/.test(t);
 }
 
-function deriveRuntimeHints(mission, recentToolRuns = []) {
+function inferMissionContract(goal = '') {
+  const text = String(goal || '').toLowerCase();
+  const localRuntime = /local|gguf|ollama|llama\.cpp|runtime|launch|server|model/.test(text);
+  const coding = /fix|implement|refactor|code|bug|test|compile|build/.test(text);
+  return {
+    id: localRuntime ? 'local-runtime-proof-v1' : coding ? 'coding-proof-v1' : 'generic-proof-v1',
+    requireMissionDoneMarker: true,
+    requireCheckpoint: true,
+    requireProofSignals: true,
+    requireLocalRuntimeProof: localRuntime
+  };
+}
+
+function evaluateMissionContract({ contract, replyText, checkpoint, newProof, localResponseProof }) {
+  const text = String(replyText || '');
+  const violations = [];
+  if (contract.requireMissionDoneMarker && !/MISSION_STATUS:\s*DONE/i.test(text)) {
+    violations.push('missing_done_marker');
+  }
+  if (contract.requireCheckpoint && !String(checkpoint || '').trim()) {
+    violations.push('missing_checkpoint');
+  }
+  if (contract.requireProofSignals && !(newProof || localResponseProof)) {
+    violations.push('missing_proof_signal');
+  }
+  if (contract.requireLocalRuntimeProof && !localResponseProof) {
+    violations.push('missing_local_runtime_proof');
+  }
+  return {
+    pass: violations.length === 0,
+    violations
+  };
+}
+
+function deriveRuntimeHints(mission, recentToolRuns = [], memoryStore = null) {
   const hints = [];
   if (!Array.isArray(recentToolRuns) || recentToolRuns.length === 0) return hints;
   const shellRuns = recentToolRuns.filter((run) => run?.toolName === 'shell_run');
   const httpRuns = recentToolRuns.filter((run) => run?.toolName === 'http_request');
+  const failedRuns = recentToolRuns.filter((run) => run?.ok === false);
+  const routeFailureCount = new Map();
+  for (const run of failedRuns) {
+    const tool = String(run?.toolName || '').toLowerCase();
+    const keyRaw = tool === 'shell_run'
+      ? String(run?.args?.cmd || '')
+      : tool === 'http_request'
+        ? String(run?.args?.url || '')
+        : JSON.stringify(run?.args || {});
+    const routeKey = `${tool}:${keyRaw}`.slice(0, 280);
+    routeFailureCount.set(routeKey, (routeFailureCount.get(routeKey) || 0) + 1);
+  }
   const shellCmds = shellRuns.map((run) => String(run?.args?.cmd || '').toLowerCase());
   const shellErrors = recentToolRuns.map((run) => String(run?.result?.error || '').toLowerCase()).filter(Boolean);
   const httpUrls = httpRuns.map((run) => String(run?.args?.url || '').toLowerCase());
@@ -95,6 +181,10 @@ function deriveRuntimeHints(mission, recentToolRuns = []) {
   }
   if (interactiveAttempts >= 1 && shellErrors.length > 0) {
     hints.push('A recent route looks interactive or REPL-like. Prefer a machine-readable API or one-shot batch command if the tool/service exposes one.');
+  }
+  const repeatedRouteFailure = [...routeFailureCount.values()].some((count) => count >= 2);
+  if (repeatedRouteFailure) {
+    hints.push('The same execution route failed repeatedly. Do not retry it unchanged; switch to a different tool/runtime surface with a narrower verification step.');
   }
   if (isLocalRuntimeMission(mission.goal)) {
     const metadataInspections = shellCmds.filter((cmd) => /blob|sha256|ollama show|find .*\.ollama|show .*--json/.test(cmd)).length;
@@ -129,6 +219,13 @@ function deriveRuntimeHints(mission, recentToolRuns = []) {
     if (shellCmds.some((cmd) => cmd.includes('ollama list')) && httpUrls.length === 0 && directLaunches === 0) {
       hints.push('After `ollama list`, prefer one bounded API verification call to the local Ollama base URL or pivot directly to `llama_cpp_python` if the API path already timed out.');
     }
+    const exhaustedLocalRoutes =
+      repeatedRouteFailure &&
+      (shellErrors.length + httpErrors.length) >= 3 &&
+      !recentToolRuns.some((run) => run?.ok === true);
+    if (exhaustedLocalRoutes) {
+      hints.push('Local routes are failing repeatedly. Use web research to find a different launch/verification approach for this exact runtime error, then apply one changed attempt and record result.');
+    }
     const localResponseProof = recentToolRuns.some((run) => {
       const stdout = String(run?.result?.stdout || '');
       const text = String(run?.result?.text || '');
@@ -138,6 +235,17 @@ function deriveRuntimeHints(mission, recentToolRuns = []) {
     });
     if (localResponseProof) {
       hints.push('You already have proof that a local runtime loaded the target GGUF and produced output. Do not keep probing. Summarize the exact proof and finish the mission if the launch path is valid.');
+    }
+  }
+  if (memoryStore?.getRouteGuidance) {
+    const guidance = memoryStore.getRouteGuidance({ goal: mission.goal, limit: 8 });
+    const unstableRoute = guidance.find((g) => g.failureCount >= 2 && g.successCount === 0);
+    if (unstableRoute) {
+      hints.push(`Historical lesson: route \`${unstableRoute.routeSignature}\` keeps failing. Prefer a different surface first.`);
+    }
+    const stableRoute = guidance.find((g) => g.successCount >= 2 && g.successRate >= 0.6);
+    if (stableRoute) {
+      hints.push(`Historical lesson: route \`${stableRoute.routeSignature}\` is usually reliable. Try it early for proof.`);
     }
   }
   return [...new Set(hints)].slice(0, 4);
@@ -159,6 +267,25 @@ function findLocalResponseProof(recentToolRuns = []) {
   if (!Array.isArray(recentToolRuns) || recentToolRuns.length === 0) return null;
   for (const run of [...recentToolRuns].reverse()) {
     if (!run || run.ok === false) continue;
+    const toolName = String(run?.toolName || '').trim().toLowerCase();
+    const url = String(run?.args?.url || '').toLowerCase();
+    const json = run?.result?.json && typeof run.result.json === 'object' ? run.result.json : null;
+    if (toolName === 'http_request' && /\/api\/(generate|chat)\b/.test(url)) {
+      const responseText =
+        String(json?.response || json?.message?.content || json?.message || '').trim();
+      const doneFlag = json?.done === true || json?.done === 'true';
+      if (responseText || doneFlag) {
+        return {
+          toolName: run.toolName,
+          cmd: trimLine(String(run?.args?.url || ''), 180),
+          summary: trimLine(
+            `HTTP runtime proof: ${responseText ? responseText.slice(0, 140) : 'model returned done=true'}`,
+            220
+          ),
+          at: run.finishedAt || run.startedAt || null
+        };
+      }
+    }
     const stdout = String(run?.result?.stdout || '');
     const stderr = String(run?.result?.stderr || '');
     const text = String(run?.result?.text || '');
@@ -204,7 +331,10 @@ export class MissionRunner {
       step: m.step,
       maxSteps: m.maxSteps,
       sessionId: m.sessionId,
-      error: m.error || null
+      error: m.error || null,
+      contract: m.contract || null,
+      contractFailures: Number(m.contractFailures || 0),
+      rollbackAttempts: Number(m.rollbackAttempts || 0)
     }));
   }
 
@@ -246,7 +376,12 @@ export class MissionRunner {
       repeatedReplyTurns: 0,
       lastReply: '',
       lastCheckpoint: '',
-      recoveryHint: ''
+      recoveryHint: '',
+      contract: inferMissionContract(trimmedGoal),
+      contractFailures: 0,
+      rollbackAttempts: 0,
+      lastToolScanAt: new Date().toISOString(),
+      routeLessonSeen: Object.create(null)
     };
     this.missions.set(id, mission);
     this.run(mission);
@@ -278,7 +413,7 @@ export class MissionRunner {
         const prompt = buildMissionPrompt(mission, {
           firstTurn: i === 0,
           workspaceRoot: this.config?.runtime?.workspaceRoot || process.env.OPENUNUM_WORKSPACE || process.cwd(),
-          runtimeHints: deriveRuntimeHints(mission, recentToolRuns),
+          runtimeHints: deriveRuntimeHints(mission, recentToolRuns, this.memoryStore),
           providerHint: deriveProviderHint(currentModel)
         });
 
@@ -302,6 +437,31 @@ export class MissionRunner {
           : null;
         const checkpointLine = text.split('\n').find((line) => line.trim().toUpperCase().startsWith('CHECKPOINT:')) || '';
         const checkpoint = checkpointLine ? trimLine(checkpointLine.replace(/^CHECKPOINT:\s*/i, '')) : '';
+        if (this.memoryStore?.getToolRunsSince && this.memoryStore?.recordRouteLesson) {
+          const deltaRuns = this.memoryStore.getToolRunsSince(
+            mission.sessionId,
+            mission.lastToolScanAt || mission.startedAt,
+            80
+          );
+          for (const run of deltaRuns) {
+            const signature = routeSignatureFromRun(run);
+            const seenKey = `${run.createdAt || ''}|${signature}|${run.ok ? 1 : 0}`;
+            if (mission.routeLessonSeen?.[seenKey]) continue;
+            mission.routeLessonSeen[seenKey] = 1;
+            this.memoryStore.recordRouteLesson({
+              sessionId: mission.sessionId,
+              goal: mission.goal,
+              routeSignature: signature,
+              surface: routeSurfaceFromRun(run),
+              success: Boolean(run.ok),
+              errorExcerpt: String(run?.result?.error || run?.result?.stderr || '').slice(0, 240),
+              note: checkpoint || '',
+              createdAt: run.createdAt || new Date().toISOString()
+            });
+          }
+          const latestRunAt = deltaRuns.length ? String(deltaRuns[deltaRuns.length - 1]?.createdAt || '') : '';
+          if (latestRunAt) mission.lastToolScanAt = latestRunAt;
+        }
         const repeatedReply = trimLine(text, 260) === trimLine(mission.lastReply, 260);
         mission.lastReply = text;
         if (checkpoint) mission.lastCheckpoint = checkpoint;
@@ -321,7 +481,15 @@ export class MissionRunner {
         });
         const timedOutTurn = /turn timed out after/i.test(text);
         const wrapUpIntent = /wrap up|finish the mission|summari[sz]e the proof|already produced output|launch path is valid/i.test(text);
-        const doneWithProof = text.includes('MISSION_STATUS: DONE') && (newProof || Boolean(localResponseProof));
+        const declaredDone = text.includes('MISSION_STATUS: DONE');
+        const contractCheck = evaluateMissionContract({
+          contract: mission.contract || inferMissionContract(mission.goal),
+          replyText: text,
+          checkpoint,
+          newProof,
+          localResponseProof
+        });
+        const doneWithProof = declaredDone && contractCheck.pass;
         const autoCompleteFromProof =
           Boolean(localResponseProof) &&
           !text.includes('MISSION_STATUS: CONTINUE') &&
@@ -359,14 +527,41 @@ export class MissionRunner {
           });
           return;
         }
-        if (text.includes('MISSION_STATUS: DONE') && !newProof && !localResponseProof) {
+        if (declaredDone && !contractCheck.pass) {
+          mission.contractFailures += 1;
+          mission.log.push({
+            step: mission.step,
+            at: new Date().toISOString(),
+            contractViolation: {
+              contractId: mission.contract?.id || 'generic-proof-v1',
+              violations: contractCheck.violations
+            }
+          });
+        } else {
+          mission.contractFailures = 0;
+        }
+
+        if (declaredDone && !contractCheck.pass) {
           mission.retries += 1;
           this.memoryStore?.recordStrategyOutcome?.({
             goal: mission.goal,
             strategy: 'model_claimed_done_without_proof',
             success: false,
-            evidence: `step=${mission.step}`
+            evidence: `step=${mission.step} violations=${contractCheck.violations.join(',')}`
           });
+          if (mission.contractFailures >= 2 && mission.rollbackAttempts < 1 && this.agent?.runTool) {
+            const rollback = await this.agent.runTool('file_restore_last', {});
+            mission.rollbackAttempts += 1;
+            mission.log.push({
+              step: mission.step,
+              at: new Date().toISOString(),
+              rollbackAttempt: mission.rollbackAttempts,
+              rollback
+            });
+            mission.recoveryHint = rollback?.ok
+              ? 'Rollback executed from local backup. Re-evaluate workspace state and continue with one verified corrective substep.'
+              : 'Rollback attempt failed or no backup found. Continue with corrective substep and regenerate proof.';
+          }
           if (mission.retries > mission.maxRetries) {
             mission.status = 'failed';
             mission.error = 'done_without_proof_retry_exhausted';
@@ -421,10 +616,13 @@ export class MissionRunner {
     const current = this.agent?.getCurrentModel?.();
     const currentProvider = current?.activeProvider || current?.provider || this.config?.model?.provider;
     const currentModel = current?.activeModel || current?.model || this.config?.model?.model || '';
+    const localRuntimeGoal = isLocalRuntimeMission(mission.goal);
+    const cloudController =
+      currentProvider !== 'ollama' ||
+      /cloud|kimi|minimax/.test(String(currentModel).toLowerCase());
     if (
-      isLocalRuntimeMission(mission.goal) &&
-      currentProvider === 'ollama' &&
-      /cloud|kimi|minimax/.test(String(currentModel).toLowerCase()) &&
+      localRuntimeGoal &&
+      cloudController &&
       this.agent?.switchModel
     ) {
       const prev = {
@@ -434,11 +632,11 @@ export class MissionRunner {
       };
       mission.controllerTuning = { previous: prev };
       this.config.runtime.providerRequestTimeoutMs = Math.min(prev.providerRequestTimeoutMs, 45000);
-      this.config.runtime.agentTurnTimeoutMs = Math.min(prev.agentTurnTimeoutMs, 70000);
+      this.config.runtime.agentTurnTimeoutMs = Math.min(prev.agentTurnTimeoutMs, 90000);
       this.config.runtime.maxToolIterations = Math.min(prev.maxToolIterations, 6);
       mission.controllerTuning.turnTimeoutMs = Math.min(
         Math.max(30000, Number(prev.agentTurnTimeoutMs || 70000) + 10000),
-        90000
+        120000
       );
       if (this.agent?.config?.runtime) {
         this.agent.config.runtime.providerRequestTimeoutMs = this.config.runtime.providerRequestTimeoutMs;
@@ -446,7 +644,7 @@ export class MissionRunner {
         this.agent.config.runtime.maxToolIterations = this.config.runtime.maxToolIterations;
       }
       mission.recoveryHint =
-        'Mission is running on a cloud controller for a local-runtime goal. Keep the controller, but work in narrow shell-first substeps, reuse existing local runtimes before creating duplicates, and avoid blocked file-write paths.';
+        'Mission is running on a cloud controller for a local-runtime goal. Keep the controller, but work in narrow shell-first substeps, reuse existing local runtimes before creating duplicates, prefer API/batch verification, and avoid blocked file-write paths.';
       mission.log.push({
         step: 0,
         at: new Date().toISOString(),
@@ -479,7 +677,12 @@ export class MissionRunner {
     const currentModel = current?.activeModel || current?.model || this.config?.model?.model || '';
     const latestReply = String(mission?.lastReply || '');
     const providerFailure = hasProviderFailureSignal(latestReply);
+    const routeStuck = /\bfailed\b|timeout|timed out|error/.test(latestReply.toLowerCase()) &&
+      Number(mission?.noProgressTurns || 0) >= 3;
     if (isLocalRuntimeMission(mission.goal)) {
+      if (routeStuck) {
+        return 'Recovery (adaptive): the current route is stalled. Next turn must use a different execution surface than the last failed one, with one short proof step. If two different surfaces fail in a row, run targeted web research for the exact error, apply one changed attempt, and record the learned fix in CHECKPOINT.';
+      }
       if (providerFailure && currentProvider !== 'ollama' && this.agent?.switchModel) {
         const ollamaModel = this.agent.getModelForProvider
           ? this.agent.getModelForProvider('ollama')

@@ -2,14 +2,17 @@
 
 OpenUnum is an Ubuntu-first autonomous assistant framework focused on high tool reliability, strict model control, and agent-operable runtime behavior.
 
-Current state (2026-03-30):
+Current state (2026-04-02):
 - Web UI with menu/submenu navigation and chat-centered workflow
 - Visible/traceable tool execution from chat (expand/collapse execution traces)
 - Multi-provider model handling with strict primary-provider lock option
+- Model-execution envelopes (`compact` / `balanced` / `full`) to constrain tool/memory exposure for smaller models
+- Autonomous execution-policy engine with self-preservation defaults and local file-restore path (`file_restore_last`)
 - Browser automation via Chrome DevTools Protocol (CDP)
 - Telegram channel loop
 - Mission runner with retry and proof-based completion
-- Persistent self-learning memory from tool outcomes and strategy outcomes
+- Persistent self-learning memory from tool outcomes, strategy outcomes, and route-signature lessons
+- Manual model-behavior controls (override/reset) for operator correction
 - Autonomy mode presets (`standard`, `relentless`)
 - Pending chat handling (`/api/chat` + `/api/chat/pending`) to avoid "stuck loading"
 - Local session history persistence in SQLite until user clicks `New Chat`
@@ -43,6 +46,10 @@ Read in this exact order:
 4. [docs/API_REFERENCE.md](/home/corp-unum/openunum/docs/API_REFERENCE.md)
 5. [docs/AUTONOMY_AND_MEMORY.md](/home/corp-unum/openunum/docs/AUTONOMY_AND_MEMORY.md)
 6. [docs/OPERATIONS_RUNBOOK.md](/home/corp-unum/openunum/docs/OPERATIONS_RUNBOOK.md)
+7. [docs/COMPETITIVE_ANALYSIS_CLAW_CODE.md](/home/corp-unum/openunum/docs/COMPETITIVE_ANALYSIS_CLAW_CODE.md)
+8. [docs/COMPETITIVE_ANALYSIS_OPENAI_CODEX.md](/home/corp-unum/openunum/docs/COMPETITIVE_ANALYSIS_OPENAI_CODEX.md)
+9. [docs/COMPETITIVE_ANALYSIS_GEMINI_CLI.md](/home/corp-unum/openunum/docs/COMPETITIVE_ANALYSIS_GEMINI_CLI.md)
+10. [docs/OPENUNUM_MULTI_MODEL_CONTROLLER_ACTION_PLAN.md](/home/corp-unum/openunum/docs/OPENUNUM_MULTI_MODEL_CONTROLLER_ACTION_PLAN.md)
 
 ## Commands
 

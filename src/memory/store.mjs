@@ -105,6 +105,17 @@ export class MemoryStore {
         updated_at TEXT NOT NULL,
         UNIQUE(provider, model)
       );
+      CREATE TABLE IF NOT EXISTS route_lessons (
+        id INTEGER PRIMARY KEY,
+        session_id TEXT NOT NULL,
+        goal_hint TEXT NOT NULL,
+        route_signature TEXT NOT NULL,
+        surface TEXT NOT NULL,
+        outcome TEXT NOT NULL,
+        error_excerpt TEXT NOT NULL,
+        note TEXT NOT NULL,
+        created_at TEXT NOT NULL
+      );
     `);
   }
 
@@ -475,7 +486,18 @@ export class MemoryStore {
         createdAt: r.created_at
       }));
 
-    return [...facts, ...strategies]
+    const routes = this.db
+      .prepare(
+        'SELECT route_signature, surface, outcome, error_excerpt, note, created_at FROM route_lessons ORDER BY id DESC LIMIT 300'
+      )
+      .all()
+      .map((r) => ({
+        type: 'route',
+        text: `${r.route_signature} | ${r.surface} | ${r.outcome} | ${r.error_excerpt} | ${r.note}`,
+        createdAt: r.created_at
+      }));
+
+    return [...facts, ...strategies, ...routes]
       .map((x) => ({ ...x, score: scoreByOverlap(queryTokens, x.text) }))
       .filter((x) => x.score > 0)
       .sort((a, b) => b.score - a.score)
@@ -572,5 +594,109 @@ export class MemoryStore {
       reasons: JSON.parse(r.reasons_json || '[]'),
       updatedAt: r.updated_at
     }));
+  }
+
+  removeControllerBehavior({ provider, model } = {}) {
+    const p = String(provider || '').trim().toLowerCase();
+    const m = String(model || '').trim().toLowerCase();
+    if (!p || !m) return { ok: false, removed: false, reason: 'provider_and_model_required' };
+    const out = this.db
+      .prepare('DELETE FROM controller_behaviors WHERE provider = ? AND model = ?')
+      .run(p, m);
+    return {
+      ok: true,
+      removed: Number(out?.changes || 0) > 0
+    };
+  }
+
+  clearControllerBehaviors() {
+    const out = this.db
+      .prepare('DELETE FROM controller_behaviors')
+      .run();
+    return {
+      ok: true,
+      removedCount: Number(out?.changes || 0)
+    };
+  }
+
+  recordRouteLesson({
+    sessionId,
+    goal = '',
+    routeSignature,
+    surface = 'tool',
+    success = false,
+    errorExcerpt = '',
+    note = '',
+    createdAt = null
+  }) {
+    const signature = String(routeSignature || '').trim().toLowerCase();
+    if (!signature) return;
+    this.ensureSession(sessionId);
+    this.db
+      .prepare(
+        `INSERT INTO route_lessons
+          (session_id, goal_hint, route_signature, surface, outcome, error_excerpt, note, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+      )
+      .run(
+        String(sessionId || ''),
+        String(goal || '').slice(0, 500),
+        signature.slice(0, 400),
+        String(surface || 'tool').slice(0, 60).toLowerCase(),
+        success ? 'success' : 'failure',
+        String(errorExcerpt || '').slice(0, 300),
+        String(note || '').slice(0, 400),
+        String(createdAt || new Date().toISOString())
+      );
+  }
+
+  getRouteGuidance({ goal = '', limit = 10 } = {}) {
+    const trimmed = String(goal || '').trim();
+    const rows = trimmed
+      ? this.db
+        .prepare(
+          `SELECT
+             route_signature,
+             surface,
+             COUNT(*) AS total,
+             SUM(CASE WHEN outcome = 'success' THEN 1 ELSE 0 END) AS success_count,
+             SUM(CASE WHEN outcome = 'failure' THEN 1 ELSE 0 END) AS failure_count,
+             MAX(created_at) AS last_seen
+           FROM route_lessons
+           WHERE goal_hint LIKE ?
+           GROUP BY route_signature, surface
+           ORDER BY failure_count DESC, success_count DESC, last_seen DESC
+           LIMIT ?`
+        )
+        .all(`%${trimmed}%`, limit)
+      : this.db
+        .prepare(
+          `SELECT
+             route_signature,
+             surface,
+             COUNT(*) AS total,
+             SUM(CASE WHEN outcome = 'success' THEN 1 ELSE 0 END) AS success_count,
+             SUM(CASE WHEN outcome = 'failure' THEN 1 ELSE 0 END) AS failure_count,
+             MAX(created_at) AS last_seen
+           FROM route_lessons
+           GROUP BY route_signature, surface
+           ORDER BY failure_count DESC, success_count DESC, last_seen DESC
+           LIMIT ?`
+        )
+        .all(limit);
+    return rows.map((r) => {
+      const total = Number(r.total || 0);
+      const successCount = Number(r.success_count || 0);
+      const failureCount = Number(r.failure_count || 0);
+      return {
+        routeSignature: r.route_signature,
+        surface: r.surface,
+        total,
+        successCount,
+        failureCount,
+        successRate: total > 0 ? successCount / total : 0,
+        lastSeen: r.last_seen || null
+      };
+    });
   }
 }

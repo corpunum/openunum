@@ -8,7 +8,10 @@ import {
   classifyControllerBehavior,
   getBehaviorRegistrySnapshot,
   hydrateBehaviorRegistry,
-  learnControllerBehavior
+  learnControllerBehavior,
+  listBehaviorClasses,
+  resetAllLearnedBehaviors,
+  resetLearnedBehavior
 } from './model-behavior-registry.mjs';
 import { buildControllerSystemMessage } from './context-pack-builder.mjs';
 import {
@@ -17,6 +20,12 @@ import {
   recoveryDirective,
   shouldForceContinuation
 } from './execution-contract.mjs';
+import { resolveExecutionEnvelope } from './model-execution-envelope.mjs';
+import {
+  classifyProviderFailure,
+  resolveFallbackAction,
+  shouldUseProvider
+} from './provider-fallback-policy.mjs';
 
 function inferParamsB(modelId) {
   const m = String(modelId || '').toLowerCase().match(/(\d+(?:\.\d+)?)b/);
@@ -340,6 +349,7 @@ export class OpenUnumAgent {
       provider: config.model.provider,
       model: config.model.model
     };
+    this.providerAvailability = new Map();
   }
 
   getCurrentModel() {
@@ -361,6 +371,78 @@ export class OpenUnumAgent {
       inMemory,
       persisted
     };
+  }
+
+  getBehaviorClasses() {
+    return listBehaviorClasses();
+  }
+
+  resetControllerBehavior({ provider, model } = {}) {
+    const p = String(provider || '').trim().toLowerCase();
+    const m = String(model || '').trim().toLowerCase();
+    const runtime = resetLearnedBehavior({ provider: p, model: m });
+    const persistedRemoved = this.memoryStore?.removeControllerBehavior
+      ? this.memoryStore.removeControllerBehavior({ provider: p, model: m })
+      : { ok: false, removed: false };
+    return {
+      ok: Boolean(runtime?.ok),
+      provider: p,
+      model: m,
+      runtimeRemoved: Boolean(runtime?.removed),
+      persistedRemoved: Boolean(persistedRemoved?.removed)
+    };
+  }
+
+  resetAllControllerBehaviors() {
+    const runtime = resetAllLearnedBehaviors();
+    const persisted = this.memoryStore?.clearControllerBehaviors
+      ? this.memoryStore.clearControllerBehaviors()
+      : { ok: false, removedCount: 0 };
+    return {
+      ok: Boolean(runtime?.ok),
+      runtimeRemovedCount: Number(runtime?.removedCount || 0),
+      persistedRemovedCount: Number(persisted?.removedCount || 0)
+    };
+  }
+
+  getProviderAvailabilitySnapshot() {
+    const now = Date.now();
+    return [...this.providerAvailability.entries()].map(([provider, row]) => {
+      const blockedUntil = Number(row?.blockedUntil || 0);
+      return {
+        provider,
+        blockedUntil,
+        blockedUntilIso: blockedUntil ? new Date(blockedUntil).toISOString() : null,
+        blocked: blockedUntil > now,
+        lastFailureKind: row?.lastFailureKind || null,
+        lastAction: row?.lastAction || null,
+        lastError: row?.lastError || null,
+        updatedAt: row?.updatedAt || null
+      };
+    });
+  }
+
+  markProviderFailure(provider, { kind, action, cooldownMs = 0, errorMessage = '' } = {}) {
+    const now = Date.now();
+    const blockedUntil = cooldownMs > 0 ? now + Number(cooldownMs) : 0;
+    this.providerAvailability.set(provider, {
+      blockedUntil,
+      lastFailureKind: kind || 'unknown',
+      lastAction: action || 'switch_provider',
+      lastError: String(errorMessage || '').slice(0, 500),
+      updatedAt: new Date(now).toISOString()
+    });
+  }
+
+  clearProviderFailure(provider) {
+    if (!this.providerAvailability.has(provider)) return;
+    this.providerAvailability.set(provider, {
+      blockedUntil: 0,
+      lastFailureKind: null,
+      lastAction: 'success',
+      lastError: null,
+      updatedAt: new Date().toISOString()
+    });
   }
 
   switchModel(provider, model) {
@@ -544,7 +626,10 @@ export class OpenUnumAgent {
     const fallbackEnabled = this.config.model.routing?.fallbackEnabled !== false;
     const fallbacks = fallbackEnabled ? (this.config.model.routing?.fallbackProviders || []) : [];
     const providers = uniq([preferred, ...fallbacks]).filter(Boolean);
-    return providers.map((provider) => ({
+    const now = Date.now();
+    let selected = providers.filter((provider) => shouldUseProvider(this.providerAvailability.get(provider), now));
+    if (!selected.length) selected = [preferred];
+    return selected.map((provider) => ({
       provider,
       model: provider === preferred ? this.config.model.model : this.getModelForProvider(provider)
     }));
@@ -558,6 +643,11 @@ export class OpenUnumAgent {
     routedTools = [],
     contextPackInputs = {}
   }) {
+    const executionEnvelope = resolveExecutionEnvelope({
+      provider,
+      model,
+      runtime: this.config.runtime
+    });
     const behavior = classifyControllerBehavior({ provider, model, config: this.config });
     const executionProfile = mergeProfileWithBehavior(getExecutionProfile(provider, model), behavior, this.config);
     const localRuntimeTask = detectLocalRuntimeTask(messages);
@@ -585,7 +675,13 @@ export class OpenUnumAgent {
       },
       ...messages
     ];
-    const maxIters = executionProfile.maxIters || this.config.runtime?.maxToolIterations || 4;
+    const maxIters = Math.max(
+      1,
+      Math.min(
+        executionProfile.maxIters || this.config.runtime?.maxToolIterations || 4,
+        executionEnvelope.maxToolIterations || this.config.runtime?.maxToolIterations || 4
+      )
+    );
     const baseTurnBudgetMs = executionProfile.turnBudgetMs || this.config.runtime?.agentTurnTimeoutMs || 420000;
     const isCloudController = ['nvidia', 'openrouter', 'openai'].includes(String(provider || '').toLowerCase()) ||
       (String(provider || '').toLowerCase() === 'ollama' && /cloud/.test(String(model || '').toLowerCase()));
@@ -604,10 +700,12 @@ export class OpenUnumAgent {
       behaviorConfidence: behavior.confidence,
       behaviorSource: behavior.source,
       localRuntimeTask,
+      executionEnvelope,
       routedTools,
       iterations: [],
       recoveryUsed: false,
-      permissionDenials: []
+      permissionDenials: [],
+      toolStateTransitions: []
     };
     let forcedContinueCount = 0;
 
@@ -621,7 +719,7 @@ export class OpenUnumAgent {
       }
       const out = await runtimeProvider.chat({
         messages,
-        tools: this.toolRuntime.toolSchemas(),
+        tools: this.toolRuntime.toolSchemas({ allowedTools: executionEnvelope.toolAllowlist }),
         timeoutMs: remainingMs
       });
       const iter = {
@@ -670,6 +768,12 @@ export class OpenUnumAgent {
       }
 
       for (const tc of out.toolCalls) {
+        trace.toolStateTransitions.push({
+          at: new Date().toISOString(),
+          tool: tc.name,
+          state: 'scheduled',
+          step: i + 1
+        });
         const toolRemainingMs = turnBudgetMs - (Date.now() - turnStartedAt);
         if (toolRemainingMs <= 0) {
           trace.timedOut = true;
@@ -680,13 +784,28 @@ export class OpenUnumAgent {
 
         let result;
         try {
+          trace.toolStateTransitions.push({
+            at: new Date().toISOString(),
+            tool: tc.name,
+            state: 'executing',
+            step: i + 1
+          });
           result = await this.toolRuntime.run(tc.name, args, {
             sessionId,
-            deadlineAt: turnStartedAt + turnBudgetMs
+            deadlineAt: turnStartedAt + turnBudgetMs,
+            allowedTools: executionEnvelope.toolAllowlist,
+            policyMode: this.config?.runtime?.autonomyPolicy?.mode || 'execute'
           });
         } catch (error) {
           result = { ok: false, error: String(error.message || error) };
         }
+        trace.toolStateTransitions.push({
+          at: new Date().toISOString(),
+          tool: tc.name,
+          state: result?.ok ? 'success' : 'error',
+          step: i + 1,
+          reason: result?.error || ''
+        });
         if (!result?.ok && ['shell_blocked', 'owner_mode_restricted', 'tool_circuit_open', 'shell_disabled', 'unsafe_xdotool_command'].includes(result?.error)) {
           trace.permissionDenials.push({
             tool: tc.name,
@@ -842,7 +961,12 @@ export class OpenUnumAgent {
         `Configured provider/model: ${configuredLabel}`,
         `Last active provider/model: ${activeLabel}`,
         paramsB ? `Estimated parameter size: ~${paramsB}B (parsed from model id)` : 'Estimated parameter size: unknown from id',
-        'Context window: not guaranteed from runtime config; provider metadata endpoint is the source of truth.'
+        'Context window: not guaranteed from runtime config; provider metadata endpoint is the source of truth.',
+        `Execution tier: ${resolveExecutionEnvelope({
+          provider: this.lastRuntime?.provider || this.config.model.provider,
+          model: this.lastRuntime?.model || this.config.model.model,
+          runtime: this.config.runtime
+        }).tier}`
       ].join('\n');
       this.memoryStore.addMessage(sessionId, 'user', message);
       this.memoryStore.addMessage(sessionId, 'assistant', reply);
@@ -883,9 +1007,15 @@ export class OpenUnumAgent {
       ? this.memoryStore.searchKnowledge(message, 6).map((k, idx) => `${idx + 1}. [${k.type}] ${k.text}`).join('\n')
       : '';
 
-    const rawHistory = this.memoryStore.getMessagesForContext(sessionId, 1200)
-      .map((m) => ({ id: m.id, role: m.role, content: m.content }));
     const modelForBudget = this.getCurrentModel();
+    const sessionEnvelope = resolveExecutionEnvelope({
+      provider: modelForBudget.activeProvider || modelForBudget.provider,
+      model: modelForBudget.activeModel || modelForBudget.model,
+      runtime: this.config.runtime
+    });
+    const historyLimit = Number.isFinite(sessionEnvelope.maxHistoryMessages) ? Number(sessionEnvelope.maxHistoryMessages) : 1200;
+    const rawHistory = this.memoryStore.getMessagesForContext(sessionId, historyLimit)
+      .map((m) => ({ id: m.id, role: m.role, content: m.content }));
     const triggerInfo = buildContextBudgetInfo({
       config: this.config,
       provider: modelForBudget.activeProvider || modelForBudget.provider,
@@ -929,7 +1059,8 @@ export class OpenUnumAgent {
       facts,
       knowledgeHits,
       strategyPrompt,
-      skillPrompt
+      skillPrompt,
+      executionEnvelope: sessionEnvelope
     };
 
     const messages = [
@@ -954,32 +1085,62 @@ export class OpenUnumAgent {
     let trace = null;
 
     for (const attempt of attempts) {
-      try {
-        const run = await this.runOneProviderTurn({
-          provider: attempt.provider,
-          model: attempt.model,
-          messages: [...messages],
-          sessionId,
-          routedTools,
-          contextPackInputs
-        });
-        finalText = run.finalText;
-        trace = run.trace;
-        if (failures.length) trace.providerFailures = [...failures];
-        break;
-      } catch (error) {
-        failures.push(`${attempt.provider}: ${String(error.message || error)}`);
+      let attemptNo = 0;
+      while (attemptNo < 2) {
+        attemptNo += 1;
+        try {
+          const run = await this.runOneProviderTurn({
+            provider: attempt.provider,
+            model: attempt.model,
+            messages: [...messages],
+            sessionId,
+            routedTools,
+            contextPackInputs
+          });
+          this.clearProviderFailure(attempt.provider);
+          finalText = run.finalText;
+          trace = run.trace;
+          if (failures.length) trace.providerFailures = [...failures];
+          break;
+        } catch (error) {
+          const errorMessage = String(error.message || error);
+          const kind = classifyProviderFailure(error);
+          const decision = resolveFallbackAction(kind, attemptNo);
+          this.markProviderFailure(attempt.provider, {
+            kind,
+            action: decision.action,
+            cooldownMs: decision.cooldownMs,
+            errorMessage
+          });
+          failures.push({
+            provider: attempt.provider,
+            model: attempt.model,
+            attempt: attemptNo,
+            kind,
+            action: decision.action,
+            cooldownMs: decision.cooldownMs,
+            error: errorMessage
+          });
+          if (decision.action === 'retry_same_provider' && attemptNo < 2) continue;
+          break;
+        }
       }
+      if (finalText) break;
     }
 
+    const failureLines = failures.map((item) =>
+      `${item.provider}: kind=${item.kind} action=${item.action} error=${item.error}`
+    );
+
     if (!finalText) {
-      finalText = `All configured providers failed.\n${failures.join('\n')}`;
+      finalText = `All configured providers failed.\n${failureLines.join('\n')}`;
       trace = {
         provider: this.config.model.provider,
         model: this.config.model.model,
         routedTools,
         iterations: [],
-        failures,
+        failures: failureLines,
+        providerFailures: failures,
         permissionDenials: [],
         pivotHints: buildPivotHints({
           executedTools: [],

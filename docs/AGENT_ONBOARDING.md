@@ -1,83 +1,139 @@
 # Agent Onboarding
 
-Purpose: let a new coding agent understand OpenUnum quickly and operate safely/effectively.
+Purpose: let a fresh agent become productive in OpenUnum in under 15 minutes, with correct assumptions about routing, credentials, and mission reliability.
 
 ## 1. What OpenUnum Is
 
-OpenUnum is a local-first assistant runtime with:
-- LLM chat + tool calling
-- provider routing (`ollama`, `openrouter`, `nvidia`, generic OpenAI-compatible)
-- browser automation through CDP
-- Telegram channel integration
-- autonomous mission loop with retries
-- persistent memory in SQLite
-- UI trace visibility for tool calls (expand/collapse)
+OpenUnum is a local-first autonomous coding runtime with:
+- model chat + tool calling (`src/core/agent.mjs`, `src/tools/runtime.mjs`)
+- provider routing and fallback control (`ollama`, `nvidia`, `openrouter`, `openai`)
+- browser/CDP automation
+- mission loop with proof-aware completion (`src/core/missions.mjs`)
+- persistent memory/telemetry in SQLite (`src/memory/store.mjs`)
+- operator trace/timeline visibility in WebUI (`src/ui/index.html`)
 
-Primary target OS/runtime: Ubuntu/Linux.
+Primary target: Ubuntu/Linux.
 
-## 2. Current Runtime Invariants
+## 2. Fast Boot (First 15 Minutes)
 
-- HTTP server is in `src/server.mjs`.
-- Default bind: `127.0.0.1:18880`.
-- Config file: `~/.openunum/openunum.json` (or `$OPENUNUM_HOME/openunum.json`).
-- DB file: `~/.openunum/openunum.db`.
-- Log directory: `~/.openunum/logs`.
-- Tool runtime is centralized in `src/tools/runtime.mjs`.
-- Autonomy mission engine is `src/core/missions.mjs`.
-
-## 3. Hard Rules the Code Enforces
-
-- Agent should not claim completion without tool evidence (system prompt behavior).
-- Mission completion is proof-aware: `MISSION_STATUS: DONE` without new successful tool evidence is retried/fails.
-- Optional strict provider lock: `model.routing.forcePrimaryProvider`.
-- Autonomy mode presets can force strict routing and higher retries (`/api/autonomy/mode`).
-
-## 4. Startup / Verification Checklist
-
-1. Install deps:
+1. Install and start:
 ```bash
+cd /home/corp-unum/openunum
 pnpm install
-```
-2. Start server:
-```bash
 node src/server.mjs
 ```
-3. Verify health:
+2. Confirm service liveness:
 ```bash
-curl -sS http://127.0.0.1:18880/api/health
+curl -sS http://127.0.0.1:18880/api/health | jq .
 ```
-4. Verify active model/routing:
+3. Confirm selected model/provider:
 ```bash
-curl -sS http://127.0.0.1:18880/api/config
+curl -sS http://127.0.0.1:18880/api/model/current | jq .
 ```
-5. Run full regression gate:
+4. Confirm provider auth/base-url readiness:
 ```bash
-pnpm e2e
+curl -sS http://127.0.0.1:18880/api/providers/config | jq .
+curl -sS http://127.0.0.1:18880/api/auth/catalog | jq .
+```
+5. Run the current controller/behavior gate:
+```bash
+pnpm -s phase14:e2e
 ```
 
-## 5. Key Operational Modes
+## 3. Runtime Invariants
 
-- `standard` autonomy mode: balanced retries/iterations.
-- `relentless` autonomy mode: increased retries and aggressive persistence, strict primary-provider behavior.
+- Server entry: `src/server.mjs` on `127.0.0.1:18880` by default.
+- Config file: `~/.openunum/openunum.json` (sanitized, non-secret).
+- Secret store: `~/.openunum/secrets.json` (real provider keys/tokens, mode `0600`).
+- DB: `~/.openunum/openunum.db`.
+- Logs: `~/.openunum/logs/*`.
 
-Switch via API:
+## 4. Credential Truth Sources (Critical)
+
+- Do not use `GET /api/config` key fields to infer provider readiness.
+- `GET /api/config` is intentionally scrubbed.
+- Use:
+  - `GET /api/providers/config` for `has*ApiKey` booleans.
+  - `GET /api/auth/catalog` for redacted stored/auth/source state.
+  - `POST /api/auth/prefill-local` to import local provider creds from known sources.
+
+## 5. Mission Controller Rules
+
+- Proof-backed completion is enforced: completion claims without evidence are rejected/retried.
+- Mission completion contracts are explicit and autonomous:
+  - each mission uses a contract id (`local-runtime-proof-v1`, `coding-proof-v1`, or `generic-proof-v1`)
+  - `MISSION_STATUS: DONE` is accepted only when contract checkpoint/proof conditions pass
+- Mission turn watchdog prevents indefinite step hangs during long/blocked provider calls.
+- Local-runtime missions use route-specific recovery hints and provider-aware pivoting.
+- Model execution envelopes are enforced by runtime tier (`compact`/`balanced`/`full`) and can reduce tool exposure/iteration budget for smaller models.
+- Execution policy engine is autonomous-first:
+  - `runtime.autonomyPolicy.mode` controls `plan` vs `execute`
+  - self-protection policy blocks self-destructive shell actions by default
+  - no human confirmation loop is required for normal policy decisions
+- Provider fallback is deterministic and typed:
+  - failures are classified (`timeout`, `network`, `auth`, `not_found`, `quota`, `rate_limited`, `unknown`)
+  - fallback actions are class-driven with provider cooldown windows
+  - inspect `/api/runtime/overview` `providerAvailability` when routing appears constrained
+- Controller behavior classes and learned tuning are tracked/persisted:
+  - `src/core/model-behavior-registry.mjs`
+  - `GET /api/controller/behaviors`
+- Manual behavior controls are available for operator correction:
+  - `GET /api/controller/behavior-classes`
+  - `POST /api/controller/behavior/override`
+  - `POST /api/controller/behavior/override/remove`
+  - `POST /api/controller/behavior/reset`
+  - `POST /api/controller/behavior/reset-all`
+- Mission route-learning is persisted and reused:
+  - route signatures are learned from tool outcomes
+  - repeated failing routes are deprioritized
+  - historically successful routes are hinted early in runtime guidance
+
+## 6. Common Failure Patterns + First Checks
+
+- Mission appears stuck:
+  - check `/api/missions/status?id=...` and `/api/missions/timeline?id=...`
+  - confirm `finishedAt`, `error`, and `recoveryHint` progression
+- Provider seems unavailable:
+  - verify `/api/providers/config` and `/api/auth/catalog`
+  - confirm current runtime model via `/api/model/current`
+- Local model tests are slow or hanging:
+  - inspect live model processes (`ollama ps`, `ps aux | rg ollama`)
+  - avoid interactive-only paths when bounded API checks exist
+- Small model appears to stall or over-call tools:
+  - inspect `/api/runtime/overview` -> `executionEnvelope`
+  - tune `runtime.modelExecutionProfiles` and `runtime.enforceModelExecutionProfiles`
+- Mission keeps claiming done without proof:
+  - inspect `/api/missions/status` and `/api/missions/timeline` contract metadata
+  - OpenUnum can trigger one autonomous rollback via `file_restore_last` when repeated contract failures occur
+
+## 7. Operational Modes
+
+- `standard`: balanced.
+- `relentless`: higher persistence, stronger mission defaults.
+
+Switch:
 ```bash
 curl -sS -X POST http://127.0.0.1:18880/api/autonomy/mode \
   -H 'Content-Type: application/json' \
   -d '{"mode":"relentless"}'
 ```
 
-## 6. What to Read Next (Immediate)
+## 8. Read Next (Required Order)
 
-- [CODEBASE_MAP.md](/home/corp-unum/openunum/docs/CODEBASE_MAP.md)
-- [API_REFERENCE.md](/home/corp-unum/openunum/docs/API_REFERENCE.md)
-- [AUTONOMY_AND_MEMORY.md](/home/corp-unum/openunum/docs/AUTONOMY_AND_MEMORY.md)
+1. [CODEBASE_MAP.md](/home/corp-unum/openunum/docs/CODEBASE_MAP.md)
+2. [API_REFERENCE.md](/home/corp-unum/openunum/docs/API_REFERENCE.md)
+3. [AUTONOMY_AND_MEMORY.md](/home/corp-unum/openunum/docs/AUTONOMY_AND_MEMORY.md)
+4. [MODEL_AWARE_CONTROLLER.md](/home/corp-unum/openunum/docs/MODEL_AWARE_CONTROLLER.md)
+5. [COMPETITIVE_ANALYSIS_CLAW_CODE.md](/home/corp-unum/openunum/docs/COMPETITIVE_ANALYSIS_CLAW_CODE.md)
+6. [COMPETITIVE_ANALYSIS_OPENAI_CODEX.md](/home/corp-unum/openunum/docs/COMPETITIVE_ANALYSIS_OPENAI_CODEX.md)
+7. [COMPETITIVE_ANALYSIS_GEMINI_CLI.md](/home/corp-unum/openunum/docs/COMPETITIVE_ANALYSIS_GEMINI_CLI.md)
+8. [OPENUNUM_MULTI_MODEL_CONTROLLER_ACTION_PLAN.md](/home/corp-unum/openunum/docs/OPENUNUM_MULTI_MODEL_CONTROLLER_ACTION_PLAN.md)
 
-## 7. Common Misdiagnosis to Avoid
+## 9. Misdiagnosis to Avoid
 
-- “Agent said done, so action happened.”
-  - Wrong. Confirm tool results and trace in chat UI or memory tables.
-- “Fallback provider used unexpectedly.”
-  - Check `forcePrimaryProvider`, `fallbackEnabled`, and `fallbackProviders` in config.
-- “Browser is available because port exists.”
-  - CDP endpoint must return `json/version`; launch route checks readiness.
+- "The model said done, so the task is done."
+  - Validate tool outputs and mission proof markers.
+- "No keys in /api/config means no credentials."
+  - Wrong surface; check provider/auth endpoints above.
+- "Fallback happened unexpectedly."
+  - Inspect `model.routing.forcePrimaryProvider`, `fallbackEnabled`, and `fallbackProviders`.

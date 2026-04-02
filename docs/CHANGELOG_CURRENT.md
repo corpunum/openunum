@@ -2,6 +2,35 @@
 
 Date: 2026-04-02
 
+## Adaptive Reliability + Operator Controls
+
+0. Removed runtime-specific hardcoded recovery and generalized mission adaptation:
+   - stalled missions now enforce route pivoting by execution surface instead of banning specific runtimes
+   - repeated multi-surface failures now trigger explicit web-research fallback guidance for alternative routes
+   - recovery directive now records changed-attempt requirement before retry
+
+1. Added persistent route-signature learning loop:
+   - new `route_lessons` persistence in SQLite
+   - mission runner now records per-route success/failure signatures from tool deltas each turn
+   - runtime hints now include historical route guidance (known failing routes, known reliable routes)
+   - route lessons are now included in memory knowledge search
+
+2. Added manual controller-behavior controls to avoid silent throttling from misclassification:
+   - new `GET /api/controller/behavior-classes`
+   - new `POST /api/controller/behavior/override`
+   - new `POST /api/controller/behavior/override/remove`
+   - new `POST /api/controller/behavior/reset`
+   - new `POST /api/controller/behavior/reset-all`
+   - learned behavior reset now clears both runtime in-memory state and persisted SQLite rows
+
+3. Hardened Ollama provider not-found recovery:
+   - when a configured Ollama model is missing, provider now discovers local tags and retries with a best-fit fallback model
+   - fallback retry failures are now surfaced explicitly for deterministic recovery decisions
+
+4. Fixed mission contract false-negatives for local runtime proof:
+   - local proof detection now recognizes successful `http_request` verification against local runtime APIs (`/api/generate`, `/api/chat`)
+   - missions with valid API proof now complete cleanly instead of looping on `missing_local_runtime_proof`
+
 ## Reliability + Docs Clarification Pass
 
 0. Hardened mission lifecycle against long-hanging controller turns:
@@ -18,6 +47,72 @@ Date: 2026-04-02
    - documented `GET /api/providers/config` as readiness surface (`has*ApiKey`)
    - documented `GET /api/auth/catalog` as redacted auth/source surface
    - documented `POST /api/auth/prefill-local` as local secret scan/import path
+
+3. Upgraded agent onboarding docs for faster operator bring-up:
+   - rewrote `docs/AGENT_ONBOARDING.md` with a 15-minute boot sequence
+   - corrected credential verification flow to provider/auth endpoints
+   - added mission/controller troubleshooting first-check sequence
+
+4. Added competitive teardown reference from provided Claw Code source archive:
+   - new `docs/COMPETITIVE_ANALYSIS_CLAW_CODE.md`
+   - captures concrete deltas in prompt packing, tool-call translation, retry policy, hook pipeline, and bounded sub-agent execution
+
+5. Added competitive teardown reference for OpenAI Codex source:
+   - new `docs/COMPETITIVE_ANALYSIS_OPENAI_CODEX.md`
+   - captures concrete deltas in policy engine shape, session recovery contracts, hook payload normalization, and fail-then-continue reliability testing
+
+6. Added competitive teardown reference for Google Gemini CLI source:
+   - new `docs/COMPETITIVE_ANALYSIS_GEMINI_CLI.md`
+   - captures concrete deltas in scheduler state orchestration, mode-aware policy engine, plan-mode restrictions, hook interception, and failure-class fallback handling
+
+7. Added consolidated controller roadmap:
+   - new `docs/OPENUNUM_MULTI_MODEL_CONTROLLER_ACTION_PLAN.md`
+   - merges Claw/Codex/Gemini reliability patterns into a phased OpenUnum implementation sequence with acceptance gates and a cross-provider test matrix
+
+8. Added model-execution envelope enforcement for lightweight-model reliability:
+   - new `src/core/model-execution-envelope.mjs`
+   - runtime now infers `compact`/`balanced`/`full` execution tier per active provider/model
+   - compact tiers can receive backend-enforced tool allowlists and lower turn iteration budgets
+   - context-history fetch in agent loop now scales by execution envelope (`maxHistoryMessages`)
+
+9. Hardened backend tool gating for profile-aware operation:
+   - `src/tools/runtime.mjs` now supports tool-schema filtering by allowlist
+   - tool execution now returns explicit `model_profile_tool_restricted` when an out-of-profile tool is called
+   - controller passes per-turn allowed tool set into runtime execution context
+
+10. Improved frontend/backend dynamic wiring for provider/model control:
+   - capabilities payload now exposes dynamic provider order and auth-service ids
+   - WebUI now hydrates provider and service lists from runtime capabilities/catalog instead of static arrays
+   - fallback model handling now strips provider prefixes dynamically (no hardcoded provider regex dependency)
+   - runtime overview now surfaces active execution envelope tier and limits
+
+11. Added autonomous execution-policy engine with self-preservation defaults:
+   - new `src/core/execution-policy-engine.mjs`
+   - centralized policy decisions now support `plan` vs `execute` mode without requiring human approval prompts
+   - shell self-destruct patterns are blocked by policy (`pkill/killall openunum/node`, `systemctl stop openunum`, hard reset/clean patterns, destructive repo wipe forms)
+
+12. Added local restoration path for self-modifying file operations:
+   - `file_write` and `file_patch` now create local backups in `~/.openunum/backups`
+   - new tool `file_restore_last` restores the latest backup (optionally by path)
+
+13. Added typed provider-failure classification and deterministic fallback actions:
+   - new `src/core/provider-fallback-policy.mjs`
+   - failures are now classified (`timeout`, `network`, `auth`, `not_found`, `quota`, `rate_limited`, `unknown`)
+   - controller uses per-class policy (`retry_same_provider` vs `switch_provider` with cooldown)
+   - provider cooldown state is tracked in-agent to avoid route thrashing
+
+14. Exposed provider availability/cooldown status in runtime overview:
+   - `/api/runtime/overview` now includes `providerAvailability`
+   - WebUI runtime summary now surfaces provider cooldown/failure-kind metadata
+
+15. Added explicit mission completion contracts with autonomous enforcement:
+   - missions now infer a contract (`local-runtime-proof-v1`, `coding-proof-v1`, or `generic-proof-v1`)
+   - `MISSION_STATUS: DONE` is accepted only when contract proof/checkpoint requirements pass
+   - contract violations are recorded in mission logs and status payloads
+
+16. Added autonomous rollback strategy when proof/contract failures repeat:
+   - repeated DONE-without-contract-proof now triggers one automatic `file_restore_last` attempt
+   - rollback result and attempt count are persisted in mission timeline/status metadata
 
 Date: 2026-04-01
 

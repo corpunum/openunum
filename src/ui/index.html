@@ -917,8 +917,8 @@
       'missions': ['Missions', 'Autonomous execution loops']
     };
 
-    const MODEL_PROVIDER_IDS = ['ollama', 'nvidia', 'openrouter', 'openai'];
-    const SERVICE_PROVIDER_IDS = ['github', 'google-workspace', 'huggingface', 'elevenlabs', 'telegram', 'openai-oauth', 'github-copilot'];
+    let MODEL_PROVIDER_IDS = ['ollama', 'nvidia', 'openrouter', 'openai'];
+    let SERVICE_PROVIDER_IDS = ['github', 'google-workspace', 'huggingface', 'elevenlabs', 'telegram', 'openai-oauth', 'github-copilot'];
     const SERVICE_SECRET_FIELD = {
       github: 'githubToken',
       'google-workspace': '',
@@ -1471,6 +1471,51 @@
       return `${p}/${m}`;
     }
 
+    function stripProviderPrefix(modelRef) {
+      const value = String(modelRef || '').trim();
+      if (!value) return '';
+      for (const provider of ['generic', ...MODEL_PROVIDER_IDS]) {
+        const prefix = `${provider}/`;
+        if (value.startsWith(prefix)) return value.slice(prefix.length);
+      }
+      return value;
+    }
+
+    async function refreshCapabilities() {
+      const caps = await jget('/api/capabilities');
+      const providers = Array.isArray(caps?.provider_order) ? caps.provider_order : [];
+      const services = Array.isArray(caps?.services) ? caps.services : [];
+      if (providers.length) {
+        MODEL_PROVIDER_IDS = [...new Set(providers.map((p) => String(p || '').trim()).filter(Boolean))];
+      }
+      if (services.length) {
+        SERVICE_PROVIDER_IDS = [...new Set(services.map((s) => String(s || '').trim()).filter(Boolean))];
+      }
+      renderProviderSelectors();
+      normalizeHiddenRows();
+      refreshAddRowSelectors();
+      return caps;
+    }
+
+    function renderProviderSelectors() {
+      const providerSelect = q('provider');
+      const fallbackSelect = q('fallbackProviderPicker');
+      if (providerSelect) {
+        const selected = providerSelect.value;
+        providerSelect.innerHTML = MODEL_PROVIDER_IDS
+          .map((provider) => `<option value="${provider}">${provider}</option>`)
+          .join('');
+        setSelectByValueOrFirst('provider', selected || MODEL_PROVIDER_IDS[0] || '');
+      }
+      if (fallbackSelect) {
+        const selected = fallbackSelect.value;
+        fallbackSelect.innerHTML = '<option value="">Select provider</option>' + MODEL_PROVIDER_IDS
+          .map((provider) => `<option value="${provider}">${provider}</option>`)
+          .join('');
+        if (selected) fallbackSelect.value = selected;
+      }
+    }
+
     function formatPct(value) {
       const num = Number(value);
       if (!Number.isFinite(num)) return '-';
@@ -1836,6 +1881,19 @@
 
     async function refreshAuthCatalog() {
       authCatalog = await jget('/api/auth/catalog');
+      const providerIds = Array.isArray(authCatalog?.provider_order)
+        ? authCatalog.provider_order
+        : (authCatalog?.providers || []).map((row) => row.provider);
+      if (providerIds?.length) {
+        MODEL_PROVIDER_IDS = [...new Set(providerIds.map((id) => String(id || '').trim()).filter(Boolean))];
+      }
+      const serviceIds = (authCatalog?.auth_targets || authCatalog?.auth_methods || [])
+        .map((row) => String(row?.id || '').trim())
+        .filter(Boolean);
+      if (serviceIds.length) {
+        SERVICE_PROVIDER_IDS = [...new Set(serviceIds)];
+      }
+      renderProviderSelectors();
       normalizeHiddenRows();
       refreshAddRowSelectors();
       renderProviderMatrix(authCatalog.providers || []);
@@ -2007,10 +2065,20 @@
         : (git.error || 'git unavailable');
 
       const degraded = (runtimeOverview.providers || []).filter((p) => p.status !== 'healthy');
+      const envelope = runtimeOverview.executionEnvelope || {};
+      const policy = runtimeOverview.autonomyPolicy || {};
+      const unavailableProviders = (runtimeOverview.providerAvailability || []).filter((row) => row.blocked);
       q('runtimeProviderValue').textContent = degraded.length ? `${degraded.length} degraded` : 'healthy';
       q('runtimeProviderMeta').textContent = (runtimeOverview.providers || [])
         .map((p) => `${p.provider}:${p.status}`)
         .join(' | ') || 'No providers';
+      if (envelope.tier) {
+        q('runtimeProviderMeta').textContent += ` | envelope=${envelope.tier} tools=${Array.isArray(envelope.toolAllowlist) ? envelope.toolAllowlist.length : 'all'} maxIters=${envelope.maxToolIterations || '-'}`;
+      }
+      q('runtimeProviderMeta').textContent += ` | policy=${policy.mode || 'execute'} selfProtect=${policy.enforceSelfProtection !== false ? 'on' : 'off'}`;
+      if (unavailableProviders.length) {
+        q('runtimeProviderMeta').textContent += ` | cooldown=${unavailableProviders.map((row) => `${row.provider}:${row.lastFailureKind || 'unknown'}`).join(',')}`;
+      }
 
       const browserInfo = runtimeOverview.browser || {};
       q('browserHealthValue').textContent = browserInfo.ok ? 'Connected' : 'Degraded';
@@ -2129,8 +2197,9 @@
           opt.textContent = `${rank} ${modelId} | score=${score} | ctx=${ctx}`;
           list.appendChild(opt);
         }
-        if (currentModel && models.some((m) => (m.model_id || m.id) === currentModel.replace(/^(ollama|nvidia|openrouter|openai|generic)\//, ''))) {
-          list.value = currentModel.replace(/^(ollama|nvidia|openrouter|openai|generic)\//, '');
+        const normalizedCurrentModel = stripProviderPrefix(currentModel);
+        if (normalizedCurrentModel && models.some((m) => (m.model_id || m.id) === normalizedCurrentModel)) {
+          list.value = normalizedCurrentModel;
         }
         q('modelCatalogStatus').textContent = `loaded ${models.length} ${provider} models`;
       } catch (error) {
@@ -2148,7 +2217,7 @@
         .filter((provider) => provider && provider !== c.model?.provider)
         .map((provider) => ({
           provider,
-          model: c.model?.providerModels?.[provider]?.replace(/^(ollama|nvidia|openrouter|openai)\//, '') || preferredModelForProvider(provider)
+          model: stripProviderPrefix(c.model?.providerModels?.[provider]) || preferredModelForProvider(provider)
         }));
       renderFallbackSequence();
       q('runtimeStatus').textContent =
@@ -2607,6 +2676,7 @@
       try {
         showView('chat');
         await ensureSessionExists(sessionId);
+        await refreshCapabilities();
         await refreshModel();
         await refreshRuntime();
         await refreshProviderConfig();

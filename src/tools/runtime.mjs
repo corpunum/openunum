@@ -1,10 +1,13 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import os from 'node:os';
+import crypto from 'node:crypto';
 import { CDPBrowser } from '../browser/cdp.mjs';
 import { ExecutorDaemon } from './executor-daemon.mjs';
 import { SkillManager } from '../skills/manager.mjs';
 import { GoogleWorkspaceClient } from './google-workspace.mjs';
 import { ResearchManager } from '../research/manager.mjs';
+import { ExecutionPolicyEngine } from '../core/execution-policy-engine.mjs';
 
 function resolveWorkspaceRoot(config) {
   const raw = String(config?.runtime?.workspaceRoot || process.env.OPENUNUM_WORKSPACE || process.cwd());
@@ -153,10 +156,14 @@ export class ToolRuntime {
       retryAttempts: config.runtime?.executorRetryAttempts ?? 3,
       retryBackoffMs: config.runtime?.executorRetryBackoffMs ?? 700
     });
+    this.policyEngine = new ExecutionPolicyEngine(config.runtime || {});
+    this.backupRoot = path.join(os.homedir(), '.openunum', 'backups');
+    this.backupIndex = [];
+    fs.mkdirSync(this.backupRoot, { recursive: true });
   }
 
-  toolSchemas() {
-    return [
+  toolSchemas(options = {}) {
+    const schemas = [
       {
         type: 'function',
         function: {
@@ -190,6 +197,17 @@ export class ToolRuntime {
               replace: { type: 'string' }
             },
             required: ['path', 'find', 'replace']
+          }
+        }
+      },
+      {
+        type: 'function',
+        function: {
+          name: 'file_restore_last',
+          description: 'Restore the last backed-up file mutation (optionally for a specific path)',
+          parameters: {
+            type: 'object',
+            properties: { path: { type: 'string' } }
           }
         }
       },
@@ -480,6 +498,55 @@ export class ToolRuntime {
         }
       }
     ];
+    const allowedTools = Array.isArray(options?.allowedTools) ? options.allowedTools : null;
+    if (!allowedTools || !allowedTools.length) return schemas;
+    const allow = new Set(allowedTools.map((name) => String(name || '').trim()).filter(Boolean));
+    return schemas.filter((schema) => allow.has(String(schema?.function?.name || '')));
+  }
+
+  isToolAllowed(toolName, context = {}) {
+    const list = Array.isArray(context?.allowedTools) ? context.allowedTools : null;
+    if (!list || !list.length) return true;
+    const allow = new Set(list.map((name) => String(name || '').trim()).filter(Boolean));
+    return allow.has(String(toolName || '').trim());
+  }
+
+  evaluatePolicy(toolName, args, context = {}) {
+    return this.policyEngine.evaluate({ toolName, args, context });
+  }
+
+  createFileBackup(targetPath, originalContent = '') {
+    const entry = {
+      id: crypto.randomUUID(),
+      path: String(targetPath || ''),
+      content: String(originalContent || ''),
+      createdAt: new Date().toISOString()
+    };
+    const filePath = path.join(this.backupRoot, `${entry.createdAt.replace(/[:.]/g, '-')}-${entry.id}.json`);
+    fs.writeFileSync(filePath, JSON.stringify(entry), 'utf8');
+    this.backupIndex.push({ ...entry, filePath });
+    if (this.backupIndex.length > 200) this.backupIndex = this.backupIndex.slice(-200);
+    return { ...entry, filePath };
+  }
+
+  restoreLastBackup(targetPath = '') {
+    const target = String(targetPath || '').trim();
+    const candidate = [...this.backupIndex].reverse().find((item) => {
+      if (!item?.path) return false;
+      if (!target) return true;
+      return item.path === target;
+    });
+    if (!candidate) {
+      return { ok: false, error: 'backup_not_found', stderr: 'No matching backup was found.' };
+    }
+    fs.mkdirSync(path.dirname(candidate.path), { recursive: true });
+    fs.writeFileSync(candidate.path, candidate.content || '', 'utf8');
+    return {
+      ok: true,
+      path: candidate.path,
+      backupId: candidate.id,
+      restoredAt: new Date().toISOString()
+    };
   }
 
   logRun(context, toolName, args, result) {
@@ -540,6 +607,26 @@ export class ToolRuntime {
   }
 
   async run(name, args, context = {}) {
+    const policy = this.evaluatePolicy(name, args, context);
+    if (!policy.allow) {
+      const out = {
+        ok: false,
+        error: 'policy_denied',
+        policyReason: policy.reason,
+        stderr: policy.details || `Tool ${name} denied by execution policy.`
+      };
+      this.logRun(context, name, args, out);
+      return out;
+    }
+    if (!this.isToolAllowed(name, context)) {
+      const out = {
+        ok: false,
+        error: 'model_profile_tool_restricted',
+        stderr: `Tool ${name} is restricted by the active model execution profile.`
+      };
+      this.logRun(context, name, args, out);
+      return out;
+    }
     const circuit = this.canExecuteTool(name);
     if (!circuit.ok) {
       const out = { ok: false, error: circuit.error, ...circuit.details };
@@ -590,6 +677,10 @@ export class ToolRuntime {
       const budgetError = ensureBudget();
       if (budgetError) return budgetError;
       const p = safePath(args.path, this.workspaceRoot);
+      if (fs.existsSync(p)) {
+        const original = fs.readFileSync(p, 'utf8');
+        this.createFileBackup(p, original);
+      }
       fs.mkdirSync(path.dirname(p), { recursive: true });
       fs.writeFileSync(p, args.content, 'utf8');
       return { ok: true, path: p, bytes: Buffer.byteLength(args.content, 'utf8') };
@@ -599,9 +690,16 @@ export class ToolRuntime {
       if (budgetError) return budgetError;
       const p = safePath(args.path, this.workspaceRoot);
       const original = fs.readFileSync(p, 'utf8');
+      this.createFileBackup(p, original);
       const patched = applySimplePatch(original, args.find, args.replace);
       fs.writeFileSync(p, patched, 'utf8');
       return { ok: true, path: p };
+    }
+    if (name === 'file_restore_last') {
+      const budgetError = ensureBudget();
+      if (budgetError) return budgetError;
+      const target = args?.path ? safePath(args.path, this.workspaceRoot) : '';
+      return this.restoreLastBackup(target);
     }
     if (name === 'shell_run') {
       const budgetError = ensureBudget();

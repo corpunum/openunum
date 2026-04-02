@@ -67,6 +67,7 @@ DB file: `~/.openunum/openunum.db`
 - `facts`: user-remembered facts
 - `tool_runs`: every tool invocation with args/result + success flag
 - `strategy_outcomes`: success/failure outcomes linked to goal/strategy
+- `route_lessons`: learned execution-route signatures with per-run success/failure outcomes
 
 ## 5. Strategy Reuse
 
@@ -76,6 +77,13 @@ Effect:
 - biases toward previously successful approaches
 - warns against recently failing approaches
 - improves autonomous retry quality over time
+
+Mission execution now also learns route-level reliability:
+- route signatures are derived from recent tool deltas (e.g., shell command family, HTTP method+path)
+- outcomes are persisted to `route_lessons`
+- runtime hints can recommend:
+  - avoid routes with repeated failures and no successes
+  - prioritize historically reliable routes early
 
 ## 6. Executor Behavior
 
@@ -105,3 +113,13 @@ For maximum persistence:
 - keep `shellEnabled=true`
 - use strict provider lock if model consistency is critical
 - increase mission `hardStepCap` for long workflows
+
+## 9. Behavior Learning Controls
+
+To correct model behavior misclassification quickly:
+- inspect learned behavior: `GET /api/controller/behaviors`
+- inspect available behavior classes: `GET /api/controller/behavior-classes`
+- set per-model override: `POST /api/controller/behavior/override`
+- remove override: `POST /api/controller/behavior/override/remove`
+- reset learned state for one model: `POST /api/controller/behavior/reset`
+- reset all learned state: `POST /api/controller/behavior/reset-all`

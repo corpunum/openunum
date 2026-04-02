@@ -101,6 +101,43 @@ export function defaultConfig() {
       missionDefaultHardStepCap: 120,
       missionDefaultMaxRetries: 3,
       missionDefaultIntervalMs: 400,
+      enforceModelExecutionProfiles: true,
+      autonomyPolicy: {
+        enabled: true,
+        mode: 'execute',
+        enforceSelfProtection: true,
+        blockShellSelfDestruct: true,
+        denyMutatingToolsInPlan: true,
+        allowRecoveryToolsInPlan: true
+      },
+      modelExecutionProfiles: {
+        compact: {
+          maxHistoryMessages: 220,
+          maxToolIterations: 3,
+          allowedTools: [
+            'file_read',
+            'file_restore_last',
+            'shell_run',
+            'http_request',
+            'browser_status',
+            'browser_extract',
+            'browser_snapshot',
+            'skill_list',
+            'email_status',
+            'research_list_recent'
+          ]
+        },
+        balanced: {
+          maxHistoryMessages: 520,
+          maxToolIterations: 5,
+          allowedTools: []
+        },
+        full: {
+          maxHistoryMessages: 1200,
+          maxToolIterations: 8,
+          allowedTools: []
+        }
+      },
       autonomyMasterAutoStart: false,
       researchDailyEnabled: false,
       researchScheduleHour: 3

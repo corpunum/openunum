@@ -10,6 +10,7 @@ export function buildControllerSystemMessage({
   provider,
   model,
   routedTools = [],
+  executionEnvelope = null,
   facts = '',
   knowledgeHits = '',
   strategyPrompt = '',
@@ -54,6 +55,9 @@ export function buildControllerSystemMessage({
     `Owner control mode: ${ownerMode}.`,
     routeHints,
     behaviorBlock,
+    executionEnvelope
+      ? `Model execution envelope: tier=${executionEnvelope.tier} maxHistoryMessages=${executionEnvelope.maxHistoryMessages} maxToolIterations=${executionEnvelope.maxToolIterations} toolAllowlist=${Array.isArray(executionEnvelope.toolAllowlist) ? executionEnvelope.toolAllowlist.join(', ') : 'all'}.`
+      : '',
     linesFromList(`Execution profile: ${executionProfile.name} guidance`, executionProfile.guidance || []),
     linesFromList('Execution guardrails', executionProfile.guardrails || []),
     linesFromList('Execution verification', executionProfile.verificationHints || []),

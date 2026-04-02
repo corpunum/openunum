@@ -94,6 +94,11 @@ Returns:
 - `GET /api/runtime/overview`
 - `GET /api/autonomy/insights?sessionId=...&goal=...`
 - `GET /api/controller/behaviors?limit=80`
+- `GET /api/controller/behavior-classes`
+- `POST /api/controller/behavior/override`
+- `POST /api/controller/behavior/override/remove`
+- `POST /api/controller/behavior/reset`
+- `POST /api/controller/behavior/reset-all`
 - `GET /api/missions/timeline?id=...`
 
 Returns a WebUI-oriented flagship summary:
@@ -118,6 +123,45 @@ Returns a WebUI-oriented flagship summary:
 - `behaviors.hydrated`
 - `behaviors.inMemory[]`
 - `behaviors.persisted[]`
+
+`GET /api/controller/behavior-classes` returns:
+- `classes[]` with:
+  - `classId`
+  - `description`
+  - `tuning`
+  - `needs`
+
+`POST /api/controller/behavior/override` payload:
+```json
+{
+  "provider": "nvidia",
+  "model": "meta/llama-3.1-405b-instruct",
+  "classId": "tool_native_strict",
+  "tuning": { "maxIters": 4 },
+  "needs": {}
+}
+```
+
+`POST /api/controller/behavior/override/remove` payload:
+```json
+{
+  "provider": "nvidia",
+  "model": "meta/llama-3.1-405b-instruct"
+}
+```
+
+`POST /api/controller/behavior/reset` payload:
+```json
+{
+  "provider": "nvidia",
+  "model": "meta/llama-3.1-405b-instruct"
+}
+```
+
+`POST /api/controller/behavior/reset-all` payload:
+```json
+{}
+```
 
 `GET /api/missions/timeline` returns:
 - `mission`

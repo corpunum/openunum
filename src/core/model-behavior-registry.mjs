@@ -134,6 +134,30 @@ export function getBehaviorRegistrySnapshot(limit = 40) {
   return rows.slice(0, limit);
 }
 
+export function listBehaviorClasses() {
+  return Object.values(BEHAVIOR_CLASSES).map((entry) => ({
+    classId: entry.classId,
+    description: entry.description,
+    tuning: { ...(entry.tuning || {}) },
+    needs: { ...(entry.needs || {}) }
+  }));
+}
+
+export function resetLearnedBehavior({ provider, model } = {}) {
+  const p = String(provider || '').trim().toLowerCase();
+  const m = String(model || '').trim().toLowerCase();
+  if (!p || !m) return { ok: false, removed: false, reason: 'provider_and_model_required' };
+  const key = modelKey(p, m);
+  const removed = registry.delete(key);
+  return { ok: true, removed, key };
+}
+
+export function resetAllLearnedBehaviors() {
+  const count = registry.size;
+  registry.clear();
+  return { ok: true, removedCount: count };
+}
+
 export function hydrateBehaviorRegistry(rows = []) {
   for (const row of Array.isArray(rows) ? rows : []) {
     const provider = String(row?.provider || '').toLowerCase();

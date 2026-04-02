@@ -97,5 +97,11 @@ Provider and integration credentials are stored separately from `openunum.json`:
 - `src/config.mjs` migrates legacy provider and Telegram secrets out of `openunum.json` into `secrets.json` on load.
 - `GET /api/config` returns sanitized config only; use `GET /api/providers/config` for `has*ApiKey` booleans and `GET /api/auth/catalog` for redacted auth status.
 - `model.behaviorOverrides` can pin behavior classes/tuning per provider (`"ollama"`) or exact provider-model key (`"ollama::ollama/qwen3.5:9b-64k"`).
+- Behavior overrides and learned behavior resets can be managed via:
+  - `GET /api/controller/behavior-classes`
+  - `POST /api/controller/behavior/override`
+  - `POST /api/controller/behavior/override/remove`
+  - `POST /api/controller/behavior/reset`
+  - `POST /api/controller/behavior/reset-all`
 - New fields should always be added to defaults + merged in `withDefaults(...)`.
 - Runtime/API updates should call `agent.reloadTools()` when tool behavior may change.
