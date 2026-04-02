@@ -557,6 +557,7 @@ Email support is now implemented via native Google OAuth credentials stored in `
 ## Session History
 
 - `GET /api/sessions/:sessionId`
+- `GET /api/sessions/:sessionId?html=false` (Skips server-side Markdown rendering for client-side performance)
 - `GET /api/sessions/:sessionId/activity?since=<ISO8601>`
 
 Activity response includes:

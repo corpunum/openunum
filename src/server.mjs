@@ -1085,7 +1085,10 @@ function noCacheHeaders(contentType) {
     'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
     'Pragma': 'no-cache',
     'Expires': '0',
-    'Surrogate-Control': 'no-store'
+    'Surrogate-Control': 'no-store',
+    'Access-Control-Allow-Origin': '*',
+    'Access-Control-Allow-Methods': 'GET, POST, OPTIONS, PUT, DELETE, PATCH',
+    'Access-Control-Allow-Headers': 'Content-Type, Authorization'
   };
 }
 
@@ -1254,6 +1257,12 @@ function prunePendingChats({ keepSessionId = '' } = {}) {
 const server = http.createServer(async (req, res) => {
   try {
     const url = new URL(req.url || '/', `http://${req.headers.host || '127.0.0.1'}`);
+
+    if (req.method === 'OPTIONS') {
+      res.writeHead(204, noCacheHeaders('text/plain'));
+      res.end();
+      return;
+    }
 
     if (req.method === 'GET' && (url.pathname === '/health' || url.pathname === '/api/health')) {
       const health = await runHealthCheck();
@@ -2153,10 +2162,11 @@ const server = http.createServer(async (req, res) => {
         });
       }
       const sessionId = decodeURIComponent(url.pathname.split('/').pop() || '');
-      const msgs = memory.getMessages(sessionId || '', 100)
+      const skipHtml = url.searchParams.get('html') === 'false';
+      const msgs = memory.getMessages(sessionId || '', 500)
         .map((m) => ({
           ...m,
-          html: m.role === 'assistant' ? renderReplyHtml(m.content || '') : null
+          html: (!skipHtml && m.role === 'assistant') ? renderReplyHtml(m.content || '') : null
         }));
       return sendJson(res, 200, { sessionId, messages: msgs });
     }

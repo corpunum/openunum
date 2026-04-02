@@ -30,7 +30,8 @@ node src/server.mjs
 ```
 
 3. Open Web UI:
-- http://127.0.0.1:18880
+- http://127.0.0.1:18880 (Classic Control UI)
+- http://127.0.0.1:19928 (NextGen Glassmorphism UI - Mobile Friendly)
 
 4. Optional full test gate:
 ```bash

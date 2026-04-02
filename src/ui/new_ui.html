@@ -1,0 +1,1061 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OpenUnum | NextGen</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700&display=swap');
+        
+        :root {
+            --bg-dark: #050810;
+            --accent-blue: #3b82f6;
+            --glass: rgba(15, 23, 42, 0.7);
+            --glass-border: rgba(255, 255, 255, 0.1);
+        }
+
+        body {
+            font-family: 'Plus Jakarta Sans', sans-serif;
+            background-color: var(--bg-dark);
+            color: #f8fafc;
+            overflow-x: hidden;
+        }
+
+        .glass {
+            background: var(--glass);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid var(--glass-border);
+        }
+
+        .glass-hover:hover {
+            background: rgba(30, 41, 59, 0.8);
+            border-color: rgba(59, 130, 246, 0.4);
+        }
+
+        .active-link {
+            background: rgba(59, 130, 246, 0.15);
+            border-left: 3px solid var(--accent-blue);
+            color: #60a5fa;
+        }
+
+        .chat-container::-webkit-scrollbar {
+            width: 4px;
+        }
+        .chat-container::-webkit-scrollbar-thumb {
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 10px;
+        }
+
+        .typing-indicator span {
+            display: inline-block;
+            width: 6px;
+            height: 6px;
+            background-color: #94a3b8;
+            border-radius: 50%;
+            margin-right: 3px;
+            animation: bounce 1.4s infinite ease-in-out both;
+        }
+
+        .typing-indicator span:nth-child(1) { animation-delay: -0.32s; }
+        .typing-indicator span:nth-child(2) { animation-delay: -0.16s; }
+
+        @keyframes bounce {
+            0%, 80%, 100% { transform: scale(0); }
+            40% { transform: scale(1.0); }
+        }
+
+        /* Mobile specific adjustments */
+        @media (max-width: 768px) {
+            .sidebar { transform: translateX(-100%); transition: transform 0.3s ease; }
+            .sidebar.open { transform: translateX(0); }
+        }
+    </style>
+</head>
+<body class="flex h-screen overflow-hidden">
+    
+    <!-- Sidebar -->
+    <aside id="sidebar" class="sidebar fixed md:relative z-40 w-72 h-full glass border-r border-slate-800 flex flex-col shrink-0">
+        <div class="p-6 flex items-center justify-between">
+            <div class="flex items-center gap-3">
+                <div class="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center shadow-lg shadow-blue-500/20">
+                    <i data-lucide="zap" class="w-5 h-5 text-white"></i>
+                </div>
+                <h1 class="text-xl font-bold tracking-tight">OpenUnum</h1>
+            </div>
+            <button onclick="toggleSidebar()" class="md:hidden text-slate-400">
+                <i data-lucide="x" class="w-6 h-6"></i>
+            </button>
+        </div>
+
+        <nav class="flex-1 px-4 space-y-1 overflow-y-auto chat-container">
+            <div class="text-[10px] font-bold text-slate-500 uppercase tracking-widest px-3 mb-2 mt-4">Core</div>
+            <a href="#" onclick="showSection('chat')" class="flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all glass-hover text-slate-300 nav-link active-link" data-section="chat">
+                <i data-lucide="message-square" class="w-4 h-4"></i>
+                <span class="text-sm font-medium">Chat Terminal</span>
+            </a>
+            <a href="#" onclick="showSection('missions')" class="flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all glass-hover text-slate-300 nav-link" data-section="missions">
+                <i data-lucide="target" class="w-4 h-4"></i>
+                <span class="text-sm font-medium">Autonomous Missions</span>
+            </a>
+
+            <div class="text-[10px] font-bold text-slate-500 uppercase tracking-widest px-3 mb-2 mt-8">Intelligence</div>
+            <a href="#" onclick="showSection('models')" class="flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all glass-hover text-slate-300 nav-link" data-section="models">
+                <i data-lucide="brain-circuit" class="w-4 h-4"></i>
+                <span class="text-sm font-medium">Model Routing</span>
+            </a>
+            <a href="#" onclick="showSection('knowledge')" class="flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all glass-hover text-slate-300 nav-link" data-section="knowledge">
+                <i data-lucide="database" class="w-4 h-4"></i>
+                <span class="text-sm font-medium">Memory & Skills</span>
+            </a>
+
+            <div class="text-[10px] font-bold text-slate-500 uppercase tracking-widest px-3 mb-2 mt-8">System</div>
+            <a href="#" onclick="showSection('runtime')" class="flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all glass-hover text-slate-300 nav-link" data-section="runtime">
+                <i data-lucide="cpu" class="w-4 h-4"></i>
+                <span class="text-sm font-medium">Runtime Overview</span>
+            </a>
+            <a href="#" onclick="showSection('auth')" class="flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all glass-hover text-slate-300 nav-link" data-section="auth">
+                <i data-lucide="shield-check" class="w-4 h-4"></i>
+                <span class="text-sm font-medium">Auth & Secrets</span>
+            </a>
+            <a href="#" onclick="showSection('settings')" class="flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all glass-hover text-slate-300 nav-link" data-section="settings">
+                <i data-lucide="settings" class="w-4 h-4"></i>
+                <span class="text-sm font-medium">Settings</span>
+            </a>
+
+            <div class="mt-8 pt-4 border-t border-slate-800">
+                <div class="px-3 mb-4">
+                    <button onclick="createNewChat()" class="w-full py-2.5 rounded-xl bg-blue-600/10 border border-blue-500/20 text-blue-400 text-sm font-medium hover:bg-blue-600/20 transition-all flex items-center justify-center gap-2">
+                        <i data-lucide="plus" class="w-4 h-4"></i>
+                        New Session
+                    </button>
+                </div>
+                <div id="session-list" class="space-y-1 px-1">
+                    <!-- Session history items will go here -->
+                </div>
+            </div>
+        </nav>
+
+        <div class="p-4 border-t border-slate-800">
+            <div class="flex items-center gap-3 px-2">
+                <div class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></div>
+                <div class="flex flex-col">
+                    <span id="status-model" class="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">Loading...</span>
+                    <span id="status-latency" class="text-[10px] text-slate-500">System Ready</span>
+                </div>
+            </div>
+        </div>
+    </aside>
+
+    <!-- Main Content -->
+    <main class="flex-1 flex flex-col min-w-0 bg-[#050810] relative">
+        
+        <!-- Top Header -->
+        <header class="h-16 border-b border-slate-800/50 glass flex items-center justify-between px-6 z-30">
+            <div class="flex items-center gap-4">
+                <button onclick="toggleSidebar()" class="md:hidden text-slate-400 hover:text-white transition-colors">
+                    <i data-lucide="menu" class="w-6 h-6"></i>
+                </button>
+                <div class="flex flex-col">
+                    <h2 id="section-title" class="text-sm font-semibold text-white">Chat Terminal</h2>
+                    <span id="section-subtitle" class="text-[10px] text-slate-500 uppercase tracking-widest font-bold">Active Session: Default</span>
+                </div>
+            </div>
+            
+            <div class="flex items-center gap-3">
+                <div class="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-full bg-slate-900/50 border border-slate-800 text-xs text-slate-400">
+                    <i data-lucide="hard-drive" class="w-3.5 h-3.5"></i>
+                    <span id="context-usage">0% Tokens</span>
+                </div>
+                <button class="p-2 text-slate-400 hover:text-white transition-colors">
+                    <i data-lucide="bell" class="w-5 h-5"></i>
+                </button>
+                <div class="w-8 h-8 rounded-full bg-gradient-to-tr from-blue-600 to-indigo-600 flex items-center justify-center border border-white/10">
+                    <span class="text-xs font-bold text-white">U</span>
+                </div>
+            </div>
+        </header>
+
+        <!-- Content Sections -->
+        <div class="flex-1 relative overflow-hidden flex flex-col">
+            
+            <!-- Chat Section -->
+            <section id="section-chat" class="absolute inset-0 flex flex-col active">
+                <div id="chat-messages" class="flex-1 overflow-y-auto p-6 space-y-6 chat-container">
+                    <!-- Messages will be injected here -->
+                    <div class="flex flex-col items-center justify-center h-full text-center space-y-4 max-w-md mx-auto opacity-40">
+                        <div class="w-16 h-16 rounded-3xl bg-slate-900 flex items-center justify-center border border-slate-800">
+                            <i data-lucide="message-square" class="w-8 h-8 text-slate-600"></i>
+                        </div>
+                        <div>
+                            <h3 class="font-semibold text-slate-300">OpenUnum Intelligent Terminal</h3>
+                            <p class="text-xs text-slate-500 mt-1">Autonomous agent ready for missions, shell tasks, and web research.</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Input Area -->
+                <div class="p-6 pt-2">
+                    <div class="max-w-4xl mx-auto">
+                        <!-- Quick Actions -->
+                        <div class="flex items-center gap-2 mb-4 overflow-x-auto no-scrollbar pb-2">
+                            <button onclick="setPrompt('Analyze current workspace status')" class="px-3 py-1.5 rounded-full glass border-slate-800 text-[11px] text-slate-400 hover:text-white hover:border-blue-500/50 transition-all whitespace-nowrap">Analyze Workspace</button>
+                            <button onclick="setPrompt('Run health check on all providers')" class="px-3 py-1.5 rounded-full glass border-slate-800 text-[11px] text-slate-400 hover:text-white hover:border-blue-500/50 transition-all whitespace-nowrap">Provider Health</button>
+                            <button onclick="setPrompt('Research latest news on AI agents')" class="px-3 py-1.5 rounded-full glass border-slate-800 text-[11px] text-slate-400 hover:text-white hover:border-blue-500/50 transition-all whitespace-nowrap">Market Research</button>
+                            <button onclick="setPrompt('Help me refactor the UI server')" class="px-3 py-1.5 rounded-full glass border-slate-800 text-[11px] text-slate-400 hover:text-white hover:border-blue-500/50 transition-all whitespace-nowrap">Refactor Code</button>
+                        </div>
+
+                        <div class="relative group">
+                            <div class="absolute -inset-0.5 bg-gradient-to-r from-blue-600 to-indigo-600 rounded-2xl blur opacity-20 group-focus-within:opacity-40 transition duration-1000"></div>
+                            <div class="relative glass border-slate-700/50 rounded-2xl flex flex-col p-2">
+                                <textarea id="chat-input" rows="2" placeholder="Send a message or issue a command..." class="w-full bg-transparent border-none focus:ring-0 text-sm p-3 text-white placeholder-slate-500 resize-none"></textarea>
+                                <div class="flex items-center justify-between px-2 pb-1 pt-1">
+                                    <div class="flex items-center gap-1">
+                                        <button class="p-2 text-slate-500 hover:text-blue-400 transition-colors rounded-lg hover:bg-slate-800/50">
+                                            <i data-lucide="paperclip" class="w-4 h-4"></i>
+                                        </button>
+                                        <button class="p-2 text-slate-500 hover:text-blue-400 transition-colors rounded-lg hover:bg-slate-800/50">
+                                            <i data-lucide="terminal" class="w-4 h-4"></i>
+                                        </button>
+                                        <button id="toggle-autonomy" class="flex items-center gap-2 px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-wider bg-slate-900 border border-slate-800 text-slate-500 hover:text-blue-400 transition-all">
+                                            <i data-lucide="activity" class="w-3 h-3"></i>
+                                            Autonomy: Standard
+                                        </button>
+                                    </div>
+                                    <button id="send-btn" onclick="sendMessage()" class="bg-blue-600 hover:bg-blue-500 text-white p-2.5 rounded-xl transition-all shadow-lg shadow-blue-600/20 flex items-center justify-center">
+                                        <i data-lucide="send" class="w-4 h-4"></i>
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                        <p class="text-center text-[10px] text-slate-600 mt-4 font-medium tracking-wide">
+                            OpenUnum Agent v0.1.0 • Running on <span class="text-slate-500">Ubuntu 24.04 LTS</span>
+                        </p>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Other Sections (Placeholders for now) -->
+            <section id="section-missions" class="hidden absolute inset-0 p-8 overflow-y-auto chat-container">
+                <div class="max-w-5xl mx-auto space-y-8">
+                    <div class="flex items-center justify-between">
+                        <div>
+                            <h2 class="text-2xl font-bold">Autonomous Missions</h2>
+                            <p class="text-slate-400 text-sm">Design and track multi-step autonomous goals.</p>
+                        </div>
+                        <button class="px-4 py-2 bg-blue-600 rounded-xl text-sm font-semibold hover:bg-blue-500 transition-all">Start New Mission</button>
+                    </div>
+
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                        <div class="glass p-6 rounded-3xl space-y-4">
+                            <div class="w-10 h-10 rounded-2xl bg-amber-500/10 flex items-center justify-center border border-amber-500/20 text-amber-500">
+                                <i data-lucide="play" class="w-5 h-5"></i>
+                            </div>
+                            <div>
+                                <h3 class="font-bold text-lg">Active</h3>
+                                <p id="active-missions-count" class="text-3xl font-black mt-1">0</p>
+                            </div>
+                        </div>
+                        <div class="glass p-6 rounded-3xl space-y-4">
+                            <div class="w-10 h-10 rounded-2xl bg-emerald-500/10 flex items-center justify-center border border-emerald-500/20 text-emerald-500">
+                                <i data-lucide="check-circle" class="w-5 h-5"></i>
+                            </div>
+                            <div>
+                                <h3 class="font-bold text-lg">Completed</h3>
+                                <p class="text-3xl font-black mt-1">12</p>
+                            </div>
+                        </div>
+                        <div class="glass p-6 rounded-3xl space-y-4">
+                            <div class="w-10 h-10 rounded-2xl bg-red-500/10 flex items-center justify-center border border-red-500/20 text-red-500">
+                                <i data-lucide="alert-circle" class="w-5 h-5"></i>
+                            </div>
+                            <div>
+                                <h3 class="font-bold text-lg">Failed</h3>
+                                <p class="text-3xl font-black mt-1">1</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="glass rounded-3xl overflow-hidden">
+                        <div class="p-6 border-b border-slate-800 flex items-center justify-between">
+                            <h3 class="font-bold">Recent Mission History</h3>
+                            <button class="text-xs text-blue-400 hover:text-blue-300 font-bold uppercase tracking-wider">View All</button>
+                        </div>
+                        <div id="missions-list" class="divide-y divide-slate-800">
+                            <!-- Missions will be injected here -->
+                            <div class="p-12 text-center text-slate-500 italic text-sm">No missions launched in this session.</div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <section id="section-models" class="hidden absolute inset-0 p-8 overflow-y-auto chat-container">
+                <div class="max-w-5xl mx-auto space-y-8">
+                    <div>
+                        <h2 class="text-2xl font-bold text-white">Model Routing</h2>
+                        <p class="text-slate-400 text-sm">Manage LLM providers and autonomous fallback policies.</p>
+                    </div>
+
+                    <div id="provider-grid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                        <!-- Provider cards injected here -->
+                    </div>
+
+                    <div class="glass rounded-3xl p-8 space-y-6">
+                        <div class="flex items-center justify-between">
+                            <h3 class="font-bold text-lg">Primary Intelligence</h3>
+                            <span class="px-2 py-1 rounded bg-blue-600/20 border border-blue-500/30 text-blue-400 text-[10px] font-bold uppercase tracking-tighter">Current Config</span>
+                        </div>
+                        
+                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-6">
+                            <div class="space-y-2">
+                                <label class="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Active Provider</label>
+                                <select id="provider-select" class="w-full bg-slate-900 border-slate-800 rounded-xl text-sm p-3 focus:ring-blue-600 focus:border-blue-600"></select>
+                            </div>
+                            <div class="space-y-2">
+                                <label class="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Active Model</label>
+                                <select id="model-select" class="w-full bg-slate-900 border-slate-800 rounded-xl text-sm p-3 focus:ring-blue-600 focus:border-blue-600"></select>
+                            </div>
+                        </div>
+
+                        <div class="pt-4 flex justify-end">
+                            <button onclick="saveRouting()" class="px-6 py-2.5 bg-blue-600 rounded-xl text-sm font-bold hover:shadow-lg hover:shadow-blue-600/20 transition-all">Deploy Configuration</button>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Add other sections similarly -->
+             <section id="section-runtime" class="hidden absolute inset-0 p-8 overflow-y-auto chat-container">
+                <div class="max-w-5xl mx-auto space-y-8">
+                    <div>
+                        <h2 class="text-2xl font-bold text-white text-center">System Runtime</h2>
+                    </div>
+                    <div id="runtime-data" class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <!-- Runtime stats -->
+                    </div>
+                </div>
+             </section>
+
+             <section id="section-auth" class="hidden absolute inset-0 p-8 overflow-y-auto chat-container">
+                <div class="max-w-5xl mx-auto space-y-8">
+                    <div>
+                        <h2 class="text-2xl font-bold text-white">Auth & Secrets</h2>
+                        <p class="text-slate-400 text-sm">Manage API keys and OAuth service connections.</p>
+                    </div>
+                    <div id="auth-grid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                        <!-- Auth items injected here -->
+                    </div>
+                </div>
+             </section>
+
+             <section id="section-knowledge" class="hidden absolute inset-0 p-8 overflow-y-auto chat-container">
+                <div class="max-w-5xl mx-auto space-y-8">
+                    <div>
+                        <h2 class="text-2xl font-bold text-white">Memory & Skills</h2>
+                        <p class="text-slate-400 text-sm">Learned behaviors, persistent memory, and installed agent skills.</p>
+                    </div>
+                    
+                    <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                        <div class="lg:col-span-2 space-y-6">
+                            <div class="glass rounded-3xl overflow-hidden">
+                                <div class="p-6 border-b border-slate-800 bg-white/5 flex items-center justify-between">
+                                    <h3 class="font-bold">Installed Skills</h3>
+                                    <button class="text-[10px] font-black uppercase tracking-widest text-blue-400">Install Skill</button>
+                                </div>
+                                <div id="skills-list" class="divide-y divide-slate-800">
+                                    <div class="p-8 text-center text-slate-500 italic text-sm">Loading skills...</div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="space-y-6">
+                            <div class="glass p-6 rounded-3xl space-y-4 border-slate-800/50">
+                                <h3 class="text-xs font-black text-slate-500 uppercase tracking-widest">Memory Stats</h3>
+                                <div class="space-y-4">
+                                    <div class="flex justify-between items-center">
+                                        <span class="text-xs text-slate-400">Learned Behaviors</span>
+                                        <span id="stat-behaviors" class="text-sm font-bold text-white">0</span>
+                                    </div>
+                                    <div class="flex justify-between items-center">
+                                        <span class="text-xs text-slate-400">Route Lessons</span>
+                                        <span id="stat-lessons" class="text-sm font-bold text-white">0</span>
+                                    </div>
+                                    <div class="flex justify-between items-center">
+                                        <span class="text-xs text-slate-400">Reliability Index</span>
+                                        <span id="stat-reliability" class="text-sm font-bold text-emerald-400">98.2%</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+             </section>
+
+             <section id="section-settings" class="hidden absolute inset-0 p-8 overflow-y-auto chat-container">
+                <div class="max-w-3xl mx-auto space-y-8">
+                    <div>
+                        <h2 class="text-2xl font-bold text-white">System Settings</h2>
+                        <p class="text-slate-400 text-sm">General system preferences and UI configuration.</p>
+                    </div>
+                    
+                    <div class="glass p-8 rounded-3xl space-y-8 border-slate-800/50">
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
+                            <div class="space-y-3">
+                                <label class="text-[10px] font-black text-slate-500 uppercase tracking-widest">Autonomy Mode</label>
+                                <select id="setting-autonomy" class="w-full bg-slate-900 border-slate-800 rounded-xl text-sm p-3 outline-none focus:ring-1 focus:ring-blue-500">
+                                    <option value="standard">Standard Autonomy</option>
+                                    <option value="relentless">Relentless Mode</option>
+                                    <option value="conservative">Conservative</option>
+                                </select>
+                                <p class="text-[10px] text-slate-500">How aggressive the agent will be in solving missions autonomously.</p>
+                            </div>
+                            
+                            <div class="space-y-3">
+                                <label class="text-[10px] font-black text-slate-500 uppercase tracking-widest">Shell Access</label>
+                                <select id="setting-shell" class="w-full bg-slate-900 border-slate-800 rounded-xl text-sm p-3 outline-none focus:ring-1 focus:ring-blue-500">
+                                    <option value="true">Enabled</option>
+                                    <option value="false">Disabled</option>
+                                </select>
+                                <p class="text-[10px] text-slate-500">Allow the agent to execute shell commands on this host.</p>
+                            </div>
+
+                            <div class="space-y-3">
+                                <label class="text-[10px] font-black text-slate-500 uppercase tracking-widest">Max Tool Iterations</label>
+                                <input type="number" id="setting-iters" value="8" min="1" max="25" class="w-full bg-slate-900 border-slate-800 rounded-xl text-sm p-3 outline-none focus:ring-1 focus:ring-blue-500">
+                                <p class="text-[10px] text-slate-500">Max number of tool calls per single assistant turn.</p>
+                            </div>
+
+                            <div class="space-y-3">
+                                <label class="text-[10px] font-black text-slate-500 uppercase tracking-widest">Self-Protection</label>
+                                <select id="setting-protect" class="w-full bg-slate-900 border-slate-800 rounded-xl text-sm p-3 outline-none focus:ring-1 focus:ring-blue-500">
+                                    <option value="true">Active (Safest)</option>
+                                    <option value="false">Disabled (Advanced)</option>
+                                </select>
+                                <p class="text-[10px] text-slate-500">Enable autonomous policy engine safety checks.</p>
+                            </div>
+                        </div>
+
+                        <div class="pt-6 border-t border-slate-800 flex justify-end">
+                            <button onclick="saveSettings()" class="px-8 py-3 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-sm font-bold shadow-lg shadow-blue-600/20 transition-all">
+                                Save System Config
+                            </button>
+                        </div>
+                    </div>
+                </div>
+             </section>
+
+        </div>
+    </main>
+
+    <!-- Scripts -->
+    <script>
+        // Constants & Configuration
+        const BACKEND_URL = 'http://127.0.0.1:18880';
+        let sessionId = localStorage.getItem('openunum_session_id') || crypto.randomUUID();
+        let currentSection = 'chat';
+        
+        // UI Helpers
+        const q = (id) => document.getElementById(id);
+        const toggleSidebar = () => q('sidebar').classList.toggle('open');
+        
+        async function api(path, options = {}) {
+            const url = `${BACKEND_URL}${path}`;
+            const method = options.method || 'GET';
+            const headers = { 'Content-Type': 'application/json', ...options.headers };
+            
+            try {
+                const response = await fetch(url, { ...options, method, headers });
+                const data = await response.json();
+                return { status: response.status, ok: response.ok, ...data };
+            } catch (err) {
+                console.error(`Fetch error [${path}]:`, err);
+                throw err;
+            }
+        }
+
+        function showSection(id) {
+            document.querySelectorAll('section').forEach(s => s.classList.add('hidden'));
+            document.querySelectorAll('section').forEach(s => s.classList.remove('active'));
+            const target = q(`section-${id}`);
+            if (target) {
+                target.classList.remove('hidden');
+                target.classList.add('active');
+            }
+            
+            document.querySelectorAll('.nav-link').forEach(l => l.classList.remove('active-link'));
+            const link = document.querySelector(`[data-section="${id}"]`);
+            if (link) {
+                link.classList.add('active-link');
+                q('section-title').textContent = link.querySelector('span').textContent;
+            }
+            
+            currentSection = id;
+            if (window.innerWidth < 768) toggleSidebar();
+            
+            // Trigger section-specific refresh
+            if (id === 'models') refreshModels();
+            if (id === 'runtime') refreshRuntime();
+            if (id === 'missions') refreshMissions();
+            if (id === 'auth') refreshAuthCatalog();
+            if (id === 'knowledge') refreshKnowledge();
+            if (id === 'settings') refreshSettings();
+        }
+
+        function buildMessageNode(role, content, trace = null) {
+            const isBot = role === 'assistant';
+            
+            // Render content with marked if it's bot output
+            const renderedContent = isBot ? marked.parse(content) : escapeHtml(content);
+            
+            const div = document.createElement('div');
+            div.className = `flex ${isBot ? 'justify-start' : 'justify-end'} mb-6 group`;
+            
+            const traceHtml = trace ? `
+                <details class="mt-2 text-[10px] glass rounded-lg border-slate-800">
+                    <summary class="p-2 cursor-pointer font-bold uppercase tracking-widest text-slate-500 hover:text-slate-300 transition-colors flex items-center gap-2">
+                        <i data-lucide="list-tree" class="w-3 h-3"></i>
+                        Execution Trace (${Array.isArray(trace.iterations) ? trace.iterations.length : 0} steps)
+                    </summary>
+                    <div class="p-3 font-mono text-[11px] text-slate-400 space-y-2 border-t border-slate-800 bg-black/20 max-h-60 overflow-y-auto">
+                        ${Array.isArray(trace.iterations) ? trace.iterations.map(it => `
+                            <div class="border-l-2 border-blue-500/30 pl-2 py-1">
+                                <div class="text-blue-400 font-bold uppercase text-[9px]">Tool: ${it.tool}</div>
+                                <div class="opacity-80">${JSON.stringify(it.args)}</div>
+                                <div class="text-emerald-500/80 mt-1">${typeof it.result === 'string' ? it.result.slice(0, 100) : 'Result data...'}</div>
+                            </div>
+                        `).join('') : '<div class="opacity-50 italic text-center">No iterations recorded</div>'}
+                    </div>
+                </details>
+            ` : '';
+
+            div.innerHTML = `
+                <div class="flex gap-4 max-w-[85%] sm:max-w-[75%] animate-in fade-in slide-in-from-bottom-2 duration-300">
+                    ${isBot ? `
+                        <div class="w-8 h-8 rounded-lg bg-blue-600 flex-shrink-0 flex items-center justify-center border border-white/10 shadow-lg shadow-blue-600/20">
+                            <i data-lucide="bot" class="w-4 h-4 text-white"></i>
+                        </div>
+                    ` : ''}
+                    <div class="flex flex-col gap-1 ${isBot ? '' : 'items-end'}">
+                        <div class="markdown-body px-4 py-2.5 rounded-2xl text-sm ${isBot ? 'glass text-slate-200' : 'bg-blue-600 text-white shadow-lg shadow-blue-600/10'}">
+                            ${renderedContent}
+                        </div>
+                        ${traceHtml}
+                        <span class="text-[10px] text-slate-600 mt-1 font-medium opacity-0 group-hover:opacity-100 transition-opacity">${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                    </div>
+                    ${!isBot ? `
+                        <div class="w-8 h-8 rounded-lg bg-slate-800 flex-shrink-0 flex items-center justify-center border border-slate-700">
+                            <i data-lucide="user" class="w-4 h-4 text-slate-400"></i>
+                        </div>
+                    ` : ''}
+                </div>
+            `;
+            return div;
+        }
+
+        function appendMessage(role, content, trace = null) {
+            const host = q('chat-messages');
+            const node = buildMessageNode(role, content, trace);
+            host.appendChild(node);
+            lucide.createIcons();
+            host.scrollTo({ top: host.scrollHeight, behavior: 'smooth' });
+            return node;
+        }
+
+        function escapeHtml(unsafe) {
+            return (unsafe || '')
+                 .replace(/&/g, "&amp;")
+                 .replace(/</g, "&lt;")
+                 .replace(/>/g, "&gt;")
+                 .replace(/"/g, "&quot;")
+                 .replace(/'/g, "&#039;");
+         }
+
+        function showTyping() {
+            const host = q('chat-messages');
+            const div = document.createElement('div');
+            div.id = 'typing-indicator';
+            div.className = 'flex justify-start mb-6 animate-in fade-in duration-300';
+            div.innerHTML = `
+                <div class="flex gap-4">
+                    <div class="w-8 h-8 rounded-lg bg-blue-600 flex-shrink-0 flex items-center justify-center border border-white/10">
+                        <i data-lucide="bot" class="w-4 h-4 text-white"></i>
+                    </div>
+                    <div class="px-5 py-4 rounded-2xl glass flex items-center">
+                        <div class="typing-indicator"><span></span><span></span><span></span></div>
+                    </div>
+                </div>
+            `;
+            host.appendChild(div);
+            lucide.createIcons();
+            host.scrollTo({ top: host.scrollHeight, behavior: 'smooth' });
+            return div;
+        }
+
+        function removeTyping() {
+            const el = q('typing-indicator');
+            if (el) el.remove();
+        }
+
+        async function sendMessage() {
+            const input = q('chat-input');
+            const text = input.value.trim();
+            if (!text) return;
+
+            input.value = '';
+            appendMessage('user', text);
+            const typingBubble = showTyping();
+            const startedAtIso = new Date().toISOString();
+
+            try {
+                const res = await api('/api/chat', {
+                    method: 'POST',
+                    body: JSON.stringify({ sessionId, message: text })
+                });
+                
+                if (res.status === 202 || res.pending) {
+                    await resolvePendingReply(typingBubble, res.startedAt || startedAtIso);
+                    return;
+                }
+
+                removeTyping();
+                appendMessage('assistant', res.replyHtml || res.reply || 'No response data', res.trace);
+                updateContextUsage();
+            } catch (err) {
+                removeTyping();
+                appendMessage('assistant', `<span class="text-red-400">Error: ${err.message || 'Unknown network error'}</span>`);
+            }
+        }
+
+        async function resolvePendingReply(typingBubble, startedAtIso) {
+            const deadline = Date.now() + 10 * 60 * 1000; // 10 min
+            const typingText = typingBubble.querySelector('.typing-indicator');
+            
+            while (Date.now() < deadline) {
+                await sleep(3000);
+                
+                // Show status in typing bubble
+                if (typingText) typingText.parentElement.innerHTML = '<div class="text-[10px] text-slate-400 animate-pulse">Agent is thinking and executing tools...</div>';
+
+                const p = await api(`/api/chat/pending?sessionId=${encodeURIComponent(sessionId)}`);
+                if (p.pending) continue;
+
+                // Done pending, fetch latest session to find the answer
+                const session = await api(`/api/sessions/${encodeURIComponent(sessionId)}?html=false`);
+                const msg = newestAssistantSince(session.messages || [], startedAtIso);
+                
+                removeTyping();
+                if (msg) {
+                    appendMessage('assistant', msg.content, msg.trace);
+                    updateSessionList();
+                    return true;
+                } else {
+                    appendMessage('assistant', 'Agent finished execution but no final reply was found. Please check the mission logs.');
+                    return false;
+                }
+            }
+            
+            removeTyping();
+            appendMessage('assistant', 'The request timed out on the client side, but the agent may still be working in the background.');
+            return false;
+        }
+
+        function newestAssistantSince(messages, sinceIso) {
+            const sinceMs = Date.parse(sinceIso || '') || 0;
+            let candidate = null;
+            for (const m of (messages || [])) {
+                if (m.role !== 'assistant') continue;
+                const t = Date.parse(m.created_at || m.createdAt || '');
+                if (Number.isFinite(t) && t >= sinceMs) candidate = m;
+            }
+            return candidate;
+        }
+
+        const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+
+        async function createNewChat() {
+            sessionId = crypto.randomUUID();
+            localStorage.setItem('openunum_session_id', sessionId);
+            q('chat-messages').innerHTML = '';
+            appendMessage('assistant', 'System core re-initialized. New autonomous session established. How can I assist you today?');
+            updateSessionList();
+            q('section-subtitle').textContent = `Active Session: ${sessionId.slice(0, 8)}...`;
+        }
+
+        function setPrompt(text) {
+            q('chat-input').value = text;
+            q('chat-input').focus();
+        }
+
+        async function updateContextUsage() {
+            try {
+                const res = await api(`/api/context/status?sessionId=${sessionId}`);
+                const pct = res.budget?.usagePct || 0;
+                q('context-usage').textContent = `${(pct * 100).toFixed(0)}% Tokens`;
+            } catch (e) {}
+        }
+
+        async function refreshModels() {
+            try {
+                const catalog = await api('/api/model-catalog');
+                const grid = q('provider-grid');
+                grid.innerHTML = catalog.providers.map(p => `
+                    <div class="glass p-5 rounded-2xl space-y-3">
+                        <div class="flex items-center justify-between">
+                            <span class="text-xs font-bold text-slate-500 uppercase tracking-widest">${p.provider}</span>
+                            <div class="w-2 h-2 rounded-full ${p.status === 'healthy' ? 'bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]' : 'bg-red-500'}"></div>
+                        </div>
+                        <h4 class="font-bold text-sm">${p.display_name}</h4>
+                        <div class="text-[10px] text-slate-500 font-medium">
+                            ${p.models.length} Models Available
+                        </div>
+                    </div>
+                `).join('');
+
+                const pSelect = q('provider-select');
+                pSelect.innerHTML = catalog.providers.map(p => `<option value="${p.provider}" ${p.provider === catalog.selected.provider ? 'selected' : ''}>${p.display_name}</option>`).join('');
+                
+                updateModelList(catalog.selected.provider, catalog.selected.model_id);
+                
+                pSelect.onchange = (e) => updateModelList(e.target.value);
+            } catch (e) {}
+        }
+
+        async function updateModelList(provider, selected = null) {
+            try {
+                const catalog = await api('/api/model-catalog');
+                const providerData = catalog.providers.find(p => p.provider === provider);
+                const mSelect = q('model-select');
+                mSelect.innerHTML = providerData.models.map(m => `<option value="${m.model_id}" ${m.model_id === selected ? 'selected' : ''}>${m.model_id} (${m.capability_score})</option>`).join('');
+            } catch (e) {}
+        }
+
+        async function refreshRuntime() {
+            try {
+                const overview = await api('/api/runtime/overview');
+                const grid = q('runtime-data');
+                grid.innerHTML = `
+                    <div class="glass p-6 rounded-3xl space-y-4">
+                        <h3 class="text-xs font-bold text-slate-500 uppercase tracking-widest">Environment</h3>
+                        <div class="space-y-3">
+                            <div class="flex justify-between items-center">
+                                <span class="text-xs text-slate-400">Workspace</span>
+                                <span class="text-xs font-mono text-slate-300 truncate max-w-[200px]">${overview.workspaceRoot}</span>
+                            </div>
+                            <div class="flex justify-between items-center">
+                                <span class="text-xs text-slate-400">Git Status</span>
+                                <span class="text-xs font-medium text-emerald-400">${overview.git.branch}</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="glass p-6 rounded-3xl space-y-4">
+                        <h3 class="text-xs font-bold text-slate-500 uppercase tracking-widest">Capabilities</h3>
+                        <div class="flex flex-wrap gap-2">
+                            ${overview.executionEnvelope.toolAllowlist?.map(t => `<span class="px-2 py-1 rounded bg-slate-900 border border-slate-800 text-[10px] text-slate-400 font-mono">${t}</span>`).join('') || '<span class="text-xs text-slate-500">All tools enabled</span>'}
+                        </div>
+                    </div>
+                `;
+            } catch (e) {}
+        }
+
+        async function refreshMissions() {
+            try {
+                const missions = await api('/api/missions');
+                q('active-missions-count').textContent = missions.filter(m => m.status === 'running').length;
+                const list = q('missions-list');
+                if (missions.length === 0) return;
+                
+                list.innerHTML = missions.slice(0, 5).map(m => `
+                    <div class="p-4 flex items-center justify-between hover:bg-white/[0.02] transition-colors">
+                        <div class="flex flex-col gap-1">
+                            <span class="text-xs font-bold text-white">${m.goal.slice(0, 50)}${m.goal.length > 50 ? '...' : ''}</span>
+                            <span class="text-[10px] text-slate-500 uppercase tracking-tighter">ID: ${m.id.slice(0, 8)} • Steps: ${m.step}</span>
+                        </div>
+                        <span class="px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-widest ${m.status === 'running' ? 'bg-blue-500/10 text-blue-400 border border-blue-500/20' : 'bg-slate-500/10 text-slate-500 border border-slate-500/20'}">
+                            ${m.status}
+                        </span>
+                    </div>
+                `).join('');
+            } catch (e) {}
+        }
+
+        async function refreshAuthCatalog() {
+            try {
+                const catalog = await api('/api/auth/catalog');
+                const host = q('auth-grid');
+                if (!host) return;
+                
+                // Combine providers and services into one management view
+                const allItems = [
+                    ...catalog.providers.map(p => ({ ...p, type: 'provider', secretKey: getProviderSecretKey(p.provider) })),
+                    ...catalog.auth_methods.map(s => ({ ...s, type: 'service', secretKey: getServiceSecretKey(s.id) }))
+                ];
+
+                host.innerHTML = allItems.map(item => {
+                    const id = item.provider || item.id;
+                    const isConfigured = item.status === 'healthy' || item.cli?.authenticated || item.stored_preview;
+                    
+                    return `
+                    <div class="glass p-5 rounded-3xl space-y-4 border-slate-800/50">
+                        <div class="flex items-center justify-between">
+                            <div class="flex items-center gap-2">
+                                <span class="text-[10px] font-black text-slate-500 uppercase tracking-widest">${item.type}</span>
+                                <h4 class="font-bold text-sm text-white">${item.display_name || id}</h4>
+                            </div>
+                            <div class="w-2 h-2 rounded-full ${isConfigured ? 'bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.4)]' : 'bg-slate-700'}"></div>
+                        </div>
+                        
+                        <div class="space-y-3">
+                            <div class="relative">
+                                <input type="password" 
+                                       id="secret-${id}" 
+                                       placeholder="${item.stored_preview ? '••••••••' : 'Enter API Key / Token'}" 
+                                       class="w-full bg-slate-900/50 border border-slate-800 rounded-xl text-xs p-2.5 focus:ring-1 focus:ring-blue-500 focus:border-blue-500 transition-all outline-none">
+                            </div>
+                            
+                            <div class="flex gap-2">
+                                <button onclick="saveSecret('${item.type}', '${id}', '${item.secretKey}')" class="flex-1 py-2 rounded-lg bg-blue-600/10 border border-blue-500/20 text-blue-400 text-[10px] font-bold uppercase tracking-wider hover:bg-blue-600/20 transition-all">
+                                    Save
+                                </button>
+                                <button onclick="testConnection('${item.type}', '${id}')" class="flex-1 py-2 rounded-lg bg-slate-800 border border-slate-700 text-slate-400 text-[10px] font-bold uppercase tracking-wider hover:bg-slate-700 transition-all">
+                                    Test
+                                </button>
+                            </div>
+                        </div>
+
+                        <div class="text-[10px] text-slate-500 font-medium flex items-center gap-2">
+                            <i data-lucide="info" class="w-3 h-3"></i>
+                            <span class="truncate">${item.degraded_reason || item.cli?.account || (isConfigured ? 'System ready' : 'Configuration required')}</span>
+                        </div>
+                    </div>
+                    `;
+                }).join('');
+                lucide.createIcons();
+            } catch (e) {
+                console.error('Auth refresh failed', e);
+            }
+        }
+
+        function getProviderSecretKey(provider) {
+            const map = { ollama: '', nvidia: 'nvidiaApiKey', openrouter: 'openrouterApiKey', openai: 'openaiApiKey' };
+            return map[provider] || '';
+        }
+
+        function getServiceSecretKey(service) {
+            const map = { github: 'githubToken', 'huggingface': 'huggingfaceApiKey', 'elevenlabs': 'elevenlabsApiKey', 'telegram': 'telegramBotToken' };
+            return map[service] || '';
+        }
+
+        async function saveSecret(type, id, key) {
+            const value = q(`secret-${id}`).value.trim();
+            if (!value) return alert('Please enter a value');
+            
+            try {
+                await api('/api/auth/catalog', {
+                    method: 'POST',
+                    body: JSON.stringify({ secrets: { [key]: value } })
+                });
+                alert(`${id} secret updated successfully.`);
+                refreshAuthCatalog();
+            } catch (e) {
+                alert('Failed to save secret.');
+            }
+        }
+
+        async function testConnection(type, id) {
+            const endpoint = type === 'provider' ? '/api/provider/test' : '/api/service/test';
+            const body = type === 'provider' ? { provider: id } : { service: id };
+            
+            try {
+                const res = await api(endpoint, {
+                    method: 'POST',
+                    body: JSON.stringify(body)
+                });
+                alert(res.ok ? `${id} connection successful!` : `Connection failed: ${res.error || res.detail || 'unknown error'}`);
+            } catch (e) {
+                alert('Test failed due to network error.');
+            }
+        }
+
+        async function saveRouting() {
+            const provider = q('provider-select').value;
+            const model = q('model-select').value;
+            try {
+                await api('/api/config', {
+                    method: 'POST',
+                    body: JSON.stringify({
+                        model: { provider, model }
+                    })
+                });
+                alert('Configuration deployed successfully.');
+                refreshModels();
+            } catch (e) {
+                alert('Failed to save routing configuration.');
+            }
+        }
+
+        async function refreshKnowledge() {
+            try {
+                const res = await api('/api/tool/run', {
+                    method: 'POST',
+                    body: JSON.stringify({ name: 'skill_list', args: {} })
+                });
+                
+                const list = q('skills-list');
+                if (res.result?.skills && res.result.skills.length > 0) {
+                    list.innerHTML = res.result.skills.map(s => `
+                        <div class="p-4 flex items-center justify-between hover:bg-white/[0.02] transition-colors">
+                            <div class="flex flex-col gap-1">
+                                <span class="text-xs font-bold text-white">${s.name}</span>
+                                <span class="text-[10px] text-slate-500 uppercase tracking-tighter">${s.description || 'No description'}</span>
+                            </div>
+                            <span class="px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-widest ${s.approved ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' : 'bg-amber-500/10 text-amber-400 border border-amber-500/20'}">
+                                ${s.approved ? 'Approved' : 'Pending Review'}
+                            </span>
+                        </div>
+                    `).join('');
+                } else {
+                    list.innerHTML = '<div class="p-8 text-center text-slate-500 italic text-sm">No external skills installed.</div>';
+                }
+
+                // Stats
+                const insight = await api(`/api/autonomy/insights?sessionId=${sessionId}`);
+                q('stat-behaviors').textContent = insight.toolReliability?.length || 0;
+                q('stat-lessons').textContent = insight.recentStrategies?.length || 0;
+            } catch (e) {
+                console.error('Knowledge refresh failed', e);
+            }
+        }
+
+        async function refreshSettings() {
+            try {
+                const config = await api('/api/config');
+                q('setting-autonomy').value = config.runtime?.autonomyMode || 'standard';
+                q('setting-shell').value = String(!!config.runtime?.shellEnabled);
+                q('setting-iters').value = config.runtime?.maxToolIterations || 8;
+                q('setting-protect').value = String(config.runtime?.enforceSelfProtection !== false);
+            } catch (e) {
+                console.error('Settings refresh failed', e);
+            }
+        }
+
+        async function saveSettings() {
+            try {
+                await api('/api/config', {
+                    method: 'POST',
+                    body: JSON.stringify({
+                        runtime: {
+                            autonomyMode: q('setting-autonomy').value,
+                            shellEnabled: q('setting-shell').value === 'true',
+                            maxToolIterations: parseInt(q('setting-iters').value),
+                            enforceSelfProtection: q('setting-protect').value === 'true'
+                        }
+                    })
+                });
+                alert('System settings updated successfully.');
+            } catch (e) {
+                alert('Failed to save settings.');
+            }
+        }
+
+        async function updateSessionList() {
+            try {
+                const res = await api('/api/sessions');
+                const list = q('session-list');
+                list.innerHTML = res.sessions.slice(0, 8).map(s => `
+                    <button onclick="switchSession('${s.sessionId}')" class="w-full text-left px-3 py-2 rounded-xl text-xs transition-all hover:bg-white/5 border border-transparent ${s.sessionId === sessionId ? 'bg-white/5 border-white/5 text-blue-400' : 'text-slate-500'}">
+                        <div class="flex flex-col">
+                            <span class="font-bold truncate">${s.title || 'Untitled Session'}</span>
+                            <span class="text-[10px] opacity-60">${new Date(s.updatedAt).toLocaleDateString()}</span>
+                        </div>
+                    </button>
+                `).join('');
+            } catch (e) {}
+        }
+
+        async function switchSession(id) {
+            sessionId = id;
+            localStorage.setItem('openunum_session_id', id);
+            
+            // Show Skeleton Loader
+            const host = q('chat-messages');
+            host.innerHTML = `
+                <div class="space-y-6 animate-pulse p-4">
+                    <div class="flex justify-end"><div class="w-2/3 h-10 bg-slate-800/40 rounded-2xl"></div></div>
+                    <div class="flex justify-start gap-4"><div class="w-8 h-8 rounded-lg bg-blue-900/40 flex-shrink-0"></div><div class="w-3/4 h-24 bg-slate-900/40 rounded-2xl"></div></div>
+                    <div class="flex justify-end"><div class="w-1/2 h-10 bg-slate-800/40 rounded-2xl"></div></div>
+                    <div class="flex justify-start gap-4"><div class="w-8 h-8 rounded-lg bg-blue-900/40 flex-shrink-0"></div><div class="w-2/3 h-32 bg-slate-900/40 rounded-2xl"></div></div>
+                </div>
+            `;
+            
+            try {
+                // Use the faster endpoint with ?html=false since we render on client
+                const res = await api(`/api/sessions/${id}?html=false`);
+                
+                // Build all HTML at once to avoid layout thrashing
+                if (Array.isArray(res.messages)) {
+                    host.innerHTML = ''; // Clear skeleton
+                    const fragment = document.createDocumentFragment();
+                    
+                    res.messages.forEach(m => {
+                        if (m.role !== 'system') {
+                            const msgNode = buildMessageNode(m.role, m.content, m.trace);
+                            fragment.appendChild(msgNode);
+                        }
+                    });
+                    
+                    host.appendChild(fragment);
+                    lucide.createIcons();
+                    host.scrollTo({ top: host.scrollHeight });
+                } else {
+                    host.innerHTML = '<div class="text-center p-8 opacity-40 italic">No messages in this session.</div>';
+                }
+
+                updateSessionList();
+                updateContextUsage();
+                q('section-subtitle').textContent = `Active Session: ${id.slice(0, 8)}...`;
+            } catch (e) {
+                host.innerHTML = `<div class="p-8 text-center text-red-400">Failed to load session history: ${e.message}</div>`;
+            }
+        }
+
+        // Initialize
+        document.addEventListener('DOMContentLoaded', async () => {
+            lucide.createIcons();
+            
+            try {
+                const model = await api('/api/model/current');
+                q('status-model').textContent = `${model.provider} / ${model.model}`;
+                
+                // Refresh all data
+                await Promise.all([
+                    updateSessionList(),
+                    updateContextUsage(),
+                    refreshModels(),
+                    refreshRuntime(),
+                    refreshMissions(),
+                    refreshAuthCatalog()
+                ]);
+                
+                // If it's a new session, show welcome
+                if (q('chat-messages').children.length <= 1) {
+                    appendMessage('assistant', 'Intelligence core online. All autonomous protocols engaged. Systems check: <span class="text-emerald-400">Optimal</span>. How can I help you?');
+                }
+            } catch (err) {
+                q('status-model').textContent = 'CONNECTION OFFLINE';
+                q('status-latency').textContent = 'Backend unreachable at 18880';
+                q('status-latency').classList.add('text-red-500');
+            }
+        });
+        
+        // Auto-refresh stats
+        setInterval(() => {
+            if (currentSection === 'chat') updateContextUsage();
+            if (currentSection === 'missions') refreshMissions();
+        }, 5000);
+
+    </script>
+</body>
+</html>
