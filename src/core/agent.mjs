@@ -351,6 +351,24 @@ function detectNoScrollbarUiIntent(messages = []) {
   return /no scrollbar|without scrollbar|remove scrollbar|not to have a scrollbar|overflow/.test(text);
 }
 
+function isNonFinalToolMarkupText(text) {
+  const raw = String(text || '');
+  const trimmed = raw.trim();
+  if (!trimmed) return false;
+  if (/<\s*minimax:tool_call\b/i.test(trimmed)) return true;
+  const hasInvokeBlock = /<\s*invoke\b/i.test(trimmed) && /<\s*parameter\b/i.test(trimmed);
+  const hasToolCallTag = /<\s*(tool_call|function_call)\b/i.test(trimmed);
+  if (!hasInvokeBlock && !hasToolCallTag) return false;
+  const withoutTags = trimmed.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+  if (!withoutTags) return true;
+  return /^(invoke|parameter|command|target|name|arguments)\b/i.test(withoutTags);
+}
+
+function normalizeAssistantContent(text) {
+  if (isNonFinalToolMarkupText(text)) return '';
+  return String(text || '');
+}
+
 function isDiscoveryShellCommand(cmd) {
   const text = String(cmd || '').trim().toLowerCase();
   if (!text) return false;
@@ -856,16 +874,17 @@ export class OpenUnumAgent {
         tools: this.toolRuntime.toolSchemas({ allowedTools: turnToolAllowlist }),
         timeoutMs: remainingMs
       });
+      const normalizedContent = normalizeAssistantContent(out.content);
       const iter = {
         step: i + 1,
         toolCalls: [],
-        assistantText: out.content || ''
+        assistantText: normalizedContent || ''
       };
-      if (out.content || (out.toolCalls && out.toolCalls.length > 0)) {
-        finalText = out.content;
+      if (normalizedContent || (out.toolCalls && out.toolCalls.length > 0)) {
+        finalText = normalizedContent;
         const assistantMessage = {
           role: 'assistant',
-          content: out.content || ''
+          content: normalizedContent || ''
         };
         if (out.toolCalls && out.toolCalls.length > 0) {
           assistantMessage.tool_calls = out.toolCalls.map((tc) => ({
@@ -883,7 +902,7 @@ export class OpenUnumAgent {
       if (!out.toolCalls || out.toolCalls.length === 0) {
         trace.iterations.push(iter);
         const forceContinue = shouldForceContinuation({
-          assistantText: out.content || finalText,
+          assistantText: normalizedContent || finalText,
           toolCalls: out.toolCalls,
           toolRuns,
           iteration: i + 1,
@@ -1036,14 +1055,17 @@ export class OpenUnumAgent {
         ];
         const recovery = await runtimeProvider.chat({ messages: recoveryMessages, tools: [], timeoutMs: remainingMs });
         if (recovery?.content) {
-          finalText = recovery.content;
+          const normalizedRecoveryContent = normalizeAssistantContent(recovery.content);
+          if (normalizedRecoveryContent) {
+            finalText = normalizedRecoveryContent;
+          }
         }
       } catch {
         // ignore and fallback to synthesized summary below
       }
     }
 
-    if (!finalText && uiCodeEditTask && toolRuns > 0) {
+    if (!finalText && uiCodeEditTask && toolRuns > 0 && !noScrollbarUiIntent) {
       const hasCodeMutation = executedTools.some((run) => isMutatingCodeTool(run));
       const inspectedUi = executedTools.some((run) => isUiInspectionTool(run));
       if (inspectedUi && !hasCodeMutation) {

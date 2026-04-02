@@ -115,6 +115,9 @@ Before broad filesystem discovery, read `GET /api/tools/catalog` and target thes
 - Mission keeps claiming done without proof:
   - inspect `/api/missions/status` and `/api/missions/timeline` contract metadata
   - OpenUnum can trigger one autonomous rollback via `file_restore_last` when repeated contract failures occur
+- Assistant returns raw tool-call XML/markup instead of a real final answer:
+  - controller now normalizes non-native tool-call markup (for example `<minimax:tool_call>`) as non-final content
+  - when UI no-scrollbar intent is detected and no concrete patch is produced, deterministic recovery edits `src/ui/index.html`
 
 ## 7. Operational Modes
 
