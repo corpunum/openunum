@@ -116,6 +116,13 @@ export class MemoryStore {
         note TEXT NOT NULL,
         created_at TEXT NOT NULL
       );
+      CREATE TABLE IF NOT EXISTS operation_receipts (
+        operation_id TEXT PRIMARY KEY,
+        operation_kind TEXT NOT NULL,
+        target_ref TEXT NOT NULL,
+        result_json TEXT NOT NULL,
+        created_at TEXT NOT NULL
+      );
     `);
   }
 
@@ -169,6 +176,175 @@ export class MemoryStore {
         createdAt: message.created_at
       }))
     });
+  }
+
+  runInTransaction(fn) {
+    this.db.exec('BEGIN');
+    try {
+      const out = fn();
+      this.db.exec('COMMIT');
+      return out;
+    } catch (error) {
+      try {
+        this.db.exec('ROLLBACK');
+      } catch {}
+      throw error;
+    }
+  }
+
+  getOperationReceipt(operationId) {
+    const opId = String(operationId || '').trim();
+    if (!opId) return null;
+    const row = this.db
+      .prepare('SELECT operation_id, operation_kind, target_ref, result_json, created_at FROM operation_receipts WHERE operation_id = ?')
+      .get(opId);
+    if (!row) return null;
+    return {
+      operationId: row.operation_id,
+      operationKind: row.operation_kind,
+      targetRef: row.target_ref,
+      result: JSON.parse(row.result_json || '{}'),
+      createdAt: row.created_at
+    };
+  }
+
+  recordOperationReceipt({ operationId, operationKind, targetRef, result }) {
+    const opId = String(operationId || '').trim();
+    if (!opId) return;
+    this.db
+      .prepare(
+        'INSERT OR REPLACE INTO operation_receipts (operation_id, operation_kind, target_ref, result_json, created_at) VALUES (?, ?, ?, ?, ?)'
+      )
+      .run(
+        opId,
+        String(operationKind || 'unknown'),
+        String(targetRef || ''),
+        JSON.stringify(result || {}),
+        new Date().toISOString()
+      );
+  }
+
+  listOperationReceipts(limit = 50) {
+    const rows = this.db
+      .prepare(
+        'SELECT operation_id, operation_kind, target_ref, created_at FROM operation_receipts ORDER BY created_at DESC LIMIT ?'
+      )
+      .all(Math.max(1, Math.min(500, Number(limit || 50))));
+    return rows.map((row) => ({
+      operationId: row.operation_id,
+      operationKind: row.operation_kind,
+      targetRef: row.target_ref,
+      createdAt: row.created_at
+    }));
+  }
+
+  deleteSession(sessionId, options = {}) {
+    const sid = String(sessionId || '').trim();
+    if (!sid) throw new Error('sessionId is required');
+    const operationId = String(options?.operationId || '').trim();
+    if (operationId) {
+      const prior = this.getOperationReceipt(operationId);
+      if (prior) {
+        return {
+          ok: true,
+          replayed: true,
+          operationId,
+          ...prior.result
+        };
+      }
+    }
+    const counts = this.runInTransaction(() => {
+      const deletedMessages = this.db.prepare('DELETE FROM messages WHERE session_id = ?').run(sid);
+      const deletedToolRuns = this.db.prepare('DELETE FROM tool_runs WHERE session_id = ?').run(sid);
+      const deletedCompactions = this.db.prepare('DELETE FROM session_compactions WHERE session_id = ?').run(sid);
+      const deletedArtifacts = this.db.prepare('DELETE FROM memory_artifacts WHERE session_id = ?').run(sid);
+      const deletedRoutes = this.db.prepare('DELETE FROM route_lessons WHERE session_id = ?').run(sid);
+      const deletedSessions = this.db.prepare('DELETE FROM sessions WHERE id = ?').run(sid);
+      return {
+        deletedMessages: Number(deletedMessages?.changes || 0),
+        deletedToolRuns: Number(deletedToolRuns?.changes || 0),
+        deletedCompactions: Number(deletedCompactions?.changes || 0),
+        deletedArtifacts: Number(deletedArtifacts?.changes || 0),
+        deletedRoutes: Number(deletedRoutes?.changes || 0),
+        deletedSessions: Number(deletedSessions?.changes || 0)
+      };
+    });
+    const out = {
+      ok: true,
+      sessionId: sid,
+      deleted: counts.deletedSessions > 0,
+      ...counts
+    };
+    if (operationId) {
+      this.recordOperationReceipt({
+        operationId,
+        operationKind: 'session_delete',
+        targetRef: sid,
+        result: out
+      });
+      out.operationId = operationId;
+    }
+    return out;
+  }
+
+  clearSessions({ keepSessionId = '', operationId = '' } = {}) {
+    const keep = String(keepSessionId || '').trim();
+    const opId = String(operationId || '').trim();
+    if (opId) {
+      const prior = this.getOperationReceipt(opId);
+      if (prior) {
+        return {
+          ok: true,
+          replayed: true,
+          operationId: opId,
+          ...prior.result
+        };
+      }
+    }
+    if (keep) this.ensureSession(keep);
+    const counts = this.runInTransaction(() => {
+      const deletedMessages = keep
+        ? this.db.prepare('DELETE FROM messages WHERE session_id != ?').run(keep)
+        : this.db.prepare('DELETE FROM messages').run();
+      const deletedToolRuns = keep
+        ? this.db.prepare('DELETE FROM tool_runs WHERE session_id != ?').run(keep)
+        : this.db.prepare('DELETE FROM tool_runs').run();
+      const deletedCompactions = keep
+        ? this.db.prepare('DELETE FROM session_compactions WHERE session_id != ?').run(keep)
+        : this.db.prepare('DELETE FROM session_compactions').run();
+      const deletedArtifacts = keep
+        ? this.db.prepare('DELETE FROM memory_artifacts WHERE session_id != ?').run(keep)
+        : this.db.prepare('DELETE FROM memory_artifacts').run();
+      const deletedRoutes = keep
+        ? this.db.prepare('DELETE FROM route_lessons WHERE session_id != ?').run(keep)
+        : this.db.prepare('DELETE FROM route_lessons').run();
+      const deletedSessions = keep
+        ? this.db.prepare('DELETE FROM sessions WHERE id != ?').run(keep)
+        : this.db.prepare('DELETE FROM sessions').run();
+      return {
+        deletedMessages: Number(deletedMessages?.changes || 0),
+        deletedToolRuns: Number(deletedToolRuns?.changes || 0),
+        deletedCompactions: Number(deletedCompactions?.changes || 0),
+        deletedArtifacts: Number(deletedArtifacts?.changes || 0),
+        deletedRoutes: Number(deletedRoutes?.changes || 0),
+        deletedSessions: Number(deletedSessions?.changes || 0)
+      };
+    });
+    const out = {
+      ok: true,
+      keepSessionId: keep || null,
+      ...counts
+    };
+    if (opId) {
+      this.recordOperationReceipt({
+        operationId: opId,
+        operationKind: 'session_clear',
+        targetRef: keep || '*',
+        result: out
+      });
+      out.operationId = opId;
+    }
+    return out;
   }
 
   getSessionSummary(sessionId) {

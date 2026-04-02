@@ -83,11 +83,19 @@ or
 Returns:
 ```json
 {
-  "contract_version": "2026-04-01.webui-capabilities.v1",
+  "contract_version": "2026-04-02.webui-capabilities.v2",
   "menu": ["chat", "missions", "trace", "runtime", "settings"],
-  "provider_order": ["ollama", "nvidia", "openrouter", "openai"]
+  "provider_order": ["ollama", "nvidia", "openrouter", "openai"],
+  "tool_catalog": {
+    "contract_version": "2026-04-02.tool-catalog.v1",
+    "tools": []
+  }
 }
 ```
+
+- `GET /api/tools/catalog`
+
+`GET /api/tools/catalog` returns the tool capability contract (name, schema, safety class, mutability, destructive flag, proof hint).
 
 ## Runtime Overview
 
@@ -471,10 +479,13 @@ Payload:
 - `POST /api/sessions`
 - `POST /api/sessions/import`
 - `POST /api/sessions/clone`
+- `POST /api/sessions/clear`
+- `GET /api/operations/recent?limit=50`
 - `GET /api/sessions?limit=120`
 - `GET /api/sessions/:sessionId`
 - `GET /api/sessions/:sessionId/activity?since=...`
 - `GET /api/sessions/:sessionId/export`
+- `DELETE /api/sessions/:sessionId`
 
 `GET /api/sessions/:sessionId/export` returns:
 - `sessionId`
@@ -490,6 +501,32 @@ Payload:
 `POST /api/sessions/clone` accepts:
 - `sourceSessionId`
 - `targetSessionId`
+
+`POST /api/sessions/clear` accepts:
+- `keepSessionId` (required unless `force=true`)
+- `force` (optional boolean; allows clearing all sessions when `keepSessionId` is empty)
+- `operationId` (optional string for idempotent replay-safe destructive operations)
+
+`DELETE /api/sessions/:sessionId` deletes one session and all session-scoped history rows.
+- optional query param: `operationId=<id>`
+
+`GET /api/operations/recent` returns operation receipts:
+- `operationId`
+- `operationKind`
+- `targetRef`
+- `createdAt`
+
+## Error Contract
+
+Error responses now follow:
+```json
+{
+  "ok": false,
+  "error": "machine_readable_code",
+  "message": "Human readable message",
+  "contract_version": "2026-04-02.api-errors.v1"
+}
+```
 
 ## Skills
 

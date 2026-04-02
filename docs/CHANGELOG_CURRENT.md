@@ -2,6 +2,32 @@
 
 Date: 2026-04-02
 
+## Kernel/Overlay Contracts + Session Destruction Reliability
+
+0. Added first-class session destruction primitives in kernel memory/API/tool layers:
+   - new memory methods: `deleteSession`, `clearSessions`
+   - new APIs: `POST /api/sessions/clear`, `DELETE /api/sessions/:sessionId`
+   - new tools: `session_list`, `session_delete`, `session_clear`
+   - compact execution profile allowlist now includes session tools for small-model portability
+
+1. Added replay-safe idempotency for destructive session actions:
+   - optional `operationId` contract for session clear/delete
+   - new persisted receipt table `operation_receipts`
+   - new API: `GET /api/operations/recent`
+
+2. Added tool capability registry surface for dynamic onboarding:
+   - capability payload upgraded to `2026-04-02.webui-capabilities.v2`
+   - new API: `GET /api/tools/catalog`
+   - capability payload now includes tool safety metadata and proof hints
+
+3. Added baseline structured API error contract:
+   - contract version: `2026-04-02.api-errors.v1`
+   - standardized error shape for not-found, invalid-json, and internal errors
+
+4. Added architecture docs for kernel vs overlay autonomy:
+   - new docs: `docs/KERNEL_OVERLAY_CAPABILITY_MATRIX.md`
+   - new docs: `docs/AUTONOMY_PACKS.md`
+
 ## Adaptive Reliability + Operator Controls
 
 0. Removed runtime-specific hardcoded recovery and generalized mission adaptation:

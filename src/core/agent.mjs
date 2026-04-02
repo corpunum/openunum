@@ -123,6 +123,9 @@ function compactToolResult(result) {
 }
 
 const TOOL_ROUTING_HINTS = [
+  { tool: 'session_clear', terms: ['delete all sessions', 'clear all sessions', 'clear chat history', 'wipe sessions'] },
+  { tool: 'session_delete', terms: ['delete session', 'remove session'] },
+  { tool: 'session_list', terms: ['list sessions', 'show sessions'] },
   { tool: 'browser_search', terms: ['search', 'google', 'find online', 'web research', 'browse'] },
   { tool: 'browser_navigate', terms: ['open website', 'navigate', 'visit', 'go to', 'browser'] },
   { tool: 'browser_extract', terms: ['extract', 'scrape', 'read page', 'page text'] },
@@ -551,7 +554,9 @@ export class OpenUnumAgent {
         '/memory',
         '/cost',
         '/ledger',
-        '/session list'
+        '/session list',
+        '/session clear',
+        '/session delete <id>'
       ].join('\n');
     }
     if (slash.name === 'status') {
@@ -608,6 +613,27 @@ export class OpenUnumAgent {
       return [
         `sessions=${sessions.length}`,
         ...sessions.map((item, index) => `${index + 1}. ${item.sessionId} | ${item.title} | ${item.messageCount} msgs`)
+      ].join('\n');
+    }
+    if (slash.name === 'session' && slash.args[0] === 'clear') {
+      const out = this.memoryStore.clearSessions({ keepSessionId: sid });
+      return [
+        `session_clear ok=${out.ok}`,
+        `keep_session_id=${sid}`,
+        `deleted_sessions=${out.deletedSessions}`,
+        `deleted_messages=${out.deletedMessages}`
+      ].join('\n');
+    }
+    if (slash.name === 'session' && slash.args[0] === 'delete') {
+      const targetId = String(slash.args[1] || '').trim();
+      if (!targetId) return 'usage: /session delete <sessionId>';
+      if (targetId === sid) return 'refused: cannot delete the active session via slash command.';
+      const out = this.memoryStore.deleteSession(targetId);
+      return [
+        `session_delete ok=${out.ok}`,
+        `session_id=${targetId}`,
+        `deleted=${out.deleted}`,
+        `deleted_messages=${out.deletedMessages}`
       ].join('\n');
     }
     return null;

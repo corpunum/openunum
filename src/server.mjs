@@ -75,6 +75,8 @@ let telegramLoopPromise = null;
 const pendingChats = new Map();
 let researchDailyTimer = null;
 const authJobs = new Map();
+const API_ERROR_CONTRACT_VERSION = '2026-04-02.api-errors.v1';
+const TOOL_CATALOG_CONTRACT_VERSION = '2026-04-02.tool-catalog.v1';
 
 function createDeferred() {
   let resolve;
@@ -745,7 +747,7 @@ function buildCapabilitiesPayload() {
     runtime: config.runtime
   });
   return {
-    contract_version: '2026-04-01.webui-capabilities.v1',
+    contract_version: '2026-04-02.webui-capabilities.v2',
     menu: ['chat', 'missions', 'trace', 'runtime', 'settings'],
     features: {
       chat: true,
@@ -766,6 +768,14 @@ function buildCapabilitiesPayload() {
       active: executionEnvelope,
       enforce_profiles: config.runtime?.enforceModelExecutionProfiles !== false,
       profiles: config.runtime?.modelExecutionProfiles || {}
+    },
+    tool_catalog: {
+      contract_version: TOOL_CATALOG_CONTRACT_VERSION,
+      tools: agent.toolRuntime.toolCatalog({ allowedTools: executionEnvelope.toolAllowlist })
+    },
+    operation_guards: {
+      idempotency_operation_id: true,
+      destructive_force_flag: true
     },
     autonomy_policy: {
       enabled: config.runtime?.autonomyPolicy?.enabled !== false,
@@ -1084,6 +1094,16 @@ function sendJson(res, code, obj) {
   res.end(JSON.stringify(obj));
 }
 
+function sendApiError(res, status, code, message, details = {}) {
+  return sendJson(res, status, {
+    ok: false,
+    error: code,
+    message: String(message || code),
+    contract_version: API_ERROR_CONTRACT_VERSION,
+    ...details
+  });
+}
+
 async function withTimeout(promise, timeoutMs, timeoutMessage = 'operation_timeout') {
   let timer;
   try {
@@ -1107,6 +1127,7 @@ async function parseBody(req) {
         const raw = Buffer.concat(chunks).toString('utf8');
         resolve(raw ? JSON.parse(raw) : {});
       } catch (e) {
+        e.code = 'invalid_json';
         reject(e);
       }
     });
@@ -1219,6 +1240,17 @@ function getOrStartChat(sessionId, message) {
   return entry;
 }
 
+function prunePendingChats({ keepSessionId = '' } = {}) {
+  const keep = String(keepSessionId || '').trim();
+  let removed = 0;
+  for (const sid of pendingChats.keys()) {
+    if (keep && sid === keep) continue;
+    pendingChats.delete(sid);
+    removed += 1;
+  }
+  return removed;
+}
+
 const server = http.createServer(async (req, res) => {
   try {
     const url = new URL(req.url || '/', `http://${req.headers.host || '127.0.0.1'}`);
@@ -1285,6 +1317,20 @@ const server = http.createServer(async (req, res) => {
 
     if (req.method === 'GET' && url.pathname === '/api/capabilities') {
       return sendJson(res, 200, buildCapabilitiesPayload());
+    }
+
+    if (req.method === 'GET' && url.pathname === '/api/tools/catalog') {
+      const executionEnvelope = resolveExecutionEnvelope({
+        provider: config.model?.provider,
+        model: config.model?.model,
+        runtime: config.runtime
+      });
+      return sendJson(res, 200, {
+        contract_version: TOOL_CATALOG_CONTRACT_VERSION,
+        enforce_profiles: config.runtime?.enforceModelExecutionProfiles !== false,
+        allowed_tools: executionEnvelope.toolAllowlist || null,
+        tools: agent.toolRuntime.toolCatalog({ allowedTools: executionEnvelope.toolAllowlist })
+      });
     }
 
     if (req.method === 'GET' && url.pathname === '/api/runtime/overview') {
@@ -2014,7 +2060,7 @@ const server = http.createServer(async (req, res) => {
     if (req.method === 'POST' && url.pathname === '/api/sessions') {
       const body = await parseBody(req);
       const sessionId = String(body?.sessionId || '').trim();
-      if (!sessionId) return sendJson(res, 400, { error: 'sessionId is required' });
+      if (!sessionId) return sendApiError(res, 400, 'session_id_required', 'sessionId is required');
       const session = memory.createSession(sessionId);
       return sendJson(res, 200, { ok: true, session });
     }
@@ -2035,6 +2081,44 @@ const server = http.createServer(async (req, res) => {
         targetSessionId: String(body?.targetSessionId || '').trim()
       });
       return sendJson(res, 200, { ok: true, session });
+    }
+
+    if (req.method === 'POST' && url.pathname === '/api/sessions/clear') {
+      const body = await parseBody(req);
+      const keepSessionId = String(body?.keepSessionId || '').trim();
+      const force = Boolean(body?.force);
+      const operationId = String(body?.operationId || '').trim();
+      if (!keepSessionId && !force) {
+        return sendApiError(
+          res,
+          400,
+          'keep_session_required',
+          'keepSessionId is required unless force=true'
+        );
+      }
+      const out = memory.clearSessions({ keepSessionId, operationId });
+      const pendingRemoved = prunePendingChats({ keepSessionId });
+      return sendJson(res, 200, { ok: true, ...out, pendingRemoved });
+    }
+
+    if (req.method === 'DELETE' && url.pathname.startsWith('/api/sessions/')) {
+      const parts = url.pathname.split('/');
+      const sessionId = decodeURIComponent(parts[3] || '');
+      if (!sessionId || parts.length !== 4) {
+        return sendApiError(res, 400, 'session_id_required', 'sessionId is required');
+      }
+      const operationId = String(url.searchParams.get('operationId') || '').trim();
+      const out = memory.deleteSession(sessionId, { operationId });
+      const pendingRemoved = pendingChats.delete(sessionId) ? 1 : 0;
+      return sendJson(res, 200, { ok: true, ...out, pendingRemoved });
+    }
+
+    if (req.method === 'GET' && url.pathname === '/api/operations/recent') {
+      const limit = Number(url.searchParams.get('limit') || 50);
+      return sendJson(res, 200, {
+        contract_version: '2026-04-02.operation-receipts.v1',
+        receipts: memory.listOperationReceipts(limit)
+      });
     }
 
     if (req.method === 'GET' && url.pathname.startsWith('/api/sessions/')) {
@@ -2196,11 +2280,13 @@ const server = http.createServer(async (req, res) => {
       return res.end(html);
     }
 
-    res.writeHead(404, noCacheHeaders('application/json'));
-    res.end(JSON.stringify({ error: 'not_found' }));
+    return sendApiError(res, 404, 'not_found', 'Unknown API route');
   } catch (error) {
     logError('request_failed', { error: String(error.message || error) });
-    sendJson(res, 500, { error: String(error.message || error) });
+    if (String(error?.code || '') === 'invalid_json') {
+      return sendApiError(res, 400, 'invalid_json', 'Request body must be valid JSON');
+    }
+    return sendApiError(res, 500, 'internal_error', String(error.message || error));
   }
 });
 

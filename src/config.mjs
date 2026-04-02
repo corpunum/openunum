@@ -117,6 +117,9 @@ export function defaultConfig() {
           allowedTools: [
             'file_read',
             'file_restore_last',
+            'session_list',
+            'session_delete',
+            'session_clear',
             'shell_run',
             'http_request',
             'browser_status',

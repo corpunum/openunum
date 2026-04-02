@@ -9,6 +9,43 @@ import { GoogleWorkspaceClient } from './google-workspace.mjs';
 import { ResearchManager } from '../research/manager.mjs';
 import { ExecutionPolicyEngine } from '../core/execution-policy-engine.mjs';
 
+const TOOL_CAPABILITY_META = {
+  file_read: { class: 'read', mutatesState: false, destructive: false, proofHint: 'returned file content/path' },
+  file_write: { class: 'mutate', mutatesState: true, destructive: false, proofHint: 'returned bytes/path' },
+  file_patch: { class: 'mutate', mutatesState: true, destructive: false, proofHint: 'returned path with ok=true' },
+  file_restore_last: { class: 'mutate', mutatesState: true, destructive: false, proofHint: 'returned backupId/path' },
+  session_list: { class: 'read', mutatesState: false, destructive: false, proofHint: 'returned sessions[]' },
+  session_delete: { class: 'destructive', mutatesState: true, destructive: true, proofHint: 'deleted=true or explicit deletion counters' },
+  session_clear: { class: 'destructive', mutatesState: true, destructive: true, proofHint: 'deletedSessions/deletedMessages counters' },
+  shell_run: { class: 'execute', mutatesState: true, destructive: false, proofHint: 'command code/stdout/stderr' },
+  browser_status: { class: 'read', mutatesState: false, destructive: false, proofHint: 'status payload' },
+  browser_navigate: { class: 'execute', mutatesState: true, destructive: false, proofHint: 'target URL in output' },
+  browser_search: { class: 'execute', mutatesState: true, destructive: false, proofHint: 'query/output' },
+  browser_type: { class: 'execute', mutatesState: true, destructive: false, proofHint: 'selector and submission output' },
+  browser_click: { class: 'execute', mutatesState: true, destructive: false, proofHint: 'selector click result' },
+  browser_extract: { class: 'read', mutatesState: false, destructive: false, proofHint: 'extracted text' },
+  browser_snapshot: { class: 'read', mutatesState: false, destructive: false, proofHint: 'tabs snapshot' },
+  http_request: { class: 'execute', mutatesState: true, destructive: false, proofHint: 'status/body payload' },
+  http_download: { class: 'mutate', mutatesState: true, destructive: false, proofHint: 'outPath and transfer result' },
+  desktop_open: { class: 'execute', mutatesState: true, destructive: false, proofHint: 'process result' },
+  desktop_xdotool: { class: 'execute', mutatesState: true, destructive: false, proofHint: 'xdotool command result' },
+  skill_list: { class: 'read', mutatesState: false, destructive: false, proofHint: 'skills list' },
+  skill_install: { class: 'mutate', mutatesState: true, destructive: false, proofHint: 'installed skill result' },
+  skill_review: { class: 'read', mutatesState: false, destructive: false, proofHint: 'review report' },
+  skill_approve: { class: 'mutate', mutatesState: true, destructive: false, proofHint: 'approval state' },
+  skill_execute: { class: 'execute', mutatesState: true, destructive: false, proofHint: 'skill execution output' },
+  skill_uninstall: { class: 'destructive', mutatesState: true, destructive: true, proofHint: 'uninstall confirmation' },
+  email_status: { class: 'read', mutatesState: false, destructive: false, proofHint: 'auth/CLI state' },
+  email_send: { class: 'mutate', mutatesState: true, destructive: false, proofHint: 'message id / delivery response' },
+  email_list: { class: 'read', mutatesState: false, destructive: false, proofHint: 'message list' },
+  email_read: { class: 'read', mutatesState: false, destructive: false, proofHint: 'message payload' },
+  gworkspace_call: { class: 'execute', mutatesState: true, destructive: false, proofHint: 'api call response' },
+  research_run_daily: { class: 'execute', mutatesState: true, destructive: false, proofHint: 'run summary' },
+  research_list_recent: { class: 'read', mutatesState: false, destructive: false, proofHint: 'reports[]' },
+  research_review_queue: { class: 'read', mutatesState: false, destructive: false, proofHint: 'queue[]' },
+  research_approve: { class: 'mutate', mutatesState: true, destructive: false, proofHint: 'approval confirmation' }
+};
+
 function resolveWorkspaceRoot(config) {
   const raw = String(config?.runtime?.workspaceRoot || process.env.OPENUNUM_WORKSPACE || process.cwd());
   return path.resolve(raw);
@@ -208,6 +245,48 @@ export class ToolRuntime {
           parameters: {
             type: 'object',
             properties: { path: { type: 'string' } }
+          }
+        }
+      },
+      {
+        type: 'function',
+        function: {
+          name: 'session_list',
+          description: 'List stored chat sessions',
+          parameters: {
+            type: 'object',
+            properties: { limit: { type: 'number' } }
+          }
+        }
+      },
+      {
+        type: 'function',
+        function: {
+          name: 'session_delete',
+          description: 'Delete one chat session and its scoped history',
+          parameters: {
+            type: 'object',
+            properties: {
+              sessionId: { type: 'string' },
+              force: { type: 'boolean' },
+              operationId: { type: 'string' }
+            },
+            required: ['sessionId']
+          }
+        }
+      },
+      {
+        type: 'function',
+        function: {
+          name: 'session_clear',
+          description: 'Delete all chat sessions except an optional keepSessionId',
+          parameters: {
+            type: 'object',
+            properties: {
+              keepSessionId: { type: 'string' },
+              force: { type: 'boolean' },
+              operationId: { type: 'string' }
+            }
           }
         }
       },
@@ -504,6 +583,23 @@ export class ToolRuntime {
     return schemas.filter((schema) => allow.has(String(schema?.function?.name || '')));
   }
 
+  toolCatalog(options = {}) {
+    const schemas = this.toolSchemas(options);
+    return schemas.map((schema) => {
+      const name = String(schema?.function?.name || '');
+      const meta = TOOL_CAPABILITY_META[name] || {};
+      return {
+        name,
+        description: String(schema?.function?.description || ''),
+        parameters: schema?.function?.parameters || { type: 'object' },
+        class: meta.class || 'execute',
+        mutatesState: Boolean(meta.mutatesState),
+        destructive: Boolean(meta.destructive),
+        proofHint: String(meta.proofHint || 'tool result payload')
+      };
+    });
+  }
+
   isToolAllowed(toolName, context = {}) {
     const list = Array.isArray(context?.allowedTools) ? context.allowedTools : null;
     if (!list || !list.length) return true;
@@ -700,6 +796,55 @@ export class ToolRuntime {
       if (budgetError) return budgetError;
       const target = args?.path ? safePath(args.path, this.workspaceRoot) : '';
       return this.restoreLastBackup(target);
+    }
+    if (name === 'session_list') {
+      const budgetError = ensureBudget();
+      if (budgetError) return budgetError;
+      if (!this.memoryStore?.listSessions) {
+        return { ok: false, error: 'memory_store_unavailable' };
+      }
+      const limit = Math.max(1, Math.min(200, Number(args?.limit || 80)));
+      return { ok: true, sessions: this.memoryStore.listSessions(limit) };
+    }
+    if (name === 'session_delete') {
+      const budgetError = ensureBudget();
+      if (budgetError) return budgetError;
+      if (!this.memoryStore?.deleteSession) {
+        return { ok: false, error: 'memory_store_unavailable' };
+      }
+      const targetSessionId = String(args?.sessionId || '').trim();
+      if (!targetSessionId) return { ok: false, error: 'sessionId is required' };
+      const currentSessionId = String(context?.sessionId || '').trim();
+      if (!Boolean(args?.force) && currentSessionId && targetSessionId === currentSessionId) {
+        return {
+          ok: false,
+          error: 'active_session_protected',
+          stderr: 'Refusing to delete the active session without force=true.'
+        };
+      }
+      return this.memoryStore.deleteSession(targetSessionId, {
+        operationId: String(args?.operationId || '').trim()
+      });
+    }
+    if (name === 'session_clear') {
+      const budgetError = ensureBudget();
+      if (budgetError) return budgetError;
+      if (!this.memoryStore?.clearSessions) {
+        return { ok: false, error: 'memory_store_unavailable' };
+      }
+      const keepFromArgs = String(args?.keepSessionId || '').trim();
+      const keepSessionId = keepFromArgs || String(context?.sessionId || '').trim();
+      if (!keepSessionId && !Boolean(args?.force)) {
+        return {
+          ok: false,
+          error: 'keep_session_required',
+          stderr: 'Missing keepSessionId. Pass keepSessionId or set force=true to clear every session.'
+        };
+      }
+      return this.memoryStore.clearSessions({
+        keepSessionId,
+        operationId: String(args?.operationId || '').trim()
+      });
     }
     if (name === 'shell_run') {
       const budgetError = ensureBudget();
