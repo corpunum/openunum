@@ -93,6 +93,7 @@ Returns:
 
 - `GET /api/runtime/overview`
 - `GET /api/autonomy/insights?sessionId=...&goal=...`
+- `GET /api/controller/behaviors?limit=80`
 - `GET /api/missions/timeline?id=...`
 
 Returns a WebUI-oriented flagship summary:
@@ -112,6 +113,11 @@ Returns a WebUI-oriented flagship summary:
 - `toolReliability[]`
 - `recentToolRuns[]`
 - `recentCompactions[]`
+
+`GET /api/controller/behaviors` returns:
+- `behaviors.hydrated`
+- `behaviors.inMemory[]`
+- `behaviors.persisted[]`
 
 `GET /api/missions/timeline` returns:
 - `mission`
@@ -136,6 +142,12 @@ Returns a WebUI-oriented flagship summary:
 - `POST /api/auth/job/input`
 - `GET /api/models?provider=ollama|nvidia|openrouter|openai`
 - `GET /api/model-catalog`
+
+Credential visibility rules:
+- `GET /api/config` is sanitized and will keep `model.*ApiKey` fields empty by design.
+- Use `GET /api/providers/config` for boolean provider readiness (`has*ApiKey`).
+- Use `GET /api/auth/catalog` for redacted stored/auth state (`stored`, `auth_ready`, `auth_mode`, `stored_preview`).
+- Use `POST /api/auth/prefill-local` to scan/import local provider credentials into the secure secret store.
 
 `GET /api/providers/config` returns canonical OpenAI fields plus legacy aliases:
 - `openaiBaseUrl`
@@ -368,6 +380,9 @@ Payload:
 - `permissionDenials`
 - `turnSummary`
 - `pivotHints`
+- `behaviorClass`
+- `behaviorConfidence`
+- `behaviorSource`
 
 Long-running behavior:
 - When a turn is still running, `POST /api/chat` returns `202` with:

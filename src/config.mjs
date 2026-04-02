@@ -141,6 +141,7 @@ export function defaultConfig() {
         fallbackProviders: ['ollama', 'nvidia', 'openrouter', 'openai'],
         forcePrimaryProvider: false
       },
+      behaviorOverrides: {},
       ollamaBaseUrl: process.env.OLLAMA_BASE_URL || 'http://127.0.0.1:11434',
       openrouterBaseUrl: process.env.OPENROUTER_BASE_URL || 'https://openrouter.ai/api/v1',
       nvidiaBaseUrl: process.env.NVIDIA_BASE_URL || 'https://integrate.api.nvidia.com/v1',

@@ -7,6 +7,9 @@ This map is implementation-accurate as of 2026-04-01.
 - `src/server.mjs`: HTTP API server and Web UI host
 - `src/core/agent.mjs`: provider chat loop, tool-call execution, trace generation
 - `src/core/missions.mjs`: autonomous mission runner with proof-aware completion
+- `src/core/model-behavior-registry.mjs`: behavior classes + runtime learning hints per provider/model
+- `src/core/context-pack-builder.mjs`: behavior-aware context/system pack assembly
+- `src/core/execution-contract.mjs`: deterministic continuation and proof-backed completion checks
 - `src/tools/runtime.mjs`: unified tool schema + execution routing
 - `src/tools/executor-daemon.mjs`: retry/backoff executor with JSONL logs
 - `src/tools/google-workspace.mjs`: native Google Workspace OAuth + Gmail/Google API client

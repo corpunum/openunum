@@ -95,6 +95,22 @@ sqlite3 ~/.openunum/openunum.db 'select tool_name, ok, created_at from tool_runs
 - Check trace panel for tool activity.
 - Verify strict routing if fallback is disabled.
 
+### Symptom: "Keys are present but API says missing"
+- Confirm secure provider state first:
+```bash
+curl -sS http://127.0.0.1:18880/api/providers/config
+curl -sS http://127.0.0.1:18880/api/auth/catalog
+```
+- Do not use `GET /api/config` key fields as truth source; config output is intentionally scrubbed.
+- Refresh/import local credentials:
+```bash
+curl -sS -X POST http://127.0.0.1:18880/api/auth/prefill-local -H 'Content-Type: application/json' -d '{}'
+```
+- Re-check provider flags:
+```bash
+curl -sS http://127.0.0.1:18880/api/providers/config
+```
+
 ### Symptom: Browser claims success but no visible window
 - Confirm graphical session env (`DISPLAY`, Wayland/X11)
 - Use `/api/browser/launch` and re-check `/api/browser/status`

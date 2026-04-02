@@ -16,6 +16,7 @@ This folder is optimized for fast machine onboarding (fresh agent session, no pr
 10. [CONTEXT_COMPACTION.md](/home/corp-unum/openunum/docs/CONTEXT_COMPACTION.md)
 11. [PROJECT_STATE_SNAPSHOT.md](/home/corp-unum/openunum/docs/PROJECT_STATE_SNAPSHOT.md)
 12. [CHANGELOG_CURRENT.md](/home/corp-unum/openunum/docs/CHANGELOG_CURRENT.md)
+13. [MODEL_AWARE_CONTROLLER.md](/home/corp-unum/openunum/docs/MODEL_AWARE_CONTROLLER.md)
 
 ## Legacy Planning Docs
 

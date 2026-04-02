@@ -4,6 +4,19 @@ import { ToolRuntime } from '../tools/runtime.mjs';
 import { loadSkills } from '../skills/loader.mjs';
 import { buildContextBudgetInfo, estimateMessagesTokens } from './context-budget.mjs';
 import { compactSessionMessages } from './context-compact.mjs';
+import {
+  classifyControllerBehavior,
+  getBehaviorRegistrySnapshot,
+  hydrateBehaviorRegistry,
+  learnControllerBehavior
+} from './model-behavior-registry.mjs';
+import { buildControllerSystemMessage } from './context-pack-builder.mjs';
+import {
+  continuationDirective,
+  isProofBackedDone,
+  recoveryDirective,
+  shouldForceContinuation
+} from './execution-contract.mjs';
 
 function inferParamsB(modelId) {
   const m = String(modelId || '').toLowerCase().match(/(\d+(?:\.\d+)?)b/);
@@ -98,18 +111,6 @@ function compactToolResult(result) {
   if (r.stderr) compact.stderr = truncateText(r.stderr, 1200);
   if (r.text) compact.text = truncateText(r.text, 2000);
   return compact;
-}
-
-function isLikelyCompletionText(text) {
-  const t = String(text || '').toLowerCase();
-  if (!t.trim()) return false;
-  return (
-    t.includes('mission_status: done') ||
-    t.includes('done') ||
-    t.includes('completed') ||
-    t.includes('finished') ||
-    t.includes('successfully')
-  );
 }
 
 const TOOL_ROUTING_HINTS = [
@@ -290,6 +291,34 @@ function getExecutionProfile(provider, model) {
   };
 }
 
+function mergeProfileWithBehavior(profile, behavior, config) {
+  const tuning = behavior?.tuning || {};
+  const configuredTurnCap = Number(config?.runtime?.agentTurnTimeoutMs || 420000);
+  const profileTurn = Number.isFinite(profile?.turnBudgetMs) ? Number(profile.turnBudgetMs) : null;
+  const tuningTurn = Number.isFinite(tuning?.turnBudgetMs) ? Number(tuning.turnBudgetMs) : null;
+  let mergedTurnBudget = profileTurn;
+  if (mergedTurnBudget == null && tuningTurn != null) mergedTurnBudget = tuningTurn;
+  if (mergedTurnBudget != null && tuningTurn != null) mergedTurnBudget = Math.min(mergedTurnBudget, tuningTurn);
+  if (mergedTurnBudget != null) {
+    mergedTurnBudget = Math.max(20000, Math.min(mergedTurnBudget, configuredTurnCap));
+  }
+
+  const profileIters = Number.isFinite(profile?.maxIters) ? Number(profile.maxIters) : null;
+  const tuningIters = Number.isFinite(tuning?.maxIters) ? Number(tuning.maxIters) : null;
+  let mergedMaxIters = profileIters;
+  if (mergedMaxIters == null && tuningIters != null) mergedMaxIters = tuningIters;
+  if (mergedMaxIters != null && tuningIters != null) mergedMaxIters = Math.min(mergedMaxIters, tuningIters);
+  if (mergedMaxIters != null) {
+    mergedMaxIters = Math.max(2, Math.min(mergedMaxIters, 12));
+  }
+
+  return {
+    ...profile,
+    turnBudgetMs: mergedTurnBudget,
+    maxIters: mergedMaxIters
+  };
+}
+
 function detectLocalRuntimeTask(messages = []) {
   const text = messages.map((m) => String(m?.content || '')).join('\n').toLowerCase();
   return /autonomous mission goal|continue autonomous mission/.test(text) &&
@@ -301,6 +330,12 @@ export class OpenUnumAgent {
     this.config = config;
     this.memoryStore = memoryStore;
     this.toolRuntime = new ToolRuntime(config, memoryStore);
+    this.behaviorRegistryHydrated = false;
+    if (this.memoryStore?.listControllerBehaviors) {
+      const persisted = this.memoryStore.listControllerBehaviors(200);
+      hydrateBehaviorRegistry(persisted);
+      this.behaviorRegistryHydrated = true;
+    }
     this.lastRuntime = {
       provider: config.model.provider,
       model: config.model.model
@@ -313,6 +348,18 @@ export class OpenUnumAgent {
       model: this.config.model.model,
       activeProvider: this.lastRuntime?.provider || this.config.model.provider,
       activeModel: this.lastRuntime?.model || this.config.model.model
+    };
+  }
+
+  getControllerBehaviorSnapshot(limit = 40) {
+    const inMemory = getBehaviorRegistrySnapshot(limit);
+    const persisted = this.memoryStore?.listControllerBehaviors
+      ? this.memoryStore.listControllerBehaviors(limit)
+      : [];
+    return {
+      hydrated: this.behaviorRegistryHydrated,
+      inMemory,
+      persisted
     };
   }
 
@@ -503,8 +550,16 @@ export class OpenUnumAgent {
     }));
   }
 
-  async runOneProviderTurn({ provider, model, messages, sessionId, routedTools = [] }) {
-    const executionProfile = getExecutionProfile(provider, model);
+  async runOneProviderTurn({
+    provider,
+    model,
+    messages,
+    sessionId,
+    routedTools = [],
+    contextPackInputs = {}
+  }) {
+    const behavior = classifyControllerBehavior({ provider, model, config: this.config });
+    const executionProfile = mergeProfileWithBehavior(getExecutionProfile(provider, model), behavior, this.config);
     const localRuntimeTask = detectLocalRuntimeTask(messages);
     const attemptConfig = {
       ...this.config,
@@ -518,11 +573,15 @@ export class OpenUnumAgent {
     messages = [
       {
         role: 'system',
-        content:
-          `Execution profile: ${executionProfile.name}.\n` +
-          `Guidance:\n${executionProfile.guidance.map((line, idx) => `${idx + 1}. ${line}`).join('\n')}\n` +
-          `Guardrails:\n${(executionProfile.guardrails || []).map((line, idx) => `${idx + 1}. ${line}`).join('\n')}\n` +
-          `Verification:\n${(executionProfile.verificationHints || []).map((line, idx) => `${idx + 1}. ${line}`).join('\n')}`
+        content: buildControllerSystemMessage({
+          config: this.config,
+          executionProfile,
+          behavior,
+          provider,
+          model,
+          routedTools,
+          ...contextPackInputs
+        })
       },
       ...messages
     ];
@@ -536,12 +595,14 @@ export class OpenUnumAgent {
     const turnStartedAt = Date.now();
     let finalText = '';
     let toolRuns = 0;
-    let lastToolResult = null;
     const executedTools = [];
     const trace = {
       provider,
       model,
       executionProfile: executionProfile.name,
+      behaviorClass: behavior.classId,
+      behaviorConfidence: behavior.confidence,
+      behaviorSource: behavior.source,
       localRuntimeTask,
       routedTools,
       iterations: [],
@@ -589,18 +650,19 @@ export class OpenUnumAgent {
 
       if (!out.toolCalls || out.toolCalls.length === 0) {
         trace.iterations.push(iter);
-        const shouldForceContinue =
-          i < maxIters - 1 &&
-          toolRuns > 0 &&
-          !isLikelyCompletionText(out.content || finalText) &&
-          forcedContinueCount < 2;
-        if (shouldForceContinue) {
+        const forceContinue = shouldForceContinuation({
+          assistantText: out.content || finalText,
+          toolCalls: out.toolCalls,
+          toolRuns,
+          iteration: i + 1,
+          maxIters,
+          priorForcedCount: forcedContinueCount
+        });
+        if (forceContinue) {
           forcedContinueCount += 1;
           messages.push({
             role: 'system',
-            content:
-              'Do not stop at planning text. Continue executing concrete actions now using tools. ' +
-              'Only provide final answer when task is actually completed from tool evidence.'
+            content: continuationDirective('planner_without_proof')
           });
           continue;
         }
@@ -633,7 +695,6 @@ export class OpenUnumAgent {
           });
         }
         toolRuns += 1;
-        lastToolResult = result;
         executedTools.push({
           name: tc.name,
           args,
@@ -668,9 +729,7 @@ export class OpenUnumAgent {
           ...messages,
           {
             role: 'system',
-            content:
-              'Provide a concise final status update based only on completed tool results. ' +
-              'Do not call tools. Include what succeeded, what failed, and next concrete step.'
+            content: recoveryDirective()
           }
         ];
         const recovery = await runtimeProvider.chat({ messages: recoveryMessages, tools: [], timeoutMs: remainingMs });
@@ -689,6 +748,18 @@ export class OpenUnumAgent {
           ? `Tool actions executed so far: ${toolRuns}. Open execution trace for the latest results.`
           : 'No successful tool output was recorded before timeout.',
         'Retry with a narrower prompt, fewer steps, or a faster model.'
+      ].join('\n');
+    }
+
+    if (
+      finalText &&
+      behavior?.tuning?.requireProofForDone &&
+      !isProofBackedDone({ text: finalText, toolRuns, requireProofForDone: true }) &&
+      /mission_status:\s*done/i.test(String(finalText))
+    ) {
+      finalText = [
+        'Completion claim was rejected by execution contract: no proof-backed tool evidence in this turn.',
+        'MISSION_STATUS: CONTINUE'
       ].join('\n');
     }
 
@@ -718,6 +789,16 @@ export class OpenUnumAgent {
     this.lastRuntime = { provider, model };
     this.config.model.providerModels = this.config.model.providerModels || {};
     this.config.model.providerModels[provider] = model;
+    const learned = learnControllerBehavior({ provider, model, trace });
+    if (learned && this.memoryStore?.upsertControllerBehavior) {
+      this.memoryStore.upsertControllerBehavior({
+        provider: learned.provider,
+        model: learned.model,
+        classId: learned.classId,
+        sampleCount: learned.sampleCount,
+        reasons: learned.reasons
+      });
+    }
     return { finalText, trace };
   }
 
@@ -843,6 +924,14 @@ export class OpenUnumAgent {
         cutoffMessageId: compacted.cutoffMessageId
       };
     }
+    const contextPackInputs = {
+      routedTools,
+      facts,
+      knowledgeHits,
+      strategyPrompt,
+      skillPrompt
+    };
+
     const messages = [
       {
         role: 'system',
@@ -850,23 +939,11 @@ export class OpenUnumAgent {
           `You are OpenUnum, an Ubuntu operator agent. Current configured provider/model is ${this.config.model.provider}/${this.config.model.model}. ` +
           'If user asks which model/provider you are using, answer with exactly that runtime value and do not invent other providers.\n' +
           'Never claim an action was completed unless a tool result in this turn confirms it.\n' +
-          'Execution contract for every model:\n' +
-          '1. Break work into small verified substeps.\n' +
-          '2. Prefer shell-first local inspection for local-machine tasks.\n' +
-          '3. After a long or noisy tool result, summarize the proof internally and continue; do not depend on raw logs.\n' +
-          '4. If one route fails twice, pivot to a different route without asking for help.\n' +
-          '5. End each turn with either concrete proof-backed progress or a short next-step checkpoint.\n' +
-          'For browser tasks: if browser flow is blocked, pivot to terminal/script strategy immediately (curl/wget/git/python/node) and continue.\n' +
-          'Prefer the quickest reliable execution path and build short scripts when it improves completion.\n' +
-          (routedTools.length ? `Heuristic tool routing hints for this request: ${routedTools.map((item) => `${item.tool}(score=${item.score})`).join(', ')}.\n` : '') +
+          'Execution contract for every model: work in small proof-backed substeps and pivot after repeated route failure.\n' +
           `Owner control mode: ${this.config.runtime?.ownerControlMode || 'safe'}. ` +
           'In safe mode, avoid destructive operations without explicit owner approval. ' +
           'In unlocked modes, maximize completion while still requiring tool evidence.\n' +
-          'Use tools aggressively to complete tasks end-to-end.\n' +
-          (facts ? `Relevant memory:\n${facts}\n` : '') +
-          (knowledgeHits ? `Smart memory recall:\n${knowledgeHits}\n` : '') +
-          (strategyPrompt ? `Previous strategy outcomes for related tasks:\n${strategyPrompt}\n` : '') +
-          (skillPrompt ? `Loaded skills:\n${skillPrompt}` : '')
+          'Use tools aggressively to complete tasks end-to-end.\n'
       },
       ...history
     ];
@@ -883,7 +960,8 @@ export class OpenUnumAgent {
           model: attempt.model,
           messages: [...messages],
           sessionId,
-          routedTools
+          routedTools,
+          contextPackInputs
         });
         finalText = run.finalText;
         trace = run.trace;

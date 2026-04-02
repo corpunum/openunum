@@ -47,6 +47,7 @@ Secret store path:
       "fallbackProviders": ["ollama", "nvidia", "openrouter", "openai"],
       "forcePrimaryProvider": false
     },
+    "behaviorOverrides": {},
     "ollamaBaseUrl": "http://127.0.0.1:11434",
     "openrouterBaseUrl": "https://openrouter.ai/api/v1",
     "nvidiaBaseUrl": "https://integrate.api.nvidia.com/v1",
@@ -94,6 +95,7 @@ Provider and integration credentials are stored separately from `openunum.json`:
 
 - `src/config.mjs` applies defaults with `withDefaults(...)` to keep backward compatibility.
 - `src/config.mjs` migrates legacy provider and Telegram secrets out of `openunum.json` into `secrets.json` on load.
-- `GET /api/config` returns sanitized config only; use `GET /api/auth/catalog` for redacted auth status.
+- `GET /api/config` returns sanitized config only; use `GET /api/providers/config` for `has*ApiKey` booleans and `GET /api/auth/catalog` for redacted auth status.
+- `model.behaviorOverrides` can pin behavior classes/tuning per provider (`"ollama"`) or exact provider-model key (`"ollama::ollama/qwen3.5:9b-64k"`).
 - New fields should always be added to defaults + merged in `withDefaults(...)`.
 - Runtime/API updates should call `agent.reloadTools()` when tool behavior may change.

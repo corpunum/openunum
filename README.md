@@ -64,3 +64,10 @@ node src/cli.mjs model switch --provider ollama --model ollama/qwen3.5:397b-clou
 - "Relentless" mode increases retries and autonomy but does not bypass OS/session security constraints.
 - OpenUnum is configured to prefer truthful completion claims with tool-evidence.
 - Strict provider mode can lock execution to the selected model provider.
+
+## Provider Credentials + Routing Reality Check
+
+- `GET /api/config` is sanitized; provider key fields are intentionally blank.
+- Use `GET /api/providers/config` for provider readiness booleans (`hasOpenrouterApiKey`, `hasNvidiaApiKey`, `hasOpenaiApiKey`).
+- Use `GET /api/auth/catalog` for redacted provider/service auth state and source previews.
+- If local secrets changed, run `POST /api/auth/prefill-local` to rescan/import provider credentials from local sources.

@@ -1,8 +1,40 @@
 # Changelog (Current Consolidated)
 
+Date: 2026-04-02
+
+## Reliability + Docs Clarification Pass
+
+0. Hardened mission lifecycle against long-hanging controller turns:
+   - added per-mission-step watchdog timeout around mission `agent.chat()` execution
+   - timeout failures now terminate mission turns with explicit error evidence instead of indefinite `running/stopping` stalls
+   - local-runtime cloud-controller missions now carry explicit mission turn timeout tuning
+
+1. Hardened local-runtime recovery across providers:
+   - recovery logic now detects provider/auth/model-not-found failure signals from mission replies
+   - local-runtime missions can pivot controller back to configured Ollama model when non-Ollama provider path is failing
+
+2. Updated operator docs to remove credential-source ambiguity:
+   - clarified that `GET /api/config` is sanitized and cannot be used as key-presence truth source
+   - documented `GET /api/providers/config` as readiness surface (`has*ApiKey`)
+   - documented `GET /api/auth/catalog` as redacted auth/source surface
+   - documented `POST /api/auth/prefill-local` as local secret scan/import path
+
 Date: 2026-04-01
 
 ## Current Flagship Pass
+
+0. Added model-aware controller scaffolding for cross-provider execution:
+   - new behavior class registry in `src/core/model-behavior-registry.mjs`
+   - new class-aware context pack builder in `src/core/context-pack-builder.mjs`
+   - new execution contract helpers in `src/core/execution-contract.mjs`
+   - provider turns now emit behavior metadata in trace (`behaviorClass`, `behaviorConfidence`, `behaviorSource`)
+   - controller now enforces proof-backed completion and planner-without-execution continuation
+   - learned behavior-class assignments now persist in SQLite (`controller_behaviors`) and are rehydrated on startup
+   - added `GET /api/controller/behaviors` for operator inspection of in-memory vs persisted behavior state
+   - behavior tuning now only tightens (never loosens) base execution profile budgets
+   - local-runtime missions on Ollama cloud controllers now clamp provider/turn budgets and iteration caps during mission execution, then restore baseline runtime settings afterward
+   - config now supports optional `model.behaviorOverrides`
+   - added implementation guide: `docs/MODEL_AWARE_CONTROLLER.md`
 
 1. Hardened local-runtime mission execution and provider portability:
    - tool/runtime turn budget enforcement now covers slow tool routes and nonproductive retries

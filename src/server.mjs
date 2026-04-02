@@ -1236,6 +1236,15 @@ const server = http.createServer(async (req, res) => {
       return sendJson(res, 200, buildAutonomyInsights({ sessionId, goal }));
     }
 
+    if (req.method === 'GET' && url.pathname === '/api/controller/behaviors') {
+      const limitRaw = Number(url.searchParams.get('limit') || 80);
+      const limit = Number.isFinite(limitRaw) ? Math.max(1, Math.min(limitRaw, 400)) : 80;
+      return sendJson(res, 200, {
+        ok: true,
+        behaviors: agent.getControllerBehaviorSnapshot(limit)
+      });
+    }
+
     if (req.method === 'GET' && url.pathname === '/api/model-catalog') {
       normalizeModelSettings();
       const catalog = await buildModelCatalog(config.model);

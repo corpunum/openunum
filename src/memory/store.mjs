@@ -95,6 +95,16 @@ export class MemoryStore {
         source_ref TEXT,
         created_at TEXT NOT NULL
       );
+      CREATE TABLE IF NOT EXISTS controller_behaviors (
+        id INTEGER PRIMARY KEY,
+        provider TEXT NOT NULL,
+        model TEXT NOT NULL,
+        class_id TEXT NOT NULL,
+        sample_count INTEGER NOT NULL,
+        reasons_json TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        UNIQUE(provider, model)
+      );
     `);
   }
 
@@ -514,6 +524,53 @@ export class MemoryStore {
       failureCount: Number(r.failure_count || 0),
       successRate: Number(r.total || 0) > 0 ? Number(r.success_count || 0) / Number(r.total || 1) : 0,
       lastUsedAt: r.last_used_at || null
+    }));
+  }
+
+  upsertControllerBehavior({ provider, model, classId, sampleCount = 0, reasons = [] }) {
+    const p = String(provider || '').trim().toLowerCase();
+    const m = String(model || '').trim().toLowerCase();
+    const c = String(classId || '').trim();
+    if (!p || !m || !c) return;
+    const normalizedReasons = Array.isArray(reasons)
+      ? reasons.map((line) => String(line || '').trim()).filter(Boolean).slice(0, 20)
+      : [];
+    this.db
+      .prepare(
+        `INSERT INTO controller_behaviors (provider, model, class_id, sample_count, reasons_json, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?)
+         ON CONFLICT(provider, model) DO UPDATE SET
+           class_id = excluded.class_id,
+           sample_count = excluded.sample_count,
+           reasons_json = excluded.reasons_json,
+           updated_at = excluded.updated_at`
+      )
+      .run(
+        p,
+        m,
+        c,
+        Math.max(0, Number(sampleCount || 0) || 0),
+        JSON.stringify(normalizedReasons),
+        new Date().toISOString()
+      );
+  }
+
+  listControllerBehaviors(limit = 80) {
+    const rows = this.db
+      .prepare(
+        `SELECT provider, model, class_id, sample_count, reasons_json, updated_at
+         FROM controller_behaviors
+         ORDER BY sample_count DESC, updated_at DESC
+         LIMIT ?`
+      )
+      .all(limit);
+    return rows.map((r) => ({
+      provider: r.provider,
+      model: r.model,
+      classId: r.class_id,
+      sampleCount: Number(r.sample_count || 0),
+      reasons: JSON.parse(r.reasons_json || '[]'),
+      updatedAt: r.updated_at
     }));
   }
 }

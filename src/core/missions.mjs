@@ -4,6 +4,29 @@ function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+class MissionTurnTimeoutError extends Error {
+  constructor(timeoutMs) {
+    super(`mission_turn_timeout_${timeoutMs}ms`);
+    this.name = 'MissionTurnTimeoutError';
+    this.timeoutMs = timeoutMs;
+  }
+}
+
+function withTimeout(promise, timeoutMs) {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => reject(new MissionTurnTimeoutError(timeoutMs)), timeoutMs);
+    Promise.resolve(promise)
+      .then((value) => {
+        clearTimeout(timer);
+        resolve(value);
+      })
+      .catch((error) => {
+        clearTimeout(timer);
+        reject(error);
+      });
+  });
+}
+
 function trimLine(text, maxChars = 220) {
   const clean = String(text || '').replace(/\s+/g, ' ').trim();
   if (clean.length <= maxChars) return clean;
@@ -49,6 +72,12 @@ MISSION_STATUS: CONTINUE`;
 function isLocalRuntimeMission(goal) {
   const text = String(goal || '').toLowerCase();
   return /local|gguf|ollama|llama\.cpp|runtime|launch|server|model/.test(text);
+}
+
+function hasProviderFailureSignal(text) {
+  const t = String(text || '').toLowerCase();
+  if (!t) return false;
+  return /all configured providers failed|provider failed|unauthorized|401|api key|authentication|invalid api key|model .* not found/.test(t);
 }
 
 function deriveRuntimeHints(mission, recentToolRuns = []) {
@@ -227,6 +256,14 @@ export class MissionRunner {
   async run(mission) {
     try {
       this.prepareMissionController(mission);
+      const missionTurnTimeoutMs = Math.max(
+        30000,
+        Number(
+          mission?.controllerTuning?.turnTimeoutMs ||
+          this.config?.runtime?.agentTurnTimeoutMs ||
+          90000
+        )
+      );
       const stepLimit = mission.continueUntilDone ? mission.hardStepCap : mission.maxSteps;
       for (let i = 0; i < stepLimit; i += 1) {
         if (mission.stopRequested) break;
@@ -245,10 +282,13 @@ export class MissionRunner {
           providerHint: deriveProviderHint(currentModel)
         });
 
-        const out = await this.agent.chat({
-          sessionId: mission.sessionId,
-          message: prompt
-        });
+        const out = await withTimeout(
+          this.agent.chat({
+            sessionId: mission.sessionId,
+            message: prompt
+          }),
+          missionTurnTimeoutMs
+        );
         const text = String(out.reply || '');
         const recentToolRunsAfter = this.memoryStore?.getRecentToolRuns
           ? this.memoryStore.getRecentToolRuns(mission.sessionId, 8)
@@ -356,6 +396,14 @@ export class MissionRunner {
       });
     } catch (error) {
       mission.status = 'failed';
+      if (error instanceof MissionTurnTimeoutError) {
+        mission.log.push({
+          step: mission.step,
+          at: new Date().toISOString(),
+          error: error.message,
+          timeoutMs: error.timeoutMs
+        });
+      }
       mission.error = String(error.message || error);
       mission.finishedAt = new Date().toISOString();
       this.memoryStore?.recordStrategyOutcome?.({
@@ -364,6 +412,8 @@ export class MissionRunner {
         success: false,
         evidence: mission.error
       });
+    } finally {
+      this.restoreMissionController(mission);
     }
   }
 
@@ -377,13 +427,49 @@ export class MissionRunner {
       /cloud|kimi|minimax/.test(String(currentModel).toLowerCase()) &&
       this.agent?.switchModel
     ) {
+      const prev = {
+        providerRequestTimeoutMs: Number(this.config?.runtime?.providerRequestTimeoutMs || 120000),
+        agentTurnTimeoutMs: Number(this.config?.runtime?.agentTurnTimeoutMs || 420000),
+        maxToolIterations: Number(this.config?.runtime?.maxToolIterations || 8)
+      };
+      mission.controllerTuning = { previous: prev };
+      this.config.runtime.providerRequestTimeoutMs = Math.min(prev.providerRequestTimeoutMs, 45000);
+      this.config.runtime.agentTurnTimeoutMs = Math.min(prev.agentTurnTimeoutMs, 70000);
+      this.config.runtime.maxToolIterations = Math.min(prev.maxToolIterations, 6);
+      mission.controllerTuning.turnTimeoutMs = Math.min(
+        Math.max(30000, Number(prev.agentTurnTimeoutMs || 70000) + 10000),
+        90000
+      );
+      if (this.agent?.config?.runtime) {
+        this.agent.config.runtime.providerRequestTimeoutMs = this.config.runtime.providerRequestTimeoutMs;
+        this.agent.config.runtime.agentTurnTimeoutMs = this.config.runtime.agentTurnTimeoutMs;
+        this.agent.config.runtime.maxToolIterations = this.config.runtime.maxToolIterations;
+      }
       mission.recoveryHint =
         'Mission is running on a cloud controller for a local-runtime goal. Keep the controller, but work in narrow shell-first substeps, reuse existing local runtimes before creating duplicates, and avoid blocked file-write paths.';
       mission.log.push({
         step: 0,
         at: new Date().toISOString(),
-        recoveryHint: mission.recoveryHint
+        recoveryHint: mission.recoveryHint,
+        controllerTuning: {
+          providerRequestTimeoutMs: this.config.runtime.providerRequestTimeoutMs,
+          agentTurnTimeoutMs: this.config.runtime.agentTurnTimeoutMs,
+          maxToolIterations: this.config.runtime.maxToolIterations
+        }
       });
+    }
+  }
+
+  restoreMissionController(mission) {
+    const prev = mission?.controllerTuning?.previous;
+    if (!prev) return;
+    this.config.runtime.providerRequestTimeoutMs = prev.providerRequestTimeoutMs;
+    this.config.runtime.agentTurnTimeoutMs = prev.agentTurnTimeoutMs;
+    this.config.runtime.maxToolIterations = prev.maxToolIterations;
+    if (this.agent?.config?.runtime) {
+      this.agent.config.runtime.providerRequestTimeoutMs = prev.providerRequestTimeoutMs;
+      this.agent.config.runtime.agentTurnTimeoutMs = prev.agentTurnTimeoutMs;
+      this.agent.config.runtime.maxToolIterations = prev.maxToolIterations;
     }
   }
 
@@ -391,7 +477,18 @@ export class MissionRunner {
     const current = this.agent?.getCurrentModel?.();
     const currentProvider = current?.activeProvider || current?.provider || this.config?.model?.provider;
     const currentModel = current?.activeModel || current?.model || this.config?.model?.model || '';
+    const latestReply = String(mission?.lastReply || '');
+    const providerFailure = hasProviderFailureSignal(latestReply);
     if (isLocalRuntimeMission(mission.goal)) {
+      if (providerFailure && currentProvider !== 'ollama' && this.agent?.switchModel) {
+        const ollamaModel = this.agent.getModelForProvider
+          ? this.agent.getModelForProvider('ollama')
+          : this.config?.model?.providerModels?.ollama;
+        if (ollamaModel) {
+          this.agent.switchModel('ollama', ollamaModel);
+          return `Provider path is failing (${currentProvider}${currentModel ? `/${currentModel}` : ''}). Switched to ollama/${ollamaModel} for local-runtime control. Continue with narrow shell-first proof steps.`;
+        }
+      }
       return 'Recovery: keep the current controller for now, but pivot the local execution route. Prefer API/batch verification over interactive flows, do not repeat a timed-out local generation call unchanged, and if one runtime remains too slow then switch to a different local runtime instead of repeating the same probe.';
     }
     const fallbacks = this.config?.model?.routing?.fallbackProviders || [];
