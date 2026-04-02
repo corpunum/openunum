@@ -18,7 +18,7 @@ function inferTier(provider, modelId) {
   return 'balanced';
 }
 
-const REQUIRED_KERNEL_TOOLS = ['session_list', 'session_delete', 'session_clear'];
+const REQUIRED_KERNEL_TOOLS = ['session_list', 'session_delete', 'session_clear', 'file_write', 'file_patch'];
 
 function normalizeProfileMap(runtime = {}) {
   const defaults = {
@@ -27,6 +27,8 @@ function normalizeProfileMap(runtime = {}) {
       maxToolIterations: 3,
       allowedTools: [
         'file_read',
+        'file_write',
+        'file_patch',
         'file_restore_last',
         'session_list',
         'session_delete',

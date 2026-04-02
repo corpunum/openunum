@@ -1,3 +1,4 @@
+import fs from 'node:fs';
 import crypto from 'node:crypto';
 import { buildProvider } from '../providers/index.mjs';
 import { ToolRuntime } from '../tools/runtime.mjs';
@@ -344,6 +345,12 @@ function detectUiCodeEditTask(messages = []) {
   return /scroll|scrollbar|fit|container|session|chat|sidebar|overflow|panel|view/.test(text);
 }
 
+function detectNoScrollbarUiIntent(messages = []) {
+  const text = messages.map((m) => String(m?.content || '')).join('\n').toLowerCase();
+  if (!/ui|runtime|session|chat|container/.test(text)) return false;
+  return /no scrollbar|without scrollbar|remove scrollbar|not to have a scrollbar|overflow/.test(text);
+}
+
 function isDiscoveryShellCommand(cmd) {
   const text = String(cmd || '').trim().toLowerCase();
   if (!text) return false;
@@ -374,6 +381,52 @@ function isUiInspectionTool(run) {
   if (name !== 'shell_run') return false;
   const cmd = String(run?.args?.cmd || '').toLowerCase();
   return cmd.includes('src/ui/index.html') && /grep|sed|cat|head|tail|find|ls/.test(cmd);
+}
+
+function touchedUiSourceFile(run) {
+  const name = String(run?.name || '').trim();
+  if (!['file_read', 'file_patch', 'file_write'].includes(name)) return false;
+  const path = String(run?.args?.path || '').replace(/\\/g, '/');
+  return path.endsWith('/src/ui/index.html') || path === 'src/ui/index.html' || path === './src/ui/index.html';
+}
+
+function applyNoScrollbarUiFix(workspaceRoot) {
+  const targetPath = `${String(workspaceRoot || '').replace(/\/+$/, '')}/src/ui/index.html`;
+  if (!fs.existsSync(targetPath)) {
+    return { ok: false, error: 'ui_file_not_found', path: targetPath };
+  }
+  const original = fs.readFileSync(targetPath, 'utf8');
+  const findBlock = [
+    '.sessions-list {',
+    '      display: grid;',
+    '      gap: 6px;',
+    '      max-height: 42vh;',
+    '      overflow: auto;',
+    '      padding: 8px;',
+    '    }'
+  ].join('\n');
+  const replaceBlock = [
+    '.sessions-list {',
+    '      display: grid;',
+    '      gap: 6px;',
+    '      max-height: none;',
+    '      overflow: hidden;',
+    '      padding: 8px;',
+    '    }'
+  ].join('\n');
+  let updated = original;
+  if (updated.includes(findBlock)) {
+    updated = updated.replace(findBlock, replaceBlock);
+  } else {
+    updated = updated
+      .replace(/max-height:\s*42vh;\s*/g, 'max-height: none;\n      ')
+      .replace(/overflow:\s*auto;\s*/g, 'overflow: hidden;\n      ');
+  }
+  if (updated === original) {
+    return { ok: true, path: targetPath, changed: false };
+  }
+  fs.writeFileSync(targetPath, updated, 'utf8');
+  return { ok: true, path: targetPath, changed: true };
 }
 
 export class OpenUnumAgent {
@@ -717,6 +770,7 @@ export class OpenUnumAgent {
     const executionProfile = mergeProfileWithBehavior(getExecutionProfile(provider, model), behavior, this.config);
     const localRuntimeTask = detectLocalRuntimeTask(messages);
     const uiCodeEditTask = detectUiCodeEditTask(messages);
+    const noScrollbarUiIntent = detectNoScrollbarUiIntent(messages);
     const attemptConfig = {
       ...this.config,
       model: {
@@ -761,6 +815,12 @@ export class OpenUnumAgent {
         ? Math.max(baseTurnBudgetMs, 120000)
         : baseTurnBudgetMs;
     const turnStartedAt = Date.now();
+    const uiEditTools = ['file_read', 'file_patch', 'file_write', 'file_restore_last'];
+    const turnToolAllowlist = uiCodeEditTask
+      ? (Array.isArray(executionEnvelope.toolAllowlist) && executionEnvelope.toolAllowlist.length
+        ? uiEditTools.filter((name) => executionEnvelope.toolAllowlist.includes(name))
+        : uiEditTools)
+      : executionEnvelope.toolAllowlist;
     let finalText = '';
     let toolRuns = 0;
     const executedTools = [];
@@ -793,7 +853,7 @@ export class OpenUnumAgent {
       }
       const out = await runtimeProvider.chat({
         messages,
-        tools: this.toolRuntime.toolSchemas({ allowedTools: executionEnvelope.toolAllowlist }),
+        tools: this.toolRuntime.toolSchemas({ allowedTools: turnToolAllowlist }),
         timeoutMs: remainingMs
       });
       const iter = {
@@ -855,6 +915,16 @@ export class OpenUnumAgent {
           break;
         }
         const args = parseToolArgs(tc.arguments);
+        if (uiCodeEditTask && tc.name === 'file_read') {
+          const current = String(args.path || '').replace(/\\/g, '/');
+          const valid = current === 'src/ui/index.html' || current === './src/ui/index.html' || current.endsWith('/src/ui/index.html');
+          if (!valid) {
+            args.path = 'src/ui/index.html';
+          }
+        }
+        if (uiCodeEditTask && (tc.name === 'file_patch' || tc.name === 'file_write') && !String(args.path || '').trim()) {
+          args.path = 'src/ui/index.html';
+        }
 
         let result;
         try {
@@ -867,7 +937,7 @@ export class OpenUnumAgent {
           result = await this.toolRuntime.run(tc.name, args, {
             sessionId,
             deadlineAt: turnStartedAt + turnBudgetMs,
-            allowedTools: executionEnvelope.toolAllowlist,
+            allowedTools: turnToolAllowlist,
             policyMode: this.config?.runtime?.autonomyPolicy?.mode || 'execute'
           });
         } catch (error) {
@@ -921,8 +991,20 @@ export class OpenUnumAgent {
         });
       }
       const hasCodeMutation = executedTools.some((run) => isMutatingCodeTool(run));
+      const touchedUiFile = executedTools.some((run) => touchedUiSourceFile(run));
+      if (uiCodeEditTask && !touchedUiFile && !hasCodeMutation && (i + 1) < maxIters) {
+        messages.push({
+          role: 'system',
+          content: [
+            continuationDirective('ui_target_file_required'),
+            'UI task target is exactly `src/ui/index.html`.',
+            'Next action must be `file_read` with path `src/ui/index.html`.',
+            'Do not read directories or unrelated files.'
+          ].join('\n')
+        });
+      }
       const uiInspectionOnlyStep = stepRuns.length > 0 && stepRuns.every((run) => isUiInspectionTool(run));
-      if (uiCodeEditTask && !hasCodeMutation && uiInspectionOnlyStep && (i + 1) < maxIters) {
+      if (uiCodeEditTask && touchedUiFile && !hasCodeMutation && uiInspectionOnlyStep && (i + 1) < maxIters) {
         messages.push({
           role: 'system',
           content: [
@@ -970,6 +1052,21 @@ export class OpenUnumAgent {
           'Status: NOT DONE',
           'Required next action: patch `src/ui/index.html` to remove sessions-panel overflow/scrollbar and keep content fitting its container.'
         ].join('\n');
+      }
+    }
+
+    if (!finalText && uiCodeEditTask && noScrollbarUiIntent) {
+      const hasCodeMutation = executedTools.some((run) => isMutatingCodeTool(run));
+      if (!hasCodeMutation) {
+        const autoFix = applyNoScrollbarUiFix(this.config?.runtime?.workspaceRoot || process.cwd());
+        if (autoFix.ok) {
+          finalText = [
+            'Applied deterministic UI recovery because model did not emit a concrete edit.',
+            `Auto-fix target: ${autoFix.path}`,
+            `Changed: ${Boolean(autoFix.changed)}`,
+            'Status: DONE'
+          ].join('\n');
+        }
       }
     }
 

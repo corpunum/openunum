@@ -116,6 +116,8 @@ export function defaultConfig() {
           maxToolIterations: 3,
           allowedTools: [
             'file_read',
+            'file_write',
+            'file_patch',
             'file_restore_last',
             'session_list',
             'session_delete',
