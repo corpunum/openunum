@@ -18,6 +18,8 @@ function inferTier(provider, modelId) {
   return 'balanced';
 }
 
+const REQUIRED_KERNEL_TOOLS = ['session_list', 'session_delete', 'session_clear'];
+
 function normalizeProfileMap(runtime = {}) {
   const defaults = {
     compact: {
@@ -54,10 +56,16 @@ function normalizeProfileMap(runtime = {}) {
   const out = {};
   for (const tier of ['compact', 'balanced', 'full']) {
     const merged = { ...(defaults[tier] || {}), ...(configured[tier] || {}) };
+    const configuredAllowedTools = Array.isArray(merged.allowedTools)
+      ? merged.allowedTools.map((t) => String(t || '').trim()).filter(Boolean)
+      : [];
+    const withKernelTools = configuredAllowedTools.length
+      ? [...new Set([...configuredAllowedTools, ...REQUIRED_KERNEL_TOOLS])]
+      : configuredAllowedTools;
     out[tier] = {
       maxHistoryMessages: Number.isFinite(merged.maxHistoryMessages) ? Number(merged.maxHistoryMessages) : defaults[tier].maxHistoryMessages,
       maxToolIterations: Number.isFinite(merged.maxToolIterations) ? Number(merged.maxToolIterations) : defaults[tier].maxToolIterations,
-      allowedTools: Array.isArray(merged.allowedTools) ? merged.allowedTools.map((t) => String(t || '').trim()).filter(Boolean) : []
+      allowedTools: withKernelTools
     };
   }
   return out;
