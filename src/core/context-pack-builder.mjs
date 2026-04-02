@@ -44,7 +44,8 @@ export function buildControllerSystemMessage({
       '1. src/core/agent.mjs for controller loop behavior.',
       '2. src/core/missions.mjs for proof-aware mission completion.',
       '3. src/tools/runtime.mjs for tool execution and safety bounds.',
-      '4. src/providers/* for provider transport contracts.'
+      '4. src/providers/* for provider transport contracts.',
+      '5. Web UI is primarily in src/ui/index.html (includes inlined CSS/JS); prefer file_read there before broad CSS file search.'
     ].join('\n')
     : '';
 

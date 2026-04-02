@@ -337,6 +337,28 @@ function detectLocalRuntimeTask(messages = []) {
     /local|gguf|ollama|llama\.cpp|runtime|launch|server|model/.test(text);
 }
 
+function detectUiCodeEditTask(messages = []) {
+  const text = messages.map((m) => String(m?.content || '')).join('\n').toLowerCase();
+  if (!/ui|frontend|layout|css|html|runtime/.test(text)) return false;
+  return /scroll|scrollbar|fit|container|session|chat|sidebar|overflow|panel|view/.test(text);
+}
+
+function isDiscoveryShellCommand(cmd) {
+  const text = String(cmd || '').trim().toLowerCase();
+  if (!text) return false;
+  if (/^ls\b|^find\b|^rg\b|^grep\b|^fd\b|^tree\b|^cat\b/.test(text)) return true;
+  return /head\s+-\d+|wc\s+-l|sort\b/.test(text);
+}
+
+function isLowSignalToolResult(run) {
+  if (!run || run.name !== 'shell_run') return false;
+  if (!isDiscoveryShellCommand(run.args?.cmd || '')) return false;
+  if (!run.result?.ok) return false;
+  const stdout = String(run.result?.stdout || '').trim();
+  const stderr = String(run.result?.stderr || '').trim();
+  return !stdout && !stderr;
+}
+
 export class OpenUnumAgent {
   constructor({ config, memoryStore }) {
     this.config = config;
@@ -677,6 +699,7 @@ export class OpenUnumAgent {
     const behavior = classifyControllerBehavior({ provider, model, config: this.config });
     const executionProfile = mergeProfileWithBehavior(getExecutionProfile(provider, model), behavior, this.config);
     const localRuntimeTask = detectLocalRuntimeTask(messages);
+    const uiCodeEditTask = detectUiCodeEditTask(messages);
     const attemptConfig = {
       ...this.config,
       model: {
@@ -701,11 +724,15 @@ export class OpenUnumAgent {
       },
       ...messages
     ];
+    const baseMaxIters = executionProfile.maxIters || this.config.runtime?.maxToolIterations || 4;
+    const uiRaisedBaseMaxIters = uiCodeEditTask ? Math.max(baseMaxIters, 5) : baseMaxIters;
+    const envelopeMaxIters = executionEnvelope.maxToolIterations || this.config.runtime?.maxToolIterations || 4;
+    const uiRaisedEnvelopeMaxIters = uiCodeEditTask ? Math.max(envelopeMaxIters, 5) : envelopeMaxIters;
     const maxIters = Math.max(
       1,
       Math.min(
-        executionProfile.maxIters || this.config.runtime?.maxToolIterations || 4,
-        executionEnvelope.maxToolIterations || this.config.runtime?.maxToolIterations || 4
+        uiRaisedBaseMaxIters,
+        uiRaisedEnvelopeMaxIters
       )
     );
     const baseTurnBudgetMs = executionProfile.turnBudgetMs || this.config.runtime?.agentTurnTimeoutMs || 420000;
@@ -713,7 +740,9 @@ export class OpenUnumAgent {
       (String(provider || '').toLowerCase() === 'ollama' && /cloud/.test(String(model || '').toLowerCase()));
     const turnBudgetMs = localRuntimeTask && !isCloudController
       ? Math.max(baseTurnBudgetMs, 180000)
-      : baseTurnBudgetMs;
+      : uiCodeEditTask && !isCloudController
+        ? Math.max(baseTurnBudgetMs, 120000)
+        : baseTurnBudgetMs;
     const turnStartedAt = Date.now();
     let finalText = '';
     let toolRuns = 0;
@@ -726,12 +755,14 @@ export class OpenUnumAgent {
       behaviorConfidence: behavior.confidence,
       behaviorSource: behavior.source,
       localRuntimeTask,
+      uiCodeEditTask,
       executionEnvelope,
       routedTools,
       iterations: [],
       recoveryUsed: false,
       permissionDenials: [],
-      toolStateTransitions: []
+      toolStateTransitions: [],
+      lowSignalPivotUsed: false
     };
     let forcedContinueCount = 0;
 
@@ -858,6 +889,20 @@ export class OpenUnumAgent {
         });
       }
       trace.iterations.push(iter);
+      const stepRuns = executedTools.slice(-iter.toolCalls.length);
+      const lowSignalDiscovery = stepRuns.length > 0 && stepRuns.every((run) => isLowSignalToolResult(run));
+      if (uiCodeEditTask && lowSignalDiscovery && (i + 1) < maxIters) {
+        trace.lowSignalPivotUsed = true;
+        messages.push({
+          role: 'system',
+          content: [
+            continuationDirective('empty_discovery_pivot_ui'),
+            'Pivot immediately: do not run more broad filesystem discovery.',
+            'Next concrete action must be `file_read` for `src/ui/index.html`.',
+            'After reading, patch only the minimal CSS/markup needed to remove runtime sessions overflow.'
+          ].join('\n')
+        });
+      }
       if (trace.timedOut) break;
     }
 
