@@ -48,6 +48,16 @@ pnpm -s phase14:e2e
 - DB: `~/.openunum/openunum.db`.
 - Logs: `~/.openunum/logs/*`.
 
+### House Map (What/Where To Edit)
+
+- UI house: `src/ui/index.html` (primary UI structure + inlined CSS/JS).
+- Agent/controller house: `src/core/agent.mjs`.
+- Tool capability house: `src/tools/runtime.mjs`.
+- API/router house: `src/server.mjs`.
+- Persistence house: `src/memory/store.mjs`.
+
+Before broad filesystem discovery, read `GET /api/tools/catalog` and target these canonical files first.
+
 ## 4. Credential Truth Sources (Critical)
 
 - Do not use `GET /api/config` key fields to infer provider readiness.
