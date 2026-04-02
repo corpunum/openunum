@@ -126,6 +126,7 @@ const TOOL_ROUTING_HINTS = [
   { tool: 'session_clear', terms: ['delete all sessions', 'clear all sessions', 'clear chat history', 'wipe sessions'] },
   { tool: 'session_delete', terms: ['delete session', 'remove session'] },
   { tool: 'session_list', terms: ['list sessions', 'show sessions'] },
+  { tool: 'file_patch', terms: ['fix ui', 'runtime ui', 'scrollbar', 'overflow', 'fit in container', 'layout fix', 'css fix'] },
   { tool: 'browser_search', terms: ['search', 'google', 'find online', 'web research', 'browse'] },
   { tool: 'browser_navigate', terms: ['open website', 'navigate', 'visit', 'go to', 'browser'] },
   { tool: 'browser_extract', terms: ['extract', 'scrape', 'read page', 'page text'] },
@@ -357,6 +358,22 @@ function isLowSignalToolResult(run) {
   const stdout = String(run.result?.stdout || '').trim();
   const stderr = String(run.result?.stderr || '').trim();
   return !stdout && !stderr;
+}
+
+function isMutatingCodeTool(run) {
+  const name = String(run?.name || '').trim();
+  return name === 'file_patch' || name === 'file_write';
+}
+
+function isUiInspectionTool(run) {
+  const name = String(run?.name || '').trim();
+  if (name === 'file_read') {
+    const path = String(run?.args?.path || '').replace(/\\/g, '/');
+    return path.endsWith('/src/ui/index.html') || path === 'src/ui/index.html';
+  }
+  if (name !== 'shell_run') return false;
+  const cmd = String(run?.args?.cmd || '').toLowerCase();
+  return cmd.includes('src/ui/index.html') && /grep|sed|cat|head|tail|find|ls/.test(cmd);
 }
 
 export class OpenUnumAgent {
@@ -725,9 +742,9 @@ export class OpenUnumAgent {
       ...messages
     ];
     const baseMaxIters = executionProfile.maxIters || this.config.runtime?.maxToolIterations || 4;
-    const uiRaisedBaseMaxIters = uiCodeEditTask ? Math.max(baseMaxIters, 5) : baseMaxIters;
+    const uiRaisedBaseMaxIters = uiCodeEditTask ? Math.max(baseMaxIters, 6) : baseMaxIters;
     const envelopeMaxIters = executionEnvelope.maxToolIterations || this.config.runtime?.maxToolIterations || 4;
-    const uiRaisedEnvelopeMaxIters = uiCodeEditTask ? Math.max(envelopeMaxIters, 5) : envelopeMaxIters;
+    const uiRaisedEnvelopeMaxIters = uiCodeEditTask ? Math.max(envelopeMaxIters, 6) : envelopeMaxIters;
     const maxIters = Math.max(
       1,
       Math.min(
@@ -903,6 +920,19 @@ export class OpenUnumAgent {
           ].join('\n')
         });
       }
+      const hasCodeMutation = executedTools.some((run) => isMutatingCodeTool(run));
+      const uiInspectionOnlyStep = stepRuns.length > 0 && stepRuns.every((run) => isUiInspectionTool(run));
+      if (uiCodeEditTask && !hasCodeMutation && uiInspectionOnlyStep && (i + 1) < maxIters) {
+        messages.push({
+          role: 'system',
+          content: [
+            continuationDirective('ui_edit_required_after_inspection'),
+            'You have already inspected the relevant UI file.',
+            'Next action must be a concrete edit via `file_patch` or `file_write` on `src/ui/index.html`.',
+            'After the edit, provide a concise final status and include what was changed.'
+          ].join('\n')
+        });
+      }
       if (trace.timedOut) break;
     }
 
@@ -928,6 +958,18 @@ export class OpenUnumAgent {
         }
       } catch {
         // ignore and fallback to synthesized summary below
+      }
+    }
+
+    if (!finalText && uiCodeEditTask && toolRuns > 0) {
+      const hasCodeMutation = executedTools.some((run) => isMutatingCodeTool(run));
+      const inspectedUi = executedTools.some((run) => isUiInspectionTool(run));
+      if (inspectedUi && !hasCodeMutation) {
+        finalText = [
+          'UI task did not complete: inspection ran, but no UI edit was applied.',
+          'Status: NOT DONE',
+          'Required next action: patch `src/ui/index.html` to remove sessions-panel overflow/scrollbar and keep content fitting its container.'
+        ].join('\n');
       }
     }
 
