@@ -336,6 +336,56 @@ export function synthesizeToolOnlyAnswer({ userMessage = '', executedTools = [],
   return `${body}\n${buildProvenanceFooter({ executedTools, synthesized: true })}`.trim();
 }
 
+export function classifyAnswerShape(finalText = '') {
+  const text = String(finalText || '');
+  if (!text.trim()) return 'empty';
+  if (/\|.+\|/.test(text)) return 'table';
+  if (/^Status:/im.test(text)) return 'status';
+  if (/^\d+\.\s+/m.test(text)) return 'steps';
+  if (/^-\s+/m.test(text) && /(Top|Comparison|Findings|Recommendation|Usable)/i.test(text)) return 'ranked_list';
+  return 'summary';
+}
+
+export function assessFinalAnswerQuality({ finalText = '', userMessage = '', executedTools = [], toolRuns = 0 }) {
+  const text = String(finalText || '').trim();
+  const requirements = extractRequirements(userMessage);
+  const evidenceIds = extractEvidenceResourceIds(executedTools);
+  const datasetIds = extractDatasetCandidates(executedTools).map((item) => item.id);
+  const shape = classifyAnswerShape(text);
+  const mentionedIds = extractResourceLikeMentions(text);
+  const unsupportedIds = mentionedIds.filter((item) => !evidenceIds.map((id) => id.toLowerCase()).includes(item.toLowerCase()));
+  let score = 100;
+  if (!text) score -= 100;
+  if (text.length > 12000) score -= 35;
+  if (requirements.asksSteps && !/^\d+\.\s+/m.test(text)) score -= 18;
+  if (requirements.asksComparison && !/comparison:/i.test(text)) score -= 16;
+  if ((requirements.asksResearch || requirements.asksDataset) && !/recommendation:/i.test(text)) score -= 14;
+  if (requirements.asksRanking && !(/top|rank|recommendation/i.test(text))) score -= 16;
+  if ((requirements.asksResearch || requirements.asksRanking) && text.length < 180 && toolRuns > 0) score -= 18;
+  const evidenceMentions = countEvidenceMentions(text, datasetIds.length ? datasetIds : evidenceIds);
+  if ((requirements.asksResearch || requirements.asksDataset || requirements.asksComparison) && evidenceIds.length > 0 && evidenceMentions === 0) {
+    score -= 30;
+  }
+  if (unsupportedIds.length > 0) score -= Math.min(45, unsupportedIds.length * 20);
+  const shouldReplace = shouldReplaceWeakFinalText({ finalText: text, userMessage, executedTools, toolRuns });
+  return {
+    shape,
+    score: Math.max(0, score),
+    shouldReplace,
+    evidenceResourceCount: evidenceIds.length,
+    evidenceMentions,
+    unsupportedIds,
+    requirements: {
+      asksRanking: requirements.asksRanking,
+      asksSteps: requirements.asksSteps,
+      asksStatus: requirements.asksStatus,
+      asksResearch: requirements.asksResearch,
+      asksDataset: requirements.asksDataset,
+      asksComparison: requirements.asksComparison
+    }
+  };
+}
+
 function countEvidenceMentions(text = '', evidenceTerms = []) {
   const source = String(text || '').toLowerCase();
   return evidenceTerms.filter((term) => term && source.includes(String(term).toLowerCase())).length;
@@ -364,6 +414,15 @@ function shouldReplaceWeakFinalText({ finalText = '', userMessage = '', executed
     const mentionedIds = extractResourceLikeMentions(text);
     const unsupported = mentionedIds.filter((item) => !evidenceIds.includes(item.toLowerCase()));
     if (unsupported.length > 0 && evidenceIds.length > 0) return true;
+  }
+  const hybridNeedCount = [requirements.asksComparison, requirements.asksSteps, requirements.asksRanking, requirements.asksResearch].filter(Boolean).length;
+  if (hybridNeedCount >= 2) {
+    const hasComparison = /comparison:/i.test(text) || /\bcompare\b/i.test(text);
+    const hasRecommendation = /recommendation:/i.test(text) || /\brecommend\b/i.test(text);
+    const hasSteps = /^\d+\.\s+/m.test(text) || /phase\s+\d+/i.test(text);
+    if (requirements.asksComparison && !hasComparison) return true;
+    if ((requirements.asksRanking || requirements.asksResearch) && !hasRecommendation) return true;
+    if (requirements.asksSteps && !hasSteps) return true;
   }
   if (requirements.asksRanking && /top candidates|recommendation|comparison/i.test(text) === false && toolRuns > 0) return true;
   return false;

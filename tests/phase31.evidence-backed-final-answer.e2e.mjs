@@ -1,5 +1,9 @@
 import assert from 'node:assert/strict';
-import { normalizeRecoveredFinalText, synthesizeToolOnlyAnswer } from '../src/core/turn-recovery-summary.mjs';
+import {
+  assessFinalAnswerQuality,
+  normalizeRecoveredFinalText,
+  synthesizeToolOnlyAnswer
+} from '../src/core/turn-recovery-summary.mjs';
 
 const userMessage = 'can you check huggingface usable datasets for model/agent training to improve tool calling/execution and planner/tasks data to test openunum and compare?';
 const executedTools = [
@@ -42,11 +46,21 @@ const normalized = normalizeRecoveredFinalText({
   toolRuns: 1
 });
 const recovered = synthesizeToolOnlyAnswer({ userMessage, executedTools, toolRuns: 1 });
+const quality = assessFinalAnswerQuality({
+  finalText: hallucinatedFinal,
+  userMessage,
+  executedTools,
+  toolRuns: 1
+});
 
 assert.equal(normalized, recovered);
 assert.ok(!normalized.includes('DeepNLP/Agent-Tool-Use-Dialogue-Open-Dataset'));
 assert.ok(!normalized.includes('LangAGI-Lab/mini_rm_benchmark_for_web_agent'));
 assert.ok(normalized.includes('alwaysfurther/deepfabric-agent-tool-calling'));
 assert.ok(normalized.includes('DataCreatorAI/tool-calling-browser-agent-tasks'));
+assert.equal(quality.shouldReplace, true);
+assert.ok(Array.isArray(quality.unsupportedIds));
+assert.ok(quality.unsupportedIds.length >= 2);
+assert.equal(typeof quality.score, 'number');
 
 console.log('phase31.evidence-backed-final-answer.e2e: ok');

@@ -5,7 +5,11 @@ import { ToolRuntime } from '../tools/runtime.mjs';
 import { loadSkills } from '../skills/loader.mjs';
 import { buildContextBudgetInfo, estimateMessagesTokens } from './context-budget.mjs';
 import { compactSessionMessages } from './context-compact.mjs';
-import { normalizeRecoveredFinalText, synthesizeToolOnlyAnswer } from './turn-recovery-summary.mjs';
+import {
+  assessFinalAnswerQuality,
+  normalizeRecoveredFinalText,
+  synthesizeToolOnlyAnswer
+} from './turn-recovery-summary.mjs';
 import {
   classifyControllerBehavior,
   getBehaviorRegistrySnapshot,
@@ -1222,6 +1226,12 @@ export class OpenUnumAgent {
       executedTools,
       toolRuns
     }) || 'No response generated.';
+    trace.answerAssessment = assessFinalAnswerQuality({
+      finalText,
+      userMessage: originalUserMessage,
+      executedTools,
+      toolRuns
+    });
     trace.pivotHints = buildPivotHints({
       executedTools,
       permissionDenials: trace.permissionDenials,
@@ -1231,7 +1241,9 @@ export class OpenUnumAgent {
       toolRuns,
       iterationCount: trace.iterations.length,
       permissionDenials: trace.permissionDenials.length,
-      routedTools: routedTools.map((item) => item.tool)
+      routedTools: routedTools.map((item) => item.tool),
+      answerShape: trace.answerAssessment?.shape || 'unknown',
+      answerScore: trace.answerAssessment?.score || 0
     };
     this.lastRuntime = { provider, model };
     this.config.model.providerModels = this.config.model.providerModels || {};

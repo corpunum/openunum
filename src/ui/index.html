@@ -38,7 +38,7 @@
       position: sticky;
       top: 0;
       height: 100vh;
-      overflow: auto;
+      overflow: hidden;
       border-right: 1px solid rgba(109, 138, 182, .22);
       background: linear-gradient(180deg, rgba(7, 12, 23, .7), rgba(4, 9, 17, .84));
       backdrop-filter: blur(14px);
@@ -68,8 +68,8 @@
     .sessions-list {
       display: grid;
       gap: 6px;
-      max-height: 42vh;
-      overflow: auto;
+      max-height: none;
+      overflow: hidden;
       padding: 8px;
     }
     .session-item {
@@ -145,8 +145,8 @@
     .subtitle { color: var(--muted); font-size: 12px; }
     .center {
       padding: 14px;
-      overflow: auto;
-    }
+      overflow: hidden;
+      }
     .view {
       display: none;
       background: linear-gradient(180deg, var(--panel), var(--panel2));
@@ -256,7 +256,7 @@
     .provider-card.healthy { border-color: rgba(34,197,94,.7); }
     .provider-card.degraded { border-color: rgba(234,179,8,.7); }
     .table-wrap {
-      overflow: auto;
+      overflow: hidden;
       border: 1px solid #2f4a80;
       border-radius: 12px;
       background: rgba(10, 19, 36, .72);
@@ -324,7 +324,7 @@
       color: var(--muted);
     }
     .messages {
-      overflow: auto;
+      overflow: hidden;
       padding: 8px;
       display: flex;
       flex-direction: column;
@@ -355,8 +355,8 @@
       background: #0a1322;
       border-radius: 8px;
       padding: 8px;
-      overflow: auto;
-    }
+      overflow: hidden;
+      }
     .bubble p { margin: 0 0 10px; }
     .bubble p:last-child { margin-bottom: 0; }
     .bubble ul, .bubble ol { margin: 8px 0 10px 18px; padding: 0; }
@@ -455,11 +455,54 @@
       word-break: break-word;
     }
     .typing {
+      display: grid;
+      gap: 8px;
+      min-height: 18px;
+    }
+    .typing-head {
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+    .typing-label {
+      font-size: 11px;
+      letter-spacing: .18em;
+      text-transform: uppercase;
+      color: #d9e9ff;
+    }
+    .typing-status {
+      font-size: 12px;
+      color: #bdd1f6;
+    }
+    .typing-dots {
       display: inline-flex;
       align-items: center;
       gap: 4px;
-      min-height: 18px;
+      min-height: 12px;
     }
+    .roman-runner {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 2px 8px;
+      border-radius: 999px;
+      border: 1px solid rgba(83, 110, 152, .46);
+      background: linear-gradient(180deg, rgba(14, 24, 44, .82), rgba(10, 17, 31, .9));
+      font-family: "IBM Plex Mono", "Fira Code", monospace;
+      font-size: 11px;
+      letter-spacing: .18em;
+      color: #95b9ff;
+    }
+    .roman-runner span {
+      opacity: .16;
+      transform: translateY(0);
+      animation: romanPulse 2.2s infinite ease-in-out;
+    }
+    .roman-runner span:nth-child(2) { animation-delay: .2s; }
+    .roman-runner span:nth-child(3) { animation-delay: .4s; }
+    .roman-runner span:nth-child(4) { animation-delay: .6s; }
+    .roman-runner span:nth-child(5) { animation-delay: .8s; }
     .dot {
       width: 7px;
       height: 7px;
@@ -470,6 +513,21 @@
     }
     .dot:nth-child(2) { animation-delay: .2s; }
     .dot:nth-child(3) { animation-delay: .4s; }
+    .trace-quality {
+      border: 1px solid rgba(96, 165, 250, .45);
+      border-radius: 8px;
+      padding: 8px;
+      background: linear-gradient(180deg, rgba(14, 27, 50, .9), rgba(9, 18, 33, .84));
+    }
+    .trace-quality.good { border-color: rgba(34,197,94,.5); }
+    .trace-quality.warn { border-color: rgba(234,179,8,.55); }
+    .trace-quality.bad { border-color: rgba(239,68,68,.55); }
+    @keyframes romanPulse {
+      0%, 100% { opacity: .16; transform: translateY(0); color: #95b9ff; }
+      20% { opacity: .35; transform: translateY(-1px); color: #a9d0ff; }
+      40% { opacity: .95; transform: translateY(-2px); color: #eef6ff; }
+      60% { opacity: .45; transform: translateY(0); color: #8eb3ff; }
+    }
     @keyframes pulse {
       0%, 80%, 100% { opacity: .3; transform: translateY(0); }
       40% { opacity: 1; transform: translateY(-3px); }
@@ -1314,7 +1372,12 @@
       node.lastToolCount = 0;
       node.lastStep = '';
       node.bubble.innerHTML = `<div class="typing" aria-label="Agent is working">
-        <span class="dot"></span><span class="dot"></span><span class="dot"></span>
+        <div class="typing-head">
+          <span class="typing-label">Agent Running</span>
+          <span class="roman-runner" aria-hidden="true"><span>I</span><span>II</span><span>III</span><span>IV</span><span>V</span></span>
+        </div>
+        <div class="typing-status">Preparing execution...</div>
+        <div class="typing-dots"><span class="dot"></span><span class="dot"></span><span class="dot"></span></div>
       </div>`;
       return node;
     }
@@ -1335,7 +1398,13 @@
         const res = escapeHtml(JSON.stringify(t.result || {}));
         return `<div class="trace-line">tool: ${escapeHtml(t.toolName)} args=${args}</div><div class="trace-line">result: ${res}</div>`;
       }).join('');
-      typing.bubble.innerHTML = `<div>${escapeHtml(statusText || 'Agent is working...')}</div>
+      typing.bubble.innerHTML = `<div class="typing">
+        <div class="typing-head">
+          <span class="typing-label">Agent Running</span>
+          <span class="roman-runner" aria-hidden="true"><span>I</span><span>II</span><span>III</span><span>IV</span><span>V</span></span>
+        </div>
+        <div class="typing-status">${escapeHtml(statusText || 'Agent is working...')}</div>
+      </div>
         <details class="trace" open>
           <summary>Live Activity (${tools.length} tool calls)</summary>
           <div class="trace-body">${lastTools || '<div class="trace-line">No tool call observed yet.</div>'}</div>
@@ -1374,8 +1443,19 @@
         const summary = document.createElement('div');
         summary.className = 'trace-line';
         summary.textContent =
-          `summary: toolRuns=${trace.turnSummary.toolRuns || 0} iterations=${trace.turnSummary.iterationCount || 0} permissionDenials=${trace.turnSummary.permissionDenials || 0}`;
+          `summary: toolRuns=${trace.turnSummary.toolRuns || 0} iterations=${trace.turnSummary.iterationCount || 0} permissionDenials=${trace.turnSummary.permissionDenials || 0} answerShape=${trace.turnSummary.answerShape || '-'} answerScore=${trace.turnSummary.answerScore || 0}`;
         body.appendChild(summary);
+      }
+
+      if (trace.answerAssessment) {
+        const qa = document.createElement('div');
+        qa.className = `trace-quality ${trace.answerAssessment.score >= 80 ? 'good' : trace.answerAssessment.score >= 55 ? 'warn' : 'bad'}`;
+        qa.innerHTML = `
+          <div class="trace-line"><strong>Answer quality</strong>: shape=${escapeHtml(trace.answerAssessment.shape || '-')} score=${escapeHtml(String(trace.answerAssessment.score || 0))} replace=${escapeHtml(String(Boolean(trace.answerAssessment.shouldReplace)))}</div>
+          <div class="trace-line">evidenceResources=${escapeHtml(String(trace.answerAssessment.evidenceResourceCount || 0))} evidenceMentions=${escapeHtml(String(trace.answerAssessment.evidenceMentions || 0))}</div>
+          ${Array.isArray(trace.answerAssessment.unsupportedIds) && trace.answerAssessment.unsupportedIds.length ? `<div class="trace-line">unsupportedIds=${escapeHtml(trace.answerAssessment.unsupportedIds.join(', '))}</div>` : ''}
+        `;
+        body.appendChild(qa);
       }
 
       if (Array.isArray(trace.pivotHints) && trace.pivotHints.length > 0) {
