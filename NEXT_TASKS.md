@@ -42,3 +42,17 @@ Priority items:
 
 Why:
 - these are the remaining operator-grade gaps after the autonomy framework pass
+
+## 4. Training Surface Parity (Harvest from MimoUnum)
+
+Goal:
+- expose a first-class `training/*` API family in OpenUnum that turns real interaction traces into eval/train artifacts
+
+Priority items:
+- `training/report`, `training/collect`, `training/export`, `training/export/file`, `training/cycle`
+- compact WebUI "Autonomy Scorecard" panel (health + quality + export quick-actions)
+- explicit score-factor transparency in API responses
+
+Why:
+- this is the highest-ROI capability harvested from MimoUnum
+- improves self-improvement workflow without weakening OpenUnum's stronger orchestration model

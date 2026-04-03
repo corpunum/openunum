@@ -2,6 +2,20 @@
 
 Date: 2026-04-03
 
+## MimoUnum Comparative Review + Harvest Backlog
+
+0. Added comparative analysis against MimoUnum:
+   - new document `docs/COMPETITIVE_ANALYSIS_MIMOUNUM.md`
+   - captures strengths, gaps, and what to harvest vs what not to copy
+
+1. Updated onboarding/index documentation links:
+   - `docs/INDEX.md` now includes MimoUnum comparative analysis in reading order
+   - `docs/AGENT_ONBOARDING.md` read-next sequence now includes MimoUnum analysis
+
+2. Updated execution backlog:
+   - `NEXT_TASKS.md` now includes `Training Surface Parity (Harvest from MimoUnum)`
+   - target is Mimo-style `training/*` API and compact autonomy scorecard UX on top of OpenUnum architecture
+
 ## Pending Chat Rehydration + Live Trace State
 
 0. Fixed WebUI refresh behavior for in-flight chat turns:

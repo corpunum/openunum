@@ -23,9 +23,10 @@ This folder is optimized for fast machine onboarding (fresh agent session, no pr
 17. [COMPETITIVE_ANALYSIS_CLAW_CODE.md](/home/corp-unum/openunum/docs/COMPETITIVE_ANALYSIS_CLAW_CODE.md)
 18. [COMPETITIVE_ANALYSIS_OPENAI_CODEX.md](/home/corp-unum/openunum/docs/COMPETITIVE_ANALYSIS_OPENAI_CODEX.md)
 19. [COMPETITIVE_ANALYSIS_GEMINI_CLI.md](/home/corp-unum/openunum/docs/COMPETITIVE_ANALYSIS_GEMINI_CLI.md)
-20. [OPENUNUM_MULTI_MODEL_CONTROLLER_ACTION_PLAN.md](/home/corp-unum/openunum/docs/OPENUNUM_MULTI_MODEL_CONTROLLER_ACTION_PLAN.md)
-21. [HF_DATASET_PIPELINE.md](/home/corp-unum/openunum/docs/HF_DATASET_PIPELINE.md)
-22. [../NEXT_TASKS.md](/home/corp-unum/openunum/NEXT_TASKS.md)
+20. [COMPETITIVE_ANALYSIS_MIMOUNUM.md](/home/corp-unum/openunum/docs/COMPETITIVE_ANALYSIS_MIMOUNUM.md)
+21. [OPENUNUM_MULTI_MODEL_CONTROLLER_ACTION_PLAN.md](/home/corp-unum/openunum/docs/OPENUNUM_MULTI_MODEL_CONTROLLER_ACTION_PLAN.md)
+22. [HF_DATASET_PIPELINE.md](/home/corp-unum/openunum/docs/HF_DATASET_PIPELINE.md)
+23. [../NEXT_TASKS.md](/home/corp-unum/openunum/NEXT_TASKS.md)
 
 ## Legacy Planning Docs
 
