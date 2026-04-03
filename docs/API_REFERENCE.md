@@ -28,6 +28,7 @@ Returns:
 - `runtime.workspaceRoot: string`
 - `runtime.ownerControlMode: "safe"|"owner-unlocked"|"owner-unrestricted"`
 - `runtime.selfPokeEnabled: boolean`
+- `runtime.toolHooksEnabled: boolean`
 - `runtime.toolCircuitFailureThreshold: number`
 - `runtime.toolCircuitCooldownMs: number`
 - `runtime.autonomyMasterAutoStart: boolean`
@@ -63,6 +64,10 @@ Payload:
 ```
 or
 ```json
+{"mode":"compact-local"}
+```
+or
+```json
 {"mode":"relentless"}
 ```
 
@@ -75,6 +80,181 @@ or
 - `POST /api/autonomy/master/self-improve`
 - `POST /api/autonomy/master/learn-skills`
 - `POST /api/autonomy/master/self-test`
+
+## Autonomous Workers
+
+- `GET /api/autonomy/workers?limit=80`
+- `GET /api/autonomy/workers/status?id=...`
+- `POST /api/autonomy/workers/start`
+- `POST /api/autonomy/workers/stop`
+- `POST /api/autonomy/workers/tick`
+
+Worker model:
+- bounded background task runner
+- explicit `allowedTools` allowlist is required
+- all `steps[*].tool` must be included in `allowedTools`
+- each run is status-tracked (`scheduled` | `running` | `completed` | `failed` | `stopped`)
+- no OAuth dependency
+
+Start payload (partial):
+```json
+{
+  "name":"daily-host-check",
+  "goal":"verify host responsiveness",
+  "allowedTools":["shell_run","http_request"],
+  "steps":[
+    {"tool":"shell_run","args":{"cmd":"uname -a"}},
+    {"tool":"http_request","args":{"url":"http://127.0.0.1:18880/health","method":"GET"}}
+  ],
+  "delayMs":0,
+  "intervalMs":60000,
+  "maxRuns":10,
+  "maxStepsPerRun":2
+}
+```
+
+## Self-Edit Pipeline
+
+- `GET /api/autonomy/self-edit?limit=40`
+- `GET /api/autonomy/self-edit/status?id=...`
+- `POST /api/autonomy/self-edit/run`
+
+Behavior:
+- explicit edit-only pipeline for `file_patch` and `file_write`
+- duplicate edit paths are rejected so rollback semantics stay deterministic
+- validation defaults to `node --check` for changed JS/MJS files plus `smoke:ui:noauth` for runtime-facing edits
+- canary defaults to local `GET /api/health` and `GET /api/runtime/overview` for runtime-facing edits
+- rollback uses per-file `file_restore_last`; no OAuth endpoints are invoked by defaults
+
+Run payload (partial):
+```json
+{
+  "label":"ui-overflow-fix",
+  "goal":"patch UI and prove the host still serves",
+  "baseUrl":"http://127.0.0.1:18880",
+  "rollbackOnFailure":true,
+  "edits":[
+    {
+      "tool":"file_patch",
+      "args":{
+        "path":"src/ui/index.html",
+        "find":"overflow:auto",
+        "replace":"overflow:hidden"
+      }
+    }
+  ],
+  "validationCommands":[
+    "node --check src/server.mjs",
+    "OPENUNUM_BASE_URL=http://127.0.0.1:18880 node scripts/ui-smoke-noauth.mjs"
+  ],
+  "canaryChecks":[
+    {"name":"health","url":"http://127.0.0.1:18880/api/health","expectStatus":200}
+  ]
+}
+```
+
+Result statuses:
+- `promoted`
+- `rolled_back`
+- `rollback_failed`
+- `failed`
+
+## Model Scout Workflow
+
+- `GET /api/autonomy/model-scout?limit=20`
+- `GET /api/autonomy/model-scout/status?id=...`
+- `POST /api/autonomy/model-scout/run`
+
+Behavior:
+- searches the live Hugging Face catalog via official `/api/models`
+- scores candidates by query match plus downloads/likes
+- inspects candidate files and prefers bounded weight artifacts under `maxDownloadBytes`
+- falls back to metadata artifacts when full weights exceed the size cap
+- can evaluate a matching local Ollama model for latency and response proof
+
+Run payload (partial):
+```json
+{
+  "query":"Qwen3.5",
+  "searchLimit":8,
+  "maxDownloadBytes":52428800,
+  "monitorLocal":true,
+  "evaluatePrompt":"Reply with READY and one short sentence about local autonomy."
+}
+```
+
+## Generic Task Framework
+
+- `GET /api/autonomy/tasks?limit=20`
+- `GET /api/autonomy/tasks/status?id=...`
+- `POST /api/autonomy/tasks/plan`
+- `POST /api/autonomy/tasks/run`
+
+Purpose:
+- provider-agnostic execution framework for arbitrary user goals
+- carries explicit plan state, step results, verification, and monitoring
+- step kinds are reusable primitives, not hardcoded end-user intents
+- can compile a plain-language goal into a bounded task graph without hardcoding one user workflow
+
+Supported step kinds:
+- `tool`
+- `mission`
+- `worker`
+- `self_edit`
+- `model_scout`
+- `delay`
+
+Supported verification/monitor kinds:
+- `http`
+- `file_contains`
+- `fact_exists`
+- `step_ok`
+
+Planner-backed goal payload:
+```json
+{
+  "goal":"search online for runtime health, inspect the host, and report proof",
+  "baseUrl":"http://127.0.0.1:18880"
+}
+```
+
+Planner response:
+- chooses bounded preflight steps such as `browser_search`, `http_request`, or `shell_run`
+- shares a task session across preflight steps and the mission controller
+- persists the task run so status/list survive restart
+
+Run payload (partial):
+```json
+{
+  "goal":"inspect host, verify health, and record runtime state",
+  "plan":[
+    "Inspect current machine/runtime state",
+    "Verify the service surface",
+    "Record monitoring evidence"
+  ],
+  "steps":[
+    {
+      "kind":"tool",
+      "label":"inspect host",
+      "tool":"shell_run",
+      "args":{"cmd":"uname -a"}
+    },
+    {
+      "kind":"tool",
+      "label":"verify health",
+      "tool":"http_request",
+      "args":{"url":"http://127.0.0.1:18880/api/health","method":"GET"}
+    }
+  ],
+  "verify":[
+    {"kind":"step_ok","stepIndex":0},
+    {"kind":"http","url":"http://127.0.0.1:18880/api/health","expectStatus":200}
+  ],
+  "monitor":[
+    {"kind":"http","url":"http://127.0.0.1:18880/api/runtime/inventory","expectStatus":200}
+  ]
+}
+```
 
 ## Capabilities
 
@@ -100,6 +280,7 @@ Returns:
 ## Runtime Overview
 
 - `GET /api/runtime/overview`
+- `GET /api/runtime/inventory?limit=300`
 - `GET /api/autonomy/insights?sessionId=...&goal=...`
 - `GET /api/controller/behaviors?limit=80`
 - `GET /api/controller/behavior-classes`
@@ -117,6 +298,18 @@ Returns a WebUI-oriented flagship summary:
 - `selectedModel`
 - `fallbackModel`
 - `providers[]` with `status`, `topModel`, and `modelCount`
+
+`GET /api/runtime/inventory` returns the latest structured fact ledger grouped by:
+- `owner`
+- `runtime`
+- `system`
+- `hardware`
+- `models`
+- `repo`
+- `workspace`
+- `browser`
+- `http`
+- `latestFacts`
 
 `GET /api/autonomy/insights` returns:
 - `sessionId`
@@ -569,8 +762,17 @@ Activity response includes:
 
 - `GET /api/missions`
 - `GET /api/missions/status?id=...`
+- `GET /api/missions/timeline?id=...`
 - `POST /api/missions/start`
 - `POST /api/missions/stop`
+- `GET /api/missions/schedules?limit=120`
+- `POST /api/missions/schedule`
+- `POST /api/missions/schedule/update`
+
+Mission runtime persistence:
+- mission records are now stored in SQLite and remain visible after server restart
+- in-progress missions interrupted by restart are marked `interrupted`
+- `GET /api/missions` and `GET /api/missions/status` read active in-memory missions first, then persisted mission records
 
 Start payload (partial):
 ```json
@@ -581,6 +783,33 @@ Start payload (partial):
   "intervalMs":400,
   "continueUntilDone":true,
   "hardStepCap":120
+}
+```
+
+Schedule payload (partial):
+```json
+{
+  "goal":"daily check",
+  "runAt":"2026-04-04T06:00:00.000Z",
+  "delayMs":60000,
+  "intervalMs":86400000,
+  "enabled":true,
+  "maxSteps":2,
+  "maxRetries":1,
+  "continueUntilDone":true,
+  "hardStepCap":20
+}
+```
+
+Schedule update payload (partial):
+```json
+{
+  "id":"schedule-uuid",
+  "enabled":false,
+  "status":"scheduled",
+  "runAt":"2026-04-05T06:00:00.000Z",
+  "nextRunAt":"2026-04-06T06:00:00.000Z",
+  "intervalMs":86400000
 }
 ```
 

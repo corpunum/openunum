@@ -32,6 +32,14 @@ function summarizeSessionTitle(text) {
   return short.length > 72 ? `${short.slice(0, 69)}...` : short;
 }
 
+function parseJson(text, fallback = null) {
+  try {
+    return JSON.parse(text || 'null');
+  } catch {
+    return fallback;
+  }
+}
+
 export class MemoryStore {
   constructor() {
     ensureHome();
@@ -123,6 +131,92 @@ export class MemoryStore {
         result_json TEXT NOT NULL,
         created_at TEXT NOT NULL
       );
+      CREATE TABLE IF NOT EXISTS mission_records (
+        id TEXT PRIMARY KEY,
+        goal TEXT NOT NULL,
+        status TEXT NOT NULL,
+        session_id TEXT NOT NULL,
+        step INTEGER NOT NULL,
+        max_steps INTEGER NOT NULL,
+        hard_step_cap INTEGER NOT NULL,
+        retries INTEGER NOT NULL,
+        max_retries INTEGER NOT NULL,
+        interval_ms INTEGER NOT NULL,
+        continue_until_done INTEGER NOT NULL,
+        error TEXT,
+        started_at TEXT NOT NULL,
+        finished_at TEXT,
+        updated_at TEXT NOT NULL,
+        mission_json TEXT NOT NULL
+      );
+      CREATE TABLE IF NOT EXISTS mission_schedules (
+        id TEXT PRIMARY KEY,
+        goal TEXT NOT NULL,
+        run_at TEXT NOT NULL,
+        interval_ms INTEGER NOT NULL,
+        enabled INTEGER NOT NULL,
+        status TEXT NOT NULL,
+        options_json TEXT NOT NULL,
+        last_run_at TEXT,
+        next_run_at TEXT,
+        last_error TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      );
+      CREATE TABLE IF NOT EXISTS task_records (
+        id TEXT PRIMARY KEY,
+        goal TEXT NOT NULL,
+        status TEXT NOT NULL,
+        session_id TEXT NOT NULL,
+        continue_on_failure INTEGER NOT NULL,
+        step_count INTEGER NOT NULL,
+        step_done_count INTEGER NOT NULL,
+        step_failed_count INTEGER NOT NULL,
+        verify_count INTEGER NOT NULL,
+        verify_failed_count INTEGER NOT NULL,
+        monitor_count INTEGER NOT NULL,
+        error TEXT,
+        created_at TEXT NOT NULL,
+        started_at TEXT NOT NULL,
+        finished_at TEXT,
+        updated_at TEXT NOT NULL,
+        task_json TEXT NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS idx_task_records_status_updated ON task_records(status, updated_at DESC);
+      CREATE INDEX IF NOT EXISTS idx_task_records_session_updated ON task_records(session_id, updated_at DESC);
+      CREATE INDEX IF NOT EXISTS idx_task_records_created ON task_records(created_at DESC);
+      CREATE TABLE IF NOT EXISTS task_step_results (
+        id INTEGER PRIMARY KEY,
+        task_id TEXT NOT NULL,
+        step_index INTEGER NOT NULL,
+        kind TEXT NOT NULL,
+        label TEXT,
+        tool TEXT,
+        ok INTEGER NOT NULL,
+        error TEXT,
+        status INTEGER,
+        code INTEGER,
+        path TEXT,
+        result_json TEXT NOT NULL,
+        raw_json TEXT NOT NULL,
+        created_at TEXT NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS idx_task_step_results_task_step ON task_step_results(task_id, step_index);
+      CREATE INDEX IF NOT EXISTS idx_task_step_results_task_created ON task_step_results(task_id, created_at DESC);
+      CREATE TABLE IF NOT EXISTS task_check_results (
+        id INTEGER PRIMARY KEY,
+        task_id TEXT NOT NULL,
+        phase TEXT NOT NULL,
+        check_index INTEGER NOT NULL,
+        kind TEXT NOT NULL,
+        label TEXT,
+        target TEXT,
+        ok INTEGER NOT NULL,
+        error TEXT,
+        result_json TEXT NOT NULL,
+        created_at TEXT NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS idx_task_check_results_task_phase ON task_check_results(task_id, phase, check_index);
     `);
   }
 
@@ -236,6 +330,363 @@ export class MemoryStore {
       targetRef: row.target_ref,
       createdAt: row.created_at
     }));
+  }
+
+  upsertMissionRecord(mission) {
+    if (!mission || !mission.id) return;
+    const now = new Date().toISOString();
+    this.db
+      .prepare(
+        `INSERT INTO mission_records (
+          id, goal, status, session_id, step, max_steps, hard_step_cap, retries, max_retries, interval_ms,
+          continue_until_done, error, started_at, finished_at, updated_at, mission_json
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(id) DO UPDATE SET
+          goal = excluded.goal,
+          status = excluded.status,
+          session_id = excluded.session_id,
+          step = excluded.step,
+          max_steps = excluded.max_steps,
+          hard_step_cap = excluded.hard_step_cap,
+          retries = excluded.retries,
+          max_retries = excluded.max_retries,
+          interval_ms = excluded.interval_ms,
+          continue_until_done = excluded.continue_until_done,
+          error = excluded.error,
+          started_at = excluded.started_at,
+          finished_at = excluded.finished_at,
+          updated_at = excluded.updated_at,
+          mission_json = excluded.mission_json`
+      )
+      .run(
+        String(mission.id),
+        String(mission.goal || ''),
+        String(mission.status || 'unknown'),
+        String(mission.sessionId || ''),
+        Number(mission.step || 0),
+        Number(mission.maxSteps || 0),
+        Number(mission.hardStepCap || 0),
+        Number(mission.retries || 0),
+        Number(mission.maxRetries || 0),
+        Number(mission.intervalMs || 0),
+        mission.continueUntilDone === false ? 0 : 1,
+        mission.error ? String(mission.error) : null,
+        String(mission.startedAt || now),
+        mission.finishedAt ? String(mission.finishedAt) : null,
+        now,
+        JSON.stringify(mission || {})
+      );
+  }
+
+  getMissionRecord(id) {
+    const missionId = String(id || '').trim();
+    if (!missionId) return null;
+    const row = this.db
+      .prepare(
+        'SELECT mission_json FROM mission_records WHERE id = ?'
+      )
+      .get(missionId);
+    if (!row) return null;
+    try {
+      return JSON.parse(row.mission_json || '{}');
+    } catch {
+      return null;
+    }
+  }
+
+  listMissionRecords(limit = 80) {
+    const rows = this.db
+      .prepare(
+        'SELECT mission_json FROM mission_records ORDER BY COALESCE(updated_at, started_at) DESC LIMIT ?'
+      )
+      .all(Math.max(1, Math.min(500, Number(limit || 80))));
+    return rows
+      .map((row) => {
+        try {
+          return JSON.parse(row.mission_json || '{}');
+        } catch {
+          return null;
+        }
+      })
+      .filter(Boolean);
+  }
+
+  markRunningMissionsInterrupted() {
+    const now = new Date().toISOString();
+    const rows = this.db
+      .prepare('SELECT mission_json FROM mission_records WHERE status IN (\'running\', \'stopping\')')
+      .all();
+    for (const row of rows) {
+      let mission = null;
+      try {
+        mission = JSON.parse(row.mission_json || '{}');
+      } catch {
+        mission = null;
+      }
+      if (!mission || !mission.id) continue;
+      mission.status = 'interrupted';
+      mission.error = mission.error || 'mission_interrupted_by_restart';
+      mission.finishedAt = mission.finishedAt || now;
+      this.upsertMissionRecord(mission);
+    }
+  }
+
+  createMissionSchedule({
+    id,
+    goal,
+    runAt,
+    intervalMs = 0,
+    enabled = true,
+    options = {}
+  }) {
+    const now = new Date().toISOString();
+    const scheduleId = String(id || '').trim();
+    if (!scheduleId) throw new Error('schedule id is required');
+    const payload = {
+      id: scheduleId,
+      goal: String(goal || ''),
+      runAt: String(runAt || now),
+      intervalMs: Math.max(0, Number(intervalMs || 0)),
+      enabled: enabled !== false,
+      status: 'scheduled',
+      options: options || {},
+      lastRunAt: null,
+      nextRunAt: String(runAt || now),
+      lastError: null,
+      createdAt: now,
+      updatedAt: now
+    };
+    this.db
+      .prepare(
+        `INSERT INTO mission_schedules (
+          id, goal, run_at, interval_ms, enabled, status, options_json,
+          last_run_at, next_run_at, last_error, created_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+      )
+      .run(
+        payload.id,
+        payload.goal,
+        payload.runAt,
+        payload.intervalMs,
+        payload.enabled ? 1 : 0,
+        payload.status,
+        JSON.stringify(payload.options || {}),
+        null,
+        payload.nextRunAt,
+        null,
+        payload.createdAt,
+        payload.updatedAt
+      );
+    return payload;
+  }
+
+  listMissionSchedules(limit = 120) {
+    const rows = this.db
+      .prepare(
+        `SELECT
+          id, goal, run_at, interval_ms, enabled, status, options_json,
+          last_run_at, next_run_at, last_error, created_at, updated_at
+         FROM mission_schedules
+         ORDER BY created_at DESC
+         LIMIT ?`
+      )
+      .all(Math.max(1, Math.min(500, Number(limit || 120))));
+    return rows.map((row) => ({
+      id: row.id,
+      goal: row.goal,
+      runAt: row.run_at,
+      intervalMs: Number(row.interval_ms || 0),
+      enabled: Boolean(row.enabled),
+      status: row.status,
+      options: JSON.parse(row.options_json || '{}'),
+      lastRunAt: row.last_run_at || null,
+      nextRunAt: row.next_run_at || null,
+      lastError: row.last_error || null,
+      createdAt: row.created_at,
+      updatedAt: row.updated_at
+    }));
+  }
+
+  updateMissionSchedule(id, changes = {}) {
+    const scheduleId = String(id || '').trim();
+    if (!scheduleId) throw new Error('schedule id is required');
+    const current = this.listMissionSchedules(500).find((item) => item.id === scheduleId);
+    if (!current) return null;
+    const next = { ...current };
+    for (const [key, value] of Object.entries(changes || {})) {
+      if (value !== undefined) next[key] = value;
+    }
+    next.options = changes.options != null ? (changes.options || {}) : current.options;
+    next.updatedAt = new Date().toISOString();
+    this.db
+      .prepare(
+        `UPDATE mission_schedules
+         SET goal = ?, run_at = ?, interval_ms = ?, enabled = ?, status = ?, options_json = ?,
+             last_run_at = ?, next_run_at = ?, last_error = ?, updated_at = ?
+         WHERE id = ?`
+      )
+      .run(
+        String(next.goal || ''),
+        String(next.runAt || current.runAt),
+        Math.max(0, Number(next.intervalMs || 0)),
+        next.enabled ? 1 : 0,
+        String(next.status || 'scheduled'),
+        JSON.stringify(next.options || {}),
+        next.lastRunAt ? String(next.lastRunAt) : null,
+        next.nextRunAt ? String(next.nextRunAt) : null,
+        next.lastError ? String(next.lastError) : null,
+        next.updatedAt,
+        scheduleId
+      );
+    return next;
+  }
+
+  upsertTaskRecord(task) {
+    if (!task || !task.id) return;
+    const now = new Date().toISOString();
+    const stepResults = Array.isArray(task.stepResults) ? task.stepResults : [];
+    const verification = Array.isArray(task.verification) ? task.verification : [];
+    const monitoring = Array.isArray(task.monitoring) ? task.monitoring : [];
+    this.db
+      .prepare(
+        `INSERT INTO task_records (
+          id, goal, status, session_id, continue_on_failure, step_count, step_done_count, step_failed_count,
+          verify_count, verify_failed_count, monitor_count, error, created_at, started_at, finished_at, updated_at, task_json
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(id) DO UPDATE SET
+          goal = excluded.goal,
+          status = excluded.status,
+          session_id = excluded.session_id,
+          continue_on_failure = excluded.continue_on_failure,
+          step_count = excluded.step_count,
+          step_done_count = excluded.step_done_count,
+          step_failed_count = excluded.step_failed_count,
+          verify_count = excluded.verify_count,
+          verify_failed_count = excluded.verify_failed_count,
+          monitor_count = excluded.monitor_count,
+          error = excluded.error,
+          created_at = excluded.created_at,
+          started_at = excluded.started_at,
+          finished_at = excluded.finished_at,
+          updated_at = excluded.updated_at,
+          task_json = excluded.task_json`
+      )
+      .run(
+        String(task.id),
+        String(task.goal || ''),
+        String(task.status || 'unknown'),
+        String(task.sessionId || ''),
+        task.continueOnFailure === true ? 1 : 0,
+        Number(task.steps?.length || 0),
+        stepResults.filter((item) => item?.result?.ok).length,
+        stepResults.filter((item) => item?.result?.ok === false).length,
+        verification.length,
+        verification.filter((item) => item?.ok === false).length,
+        monitoring.length,
+        Array.isArray(task.errors) && task.errors.length ? String(task.errors.at(-1)) : null,
+        String(task.createdAt || now),
+        String(task.startedAt || now),
+        task.finishedAt ? String(task.finishedAt) : null,
+        now,
+        JSON.stringify(task || {})
+      );
+  }
+
+  replaceTaskStepResults(taskId, stepResults = []) {
+    const trimmed = String(taskId || '').trim();
+    if (!trimmed) return;
+    this.db.prepare('DELETE FROM task_step_results WHERE task_id = ?').run(trimmed);
+    const stmt = this.db.prepare(
+      `INSERT INTO task_step_results (
+        task_id, step_index, kind, label, tool, ok, error, status, code, path, result_json, raw_json, created_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    );
+    for (const step of stepResults) {
+      const result = step?.result || {};
+      stmt.run(
+        trimmed,
+        Number(step?.index || 0),
+        String(step?.kind || ''),
+        step?.label ? String(step.label) : null,
+        step?.tool ? String(step.tool) : null,
+        result.ok ? 1 : 0,
+        result.error ? String(result.error) : null,
+        Number.isFinite(result.status) ? Number(result.status) : null,
+        Number.isFinite(result.code) ? Number(result.code) : null,
+        result.path ? String(result.path) : null,
+        JSON.stringify(result),
+        JSON.stringify(step?.raw || {}),
+        new Date().toISOString()
+      );
+    }
+  }
+
+  replaceTaskCheckResults(taskId, phase, checks = []) {
+    const trimmed = String(taskId || '').trim();
+    const normalizedPhase = String(phase || '').trim().toLowerCase();
+    if (!trimmed || !normalizedPhase) return;
+    this.db.prepare('DELETE FROM task_check_results WHERE task_id = ? AND phase = ?').run(trimmed, normalizedPhase);
+    const stmt = this.db.prepare(
+      `INSERT INTO task_check_results (
+        task_id, phase, check_index, kind, label, target, ok, error, result_json, created_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    );
+    for (let i = 0; i < checks.length; i += 1) {
+      const check = checks[i] || {};
+      stmt.run(
+        trimmed,
+        normalizedPhase,
+        i,
+        String(check.kind || ''),
+        check.label ? String(check.label) : null,
+        check.target != null ? String(check.target) : null,
+        check.ok ? 1 : 0,
+        check.error ? String(check.error) : null,
+        JSON.stringify(check),
+        new Date().toISOString()
+      );
+    }
+  }
+
+  persistTaskState(task) {
+    if (!task || !task.id) return;
+    this.runInTransaction(() => {
+      this.upsertTaskRecord(task);
+      this.replaceTaskStepResults(task.id, task.stepResults || []);
+      this.replaceTaskCheckResults(task.id, 'verify', task.verification || []);
+      this.replaceTaskCheckResults(task.id, 'monitor', task.monitoring || []);
+    });
+  }
+
+  getTaskRecord(id) {
+    const taskId = String(id || '').trim();
+    if (!taskId) return null;
+    const row = this.db.prepare('SELECT task_json FROM task_records WHERE id = ?').get(taskId);
+    if (!row) return null;
+    return parseJson(row.task_json, null);
+  }
+
+  listTaskRecords(limit = 80) {
+    const rows = this.db
+      .prepare('SELECT task_json FROM task_records ORDER BY COALESCE(updated_at, started_at) DESC LIMIT ?')
+      .all(Math.max(1, Math.min(500, Number(limit || 80))));
+    return rows.map((row) => parseJson(row.task_json, null)).filter(Boolean);
+  }
+
+  markRunningTasksInterrupted() {
+    const now = new Date().toISOString();
+    const rows = this.db
+      .prepare('SELECT task_json FROM task_records WHERE status = \'running\'')
+      .all();
+    for (const row of rows) {
+      const task = parseJson(row.task_json, null);
+      if (!task || !task.id) continue;
+      task.status = 'interrupted';
+      if (!Array.isArray(task.errors)) task.errors = [];
+      if (!task.errors.includes('task_interrupted_by_restart')) task.errors.push('task_interrupted_by_restart');
+      task.finishedAt = task.finishedAt || now;
+      this.persistTaskState(task);
+    }
   }
 
   deleteSession(sessionId, options = {}) {
@@ -421,6 +872,23 @@ export class MemoryStore {
     return this.db
       .prepare('SELECT key, value, created_at FROM facts WHERE key LIKE ? OR value LIKE ? ORDER BY id DESC LIMIT ?')
       .all(`%${query}%`, `%${query}%`, limit);
+  }
+
+  listFacts({ prefix = '', limit = 200 } = {}) {
+    const normalizedPrefix = String(prefix || '').trim();
+    const rowLimit = Math.max(1, Math.min(1000, Number(limit || 200)));
+    const rows = normalizedPrefix
+      ? this.db
+        .prepare('SELECT key, value, created_at FROM facts WHERE key LIKE ? ORDER BY id DESC LIMIT ?')
+        .all(`${normalizedPrefix}%`, rowLimit)
+      : this.db
+        .prepare('SELECT key, value, created_at FROM facts ORDER BY id DESC LIMIT ?')
+        .all(rowLimit);
+    return rows.map((row) => ({
+      key: row.key,
+      value: row.value,
+      createdAt: row.created_at
+    }));
   }
 
   recordToolRun({ sessionId, toolName, args, result }) {

@@ -33,6 +33,9 @@ export async function handleConfigRoute({ req, res, url, ctx }) {
     if (body.runtime && typeof body.runtime.selfPokeEnabled === 'boolean') {
       ctx.config.runtime.selfPokeEnabled = body.runtime.selfPokeEnabled;
     }
+    if (body.runtime && typeof body.runtime.toolHooksEnabled === 'boolean') {
+      ctx.config.runtime.toolHooksEnabled = body.runtime.toolHooksEnabled;
+    }
     if (body.runtime && Number.isFinite(body.runtime.toolCircuitFailureThreshold)) {
       ctx.config.runtime.toolCircuitFailureThreshold = Number(body.runtime.toolCircuitFailureThreshold);
     }
@@ -223,4 +226,3 @@ export async function handleConfigRoute({ req, res, url, ctx }) {
 
   return false;
 }
-

@@ -23,6 +23,32 @@ try {
   assert.equal(list.status, 200);
   assert.ok(Array.isArray(list.json.missions));
 
+  const schedule = await jpost('/api/missions/schedule', {
+    goal: 'scheduled phase7 mission',
+    delayMs: 60000,
+    enabled: false,
+    maxSteps: 1
+  });
+  assert.equal(schedule.status, 200);
+  assert.equal(schedule.json.ok, true);
+  assert.ok(schedule.json.schedule?.id);
+
+  const schedules = await jget('/api/missions/schedules?limit=10');
+  assert.equal(schedules.status, 200);
+  assert.ok(Array.isArray(schedules.json.schedules));
+  assert.equal(
+    schedules.json.schedules.some((item) => item.id === schedule.json.schedule.id),
+    true
+  );
+
+  const updateSchedule = await jpost('/api/missions/schedule/update', {
+    id: schedule.json.schedule.id,
+    enabled: true
+  });
+  assert.equal(updateSchedule.status, 200);
+  assert.equal(updateSchedule.json.ok, true);
+  assert.equal(updateSchedule.json.schedule.enabled, true);
+
   console.log('phase7 ok');
 } finally {
   await stopServer(p);

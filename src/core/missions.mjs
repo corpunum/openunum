@@ -319,10 +319,14 @@ export class MissionRunner {
     this.memoryStore = memoryStore;
     this.config = config;
     this.missions = new Map();
+    this.scheduleTimer = null;
+    this.schedulePollMs = 5000;
+    this.memoryStore?.markRunningMissionsInterrupted?.();
+    this.startScheduleLoop();
   }
 
   list() {
-    return [...this.missions.values()].map((m) => ({
+    const active = [...this.missions.values()].map((m) => ({
       id: m.id,
       goal: m.goal,
       status: m.status,
@@ -336,10 +340,39 @@ export class MissionRunner {
       contractFailures: Number(m.contractFailures || 0),
       rollbackAttempts: Number(m.rollbackAttempts || 0)
     }));
+    const persisted = this.memoryStore?.listMissionRecords
+      ? this.memoryStore.listMissionRecords(120)
+      : [];
+    const seen = new Set(active.map((item) => item.id));
+    for (const m of persisted) {
+      if (!m?.id || seen.has(m.id)) continue;
+      active.push({
+        id: m.id,
+        goal: m.goal,
+        status: m.status,
+        startedAt: m.startedAt,
+        finishedAt: m.finishedAt,
+        step: m.step,
+        maxSteps: m.maxSteps,
+        sessionId: m.sessionId,
+        error: m.error || null,
+        contract: m.contract || null,
+        contractFailures: Number(m.contractFailures || 0),
+        rollbackAttempts: Number(m.rollbackAttempts || 0)
+      });
+    }
+    active.sort((a, b) => String(b.startedAt || '').localeCompare(String(a.startedAt || '')));
+    return active;
   }
 
   get(id) {
-    return this.missions.get(id) || null;
+    const missionId = String(id || '').trim();
+    if (!missionId) return null;
+    const active = this.missions.get(missionId);
+    if (active) return active;
+    return this.memoryStore?.getMissionRecord
+      ? this.memoryStore.getMissionRecord(missionId)
+      : null;
   }
 
   stop(id) {
@@ -347,14 +380,15 @@ export class MissionRunner {
     if (!mission) return { ok: false, error: 'mission_not_found' };
     mission.stopRequested = true;
     if (mission.status === 'running') mission.status = 'stopping';
+    this.persistMission(mission);
     return { ok: true, id, status: mission.status };
   }
 
-  start({ goal, maxSteps = 6, intervalMs = 400, maxRetries = 3, continueUntilDone = true, hardStepCap = 120 }) {
+  start({ goal, maxSteps = 6, intervalMs = 400, maxRetries = 3, continueUntilDone = true, hardStepCap = 120, sessionId = '' }) {
     const trimmedGoal = String(goal || '').trim();
     if (!trimmedGoal) throw new Error('goal is required');
     const id = crypto.randomUUID();
-    const sessionId = `mission:${id}`;
+    const resolvedSessionId = String(sessionId || '').trim() || `mission:${id}`;
     const mission = {
       id,
       goal: trimmedGoal,
@@ -368,7 +402,7 @@ export class MissionRunner {
       hardStepCap: Number(hardStepCap) > 0 ? Number(hardStepCap) : 120,
       intervalMs: Number(intervalMs) >= 0 ? Number(intervalMs) : 400,
       stopRequested: false,
-      sessionId,
+      sessionId: resolvedSessionId,
       log: [],
       retries: 0,
       error: null,
@@ -384,8 +418,117 @@ export class MissionRunner {
       routeLessonSeen: Object.create(null)
     };
     this.missions.set(id, mission);
+    this.persistMission(mission);
     this.run(mission);
-    return { ok: true, id, status: mission.status, sessionId };
+    return { ok: true, id, status: mission.status, sessionId: resolvedSessionId };
+  }
+
+  startSchedule({
+    goal,
+    runAt = '',
+    delayMs = 0,
+    intervalMs = 0,
+    enabled = true,
+    options = {}
+  }) {
+    const trimmedGoal = String(goal || '').trim();
+    if (!trimmedGoal) throw new Error('goal is required');
+    const nowMs = Date.now();
+    const delay = Math.max(0, Number(delayMs || 0));
+    const parsedRunAtMs = runAt ? Date.parse(String(runAt)) : NaN;
+    const runAtMs = Number.isFinite(parsedRunAtMs) ? parsedRunAtMs : (nowMs + delay);
+    const schedule = this.memoryStore?.createMissionSchedule
+      ? this.memoryStore.createMissionSchedule({
+        id: crypto.randomUUID(),
+        goal: trimmedGoal,
+        runAt: new Date(runAtMs).toISOString(),
+        intervalMs: Math.max(0, Number(intervalMs || 0)),
+        enabled: enabled !== false,
+        options: {
+          maxSteps: Number(options?.maxSteps || 0) || undefined,
+          maxRetries: Number(options?.maxRetries || 0) || undefined,
+          continueUntilDone: options?.continueUntilDone,
+          hardStepCap: Number(options?.hardStepCap || 0) || undefined,
+          intervalMs: Number(options?.intervalMs || 0) || undefined
+        }
+      })
+      : null;
+    return { ok: true, schedule };
+  }
+
+  listSchedules(limit = 120) {
+    return this.memoryStore?.listMissionSchedules
+      ? this.memoryStore.listMissionSchedules(limit)
+      : [];
+  }
+
+  updateSchedule(id, changes = {}) {
+    if (!this.memoryStore?.updateMissionSchedule) return null;
+    return this.memoryStore.updateMissionSchedule(id, changes);
+  }
+
+  startScheduleLoop() {
+    if (this.scheduleTimer) clearInterval(this.scheduleTimer);
+    this.scheduleTimer = setInterval(() => {
+      this.runDueSchedules().catch(() => {});
+    }, this.schedulePollMs);
+  }
+
+  async runDueSchedules() {
+    const schedules = this.listSchedules(240);
+    const nowMs = Date.now();
+    for (const schedule of schedules) {
+      if (!schedule?.enabled || !schedule?.id) continue;
+      if (schedule.status === 'running') continue;
+      const dueAt = Date.parse(String(schedule.nextRunAt || schedule.runAt || ''));
+      if (!Number.isFinite(dueAt) || dueAt > nowMs) continue;
+      const updated = this.updateSchedule(schedule.id, {
+        status: 'running',
+        lastError: null
+      });
+      if (!updated) continue;
+      try {
+        const runOptions = schedule.options || {};
+        const started = this.start({
+          goal: schedule.goal,
+          maxSteps: runOptions.maxSteps ?? 6,
+          intervalMs: runOptions.intervalMs ?? this.config?.runtime?.missionDefaultIntervalMs ?? 400,
+          maxRetries: runOptions.maxRetries ?? this.config?.runtime?.missionDefaultMaxRetries ?? 3,
+          continueUntilDone: runOptions.continueUntilDone ?? this.config?.runtime?.missionDefaultContinueUntilDone ?? true,
+          hardStepCap: runOptions.hardStepCap ?? this.config?.runtime?.missionDefaultHardStepCap ?? 120
+        });
+        const after = this.updateSchedule(schedule.id, {
+          status: schedule.intervalMs > 0 ? 'scheduled' : 'completed',
+          lastRunAt: new Date().toISOString(),
+          nextRunAt: schedule.intervalMs > 0
+            ? new Date(Date.now() + schedule.intervalMs).toISOString()
+            : null,
+          enabled: schedule.intervalMs > 0,
+          lastError: null
+        });
+        if (!after) continue;
+        if (!started?.ok) {
+          this.updateSchedule(schedule.id, {
+            status: 'failed',
+            lastError: 'mission_start_failed'
+          });
+        }
+      } catch (error) {
+        this.updateSchedule(schedule.id, {
+          status: 'failed',
+          lastError: String(error.message || error),
+          lastRunAt: new Date().toISOString(),
+          nextRunAt: schedule.intervalMs > 0
+            ? new Date(Date.now() + schedule.intervalMs).toISOString()
+            : null,
+          enabled: schedule.intervalMs > 0
+        });
+      }
+    }
+  }
+
+  persistMission(mission) {
+    this.memoryStore?.upsertMissionRecord?.(mission);
   }
 
   async run(mission) {
@@ -479,6 +622,7 @@ export class MissionRunner {
           checkpoint: checkpoint || null,
           noProgressTurns: mission.noProgressTurns
         });
+        this.persistMission(mission);
         const timedOutTurn = /turn timed out after/i.test(text);
         const wrapUpIntent = /wrap up|finish the mission|summari[sz]e the proof|already produced output|launch path is valid/i.test(text);
         const declaredDone = text.includes('MISSION_STATUS: DONE');
@@ -525,6 +669,7 @@ export class MissionRunner {
             success: true,
             evidence: `completed_with_proof step=${mission.step}`
           });
+          this.persistMission(mission);
           return;
         }
         if (declaredDone && !contractCheck.pass) {
@@ -566,6 +711,7 @@ export class MissionRunner {
             mission.status = 'failed';
             mission.error = 'done_without_proof_retry_exhausted';
             mission.finishedAt = new Date().toISOString();
+            this.persistMission(mission);
             return;
           }
         }
@@ -589,6 +735,7 @@ export class MissionRunner {
         success: false,
         evidence: mission.status
       });
+      this.persistMission(mission);
     } catch (error) {
       mission.status = 'failed';
       if (error instanceof MissionTurnTimeoutError) {
@@ -607,8 +754,11 @@ export class MissionRunner {
         success: false,
         evidence: mission.error
       });
+      this.persistMission(mission);
     } finally {
       this.restoreMissionController(mission);
+      this.persistMission(mission);
+      this.missions.delete(mission.id);
     }
   }
 

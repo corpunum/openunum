@@ -24,6 +24,7 @@ This folder is optimized for fast machine onboarding (fresh agent session, no pr
 18. [COMPETITIVE_ANALYSIS_OPENAI_CODEX.md](/home/corp-unum/openunum/docs/COMPETITIVE_ANALYSIS_OPENAI_CODEX.md)
 19. [COMPETITIVE_ANALYSIS_GEMINI_CLI.md](/home/corp-unum/openunum/docs/COMPETITIVE_ANALYSIS_GEMINI_CLI.md)
 20. [OPENUNUM_MULTI_MODEL_CONTROLLER_ACTION_PLAN.md](/home/corp-unum/openunum/docs/OPENUNUM_MULTI_MODEL_CONTROLLER_ACTION_PLAN.md)
+21. [../NEXT_TASKS.md](/home/corp-unum/openunum/NEXT_TASKS.md)
 
 ## Legacy Planning Docs
 
@@ -37,3 +38,11 @@ These files describe original planning context and early phase structure:
 
 If an agent can only read one doc first, read:
 - [AGENT_ONBOARDING.md](/home/corp-unum/openunum/docs/AGENT_ONBOARDING.md)
+
+## Current Focus
+
+The current autonomy surface is centered on:
+- planner-backed generic tasks (`/api/autonomy/tasks/plan`, `/api/autonomy/tasks/run`)
+- bounded workers, self-edit, and model-scout workflows
+- restart-safe task persistence in SQLite
+- planner-backed chat `/auto` execution instead of a hardcoded mission shortcut

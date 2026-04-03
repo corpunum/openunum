@@ -846,6 +846,7 @@
               <label>Autonomy Mode</label>
               <select id="autonomyMode" data-testid="autonomy-mode-select">
                 <option value="autonomy-first">Autonomy First</option>
+                <option value="compact-local">Compact Local</option>
                 <option value="relentless">Relentless</option>
               </select>
             </div>
@@ -943,6 +944,43 @@
                 <input id="cpResearchUrl" placeholder="proposal URL for approve" />
                 <input id="cpResearchNote" placeholder="approval note (optional)" />
                 <button id="cpResearchApprove">Approve Proposal</button>
+              </div>
+            </div>
+            <div class="card">
+              <h4>Workers & Self-Edit</h4>
+              <div class="row">
+                <button id="cpWorkersList">Workers</button>
+                <button id="cpWorkerStatus">Worker Status</button>
+                <button id="cpSelfEditRuns">Self-Edit Runs</button>
+                <button id="cpSelfEditStatus">Self-Edit Status</button>
+              </div>
+              <div class="grid" style="margin-top:8px;">
+                <input id="cpWorkerId" placeholder="worker id" />
+                <input id="cpSelfEditId" placeholder="self-edit run id" />
+              </div>
+            </div>
+            <div class="card">
+              <h4>Model Scout</h4>
+              <div class="row">
+                <button id="cpModelScoutRun">Run Scout</button>
+                <button id="cpModelScoutList">Scout Runs</button>
+                <button id="cpModelScoutStatus">Scout Status</button>
+              </div>
+              <div class="grid" style="margin-top:8px;">
+                <input id="cpModelScoutQuery" placeholder="Qwen3.5 / DeepSeek R1 Distill" />
+                <input id="cpModelScoutId" placeholder="model-scout run id" />
+              </div>
+            </div>
+            <div class="card">
+              <h4>Generic Tasks</h4>
+              <div class="row">
+                <button id="cpTaskRun">Run Task</button>
+                <button id="cpTaskList">Task Runs</button>
+                <button id="cpTaskStatus">Task Status</button>
+              </div>
+              <div class="grid" style="margin-top:8px;">
+                <input id="cpTaskGoal" placeholder="inspect, execute, verify, monitor" />
+                <input id="cpTaskId" placeholder="task run id" />
               </div>
             </div>
           </div>
@@ -1508,65 +1546,71 @@
         return;
       }
 
-      const startAutoMission = async () => {
-        const started = await jpost('/api/missions/start', {
+      let activeTaskId = '';
+
+      const startAutoTask = async () => {
+        const started = await jpost('/api/autonomy/tasks/run', {
           goal,
-          maxSteps: Number(q('missionSteps').value || 6),
-          intervalMs: Number(q('missionInterval').value || 400),
-          continueUntilDone: true,
-          hardStepCap: 300,
-          maxRetries: 8
+          baseUrl: location.origin,
+          runtime: {
+            missionDefaultHardStepCap: Number(q('missionSteps').value || 6),
+            missionDefaultIntervalMs: Number(q('missionInterval').value || 400),
+            missionDefaultMaxRetries: 8
+          },
+          missionTimeoutMs: 20 * 60 * 1000
         });
-        activeMissionId = started.id;
-        localStorage.setItem('openunum_mission', activeMissionId);
-        q('missionStatus').textContent = `running id=${activeMissionId}`;
-        addLiveEvent(typing, `mission started: ${activeMissionId}`);
+        activeTaskId = started.task.id;
+        addLiveEvent(typing, `task started: ${activeTaskId}`);
       };
 
-      await startAutoMission();
+      await startAutoTask();
 
       const deadline = Date.now() + 60 * 60 * 1000;
       let recoveries = 0;
       while (Date.now() < deadline) {
         await sleep(2000);
-        const out = await jget(`/api/missions/status?id=${encodeURIComponent(activeMissionId)}`);
+        const out = await jget(`/api/autonomy/tasks/status?id=${encodeURIComponent(activeTaskId)}`);
         if (out.error) {
-          if (out.error === 'mission_not_found' && recoveries < 2) {
+          if (out.error === 'task_not_found' && recoveries < 2) {
             recoveries += 1;
-            addLiveEvent(typing, `mission_not_found; auto-recover ${recoveries}/2`);
-            renderLiveBubble(typing, `Mission handle lost. Auto-recovering... (${recoveries}/2)`, []);
-            await startAutoMission();
+            addLiveEvent(typing, `task_not_found; auto-recover ${recoveries}/2`);
+            renderLiveBubble(typing, `Task handle lost. Auto-recovering... (${recoveries}/2)`, []);
+            await startAutoTask();
             continue;
           }
-          addLiveEvent(typing, `mission error: ${out.error}`);
-          typing.bubble.textContent = `auto mission error: ${out.error}`;
+          addLiveEvent(typing, `task error: ${out.error}`);
+          typing.bubble.textContent = `auto task error: ${out.error}`;
           return;
         }
-        const m = out.mission;
-        const latest = m.log?.[m.log.length - 1];
-        const preview = latest?.reply ? String(latest.reply).slice(0, 1400) : 'working...';
-        const stepKey = `${m.status}:${m.step}`;
+        const task = out.task;
+        const latest = Array.isArray(task.stepResults) ? task.stepResults[task.stepResults.length - 1] : null;
+        const preview = latest?.result?.error || latest?.kind || 'working...';
+        const completedSteps = Array.isArray(task.plan)
+          ? task.plan.filter((item) => item.status === 'completed').length
+          : 0;
+        const stepKey = `${task.status}:${completedSteps}`;
         if (typing.lastStep !== stepKey) {
           typing.lastStep = stepKey;
-          addLiveEvent(typing, `mission status=${m.status} step=${m.step}`);
+          addLiveEvent(typing, `task status=${task.status} completed=${completedSteps}`);
         }
-        const missionToolLike = latest ? [{ toolName: 'mission.latest', args: { step: m.step, status: m.status }, result: { preview } }] : [];
+        const taskToolLike = latest ? [{ toolName: `task.${latest.kind}`, args: { status: task.status }, result: { preview } }] : [];
         renderLiveBubble(
           typing,
-          `auto mission ${m.id} status=${m.status} step=${m.step}/${m.hardStepCap || m.maxSteps}`,
-          missionToolLike
+          `auto task ${task.id} status=${task.status} completed=${completedSteps}/${task.plan?.length || task.steps?.length || 0}`,
+          taskToolLike
         );
-        if (m.status !== 'running' && m.status !== 'stopping') {
-          localStorage.removeItem('openunum_mission');
-          activeMissionId = '';
-          addLiveEvent(typing, `mission terminal status: ${m.status}`);
-          typing.bubble.innerHTML = `<pre>${escapeHtml(latest?.reply || `Mission ended: ${m.status}`)}
+        if (task.status !== 'running') {
+          addLiveEvent(typing, `task terminal status: ${task.status}`);
+          const verificationSummary = (task.verification || [])
+            .map((item) => `${item.label || item.kind}: ${item.ok ? 'ok' : 'failed'}`)
+            .join('\n');
+          typing.bubble.innerHTML = `<pre>${escapeHtml(`Autonomous task ${task.id} ended: ${task.status}
 
-[mission status: ${escapeHtml(m.status)}]</pre>`;
+${verificationSummary || preview}`)}</pre>`;
           return;
         }
       }
-      typing.bubble.textContent = 'Auto mission still running in background. Open Missions for live status.';
+      typing.bubble.textContent = 'Auto task is still running in background.';
     }
 
     function shouldEscalateToAuto(message, out) {
@@ -2792,6 +2836,66 @@
         url: q('cpResearchUrl').value.trim(),
         note: q('cpResearchNote').value.trim()
       });
+
+    q('cpWorkersList').onclick = () => runControlPlaneRequest('GET', '/api/autonomy/workers?limit=50');
+    q('cpWorkerStatus').onclick = () => {
+      const id = q('cpWorkerId').value.trim();
+      if (!id) return;
+      runControlPlaneRequest('GET', `/api/autonomy/workers/status?id=${encodeURIComponent(id)}`);
+    };
+    q('cpSelfEditRuns').onclick = () => runControlPlaneRequest('GET', '/api/autonomy/self-edit?limit=25');
+    q('cpSelfEditStatus').onclick = () => {
+      const id = q('cpSelfEditId').value.trim();
+      if (!id) return;
+      runControlPlaneRequest('GET', `/api/autonomy/self-edit/status?id=${encodeURIComponent(id)}`);
+    };
+    q('cpModelScoutRun').onclick = () =>
+      runControlPlaneRequest('POST', '/api/autonomy/model-scout/run', {
+        query: q('cpModelScoutQuery').value.trim(),
+        monitorLocal: true
+      });
+    q('cpModelScoutList').onclick = () => runControlPlaneRequest('GET', '/api/autonomy/model-scout?limit=20');
+    q('cpModelScoutStatus').onclick = () => {
+      const id = q('cpModelScoutId').value.trim();
+      if (!id) return;
+      runControlPlaneRequest('GET', `/api/autonomy/model-scout/status?id=${encodeURIComponent(id)}`);
+    };
+    q('cpTaskRun').onclick = () =>
+      runControlPlaneRequest('POST', '/api/autonomy/tasks/run', {
+        goal: q('cpTaskGoal').value.trim(),
+        plan: [
+          'Inspect current runtime state',
+          'Verify the service surface',
+          'Record monitoring evidence'
+        ],
+        steps: [
+          {
+            kind: 'tool',
+            label: 'inspect host',
+            tool: 'shell_run',
+            args: { cmd: 'uname -a' }
+          },
+          {
+            kind: 'tool',
+            label: 'verify health',
+            tool: 'http_request',
+            args: { url: `${location.origin}/api/health`, method: 'GET' }
+          }
+        ],
+        verify: [
+          { kind: 'step_ok', stepIndex: 0 },
+          { kind: 'http', url: `${location.origin}/api/health`, expectStatus: 200 }
+        ],
+        monitor: [
+          { kind: 'http', url: `${location.origin}/api/runtime/inventory`, expectStatus: 200 }
+        ]
+      });
+    q('cpTaskList').onclick = () => runControlPlaneRequest('GET', '/api/autonomy/tasks?limit=20');
+    q('cpTaskStatus').onclick = () => {
+      const id = q('cpTaskId').value.trim();
+      if (!id) return;
+      runControlPlaneRequest('GET', `/api/autonomy/tasks/status?id=${encodeURIComponent(id)}`);
+    };
 
     q('cpOpsRecent').onclick = () => runControlPlaneRequest('GET', '/api/operations/recent?limit=50');
     q('cpSessionDelete').onclick = () => {

@@ -84,6 +84,7 @@ export function defaultConfig() {
       workspaceRoot: process.env.OPENUNUM_WORKSPACE || process.cwd(),
       ownerControlMode: process.env.OPENUNUM_OWNER_MODE || 'safe',
       selfPokeEnabled: true,
+      toolHooksEnabled: true,
       toolCircuitFailureThreshold: 3,
       toolCircuitCooldownMs: 300000,
       contextCompactionEnabled: true,

@@ -89,7 +89,8 @@ function summarizeResult(result) {
     code: Number.isFinite(r.code) ? r.code : undefined,
     error: r.error || null,
     path: r.path || r.outPath || null,
-    url: r.url || null
+    url: r.url || null,
+    hookEventCount: Array.isArray(r.hookEvents) ? r.hookEvents.length : 0
   };
 }
 
@@ -120,7 +121,81 @@ function compactToolResult(result) {
   if (r.stdout) compact.stdout = truncateText(r.stdout, 2000);
   if (r.stderr) compact.stderr = truncateText(r.stderr, 1200);
   if (r.text) compact.text = truncateText(r.text, 2000);
+  if (Array.isArray(r.hookEvents) && r.hookEvents.length) {
+    compact.hookEvents = r.hookEvents.map((item) => ({
+      stage: item.stage,
+      hook: item.hook,
+      decision: item.decision,
+      note: truncateText(item.note || '', 120)
+    }));
+  }
   return compact;
+}
+
+function clipText(text, maxChars = 1200) {
+  const clean = String(text || '').trim();
+  if (clean.length <= maxChars) return clean;
+  return `${clean.slice(0, maxChars - 3)}...`;
+}
+
+function buildSkillPrompt(skills = [], { maxSkills = 4, maxCharsPerSkill = 2000 } = {}) {
+  return skills
+    .slice(0, maxSkills)
+    .map((s) => `Skill ${s.name}:\n${clipText(s.content, maxCharsPerSkill)}`)
+    .join('\n\n');
+}
+
+function uniqueFacts(items = []) {
+  const seen = new Set();
+  const out = [];
+  for (const item of items) {
+    const key = String(item?.key || '').trim();
+    const value = String(item?.value || '').trim();
+    if (!key || !value) continue;
+    const signature = `${key}=${value}`;
+    if (seen.has(signature)) continue;
+    seen.add(signature);
+    out.push({ key, value });
+  }
+  return out;
+}
+
+function extractAutomaticFacts({ message = '', reply = '', model = null, trace = null }) {
+  const facts = [];
+  const userText = String(message || '').trim();
+  const assistantText = String(reply || '').trim();
+  const combined = `${userText}\n${assistantText}`;
+
+  const nameMatch =
+    userText.match(/\bmy name is\s+([a-z][a-z0-9 .'-]{1,60})/i) ||
+    userText.match(/\bcall me\s+([a-z][a-z0-9 .'-]{1,60})/i);
+  if (nameMatch?.[1]) facts.push({ key: 'owner.name', value: nameMatch[1].trim() });
+
+  const locationMatch = userText.match(/\bi (?:am|live) in\s+([a-z][a-z0-9 ,.'-]{1,80})/i);
+  if (locationMatch?.[1]) facts.push({ key: 'owner.location', value: locationMatch[1].trim() });
+
+  const preferencePatterns = [
+    { regex: /\bi prefer\s+([^.\n]{2,80})/i, key: 'owner.preference.general' },
+    { regex: /\buse\s+(ollama|openai|openrouter|nvidia)\b/i, key: 'owner.preference.provider' },
+    { regex: /\b(?:avoid|don\'t use|do not use)\s+(browser|shell|telegram|email)\b/i, key: 'owner.preference.avoid_surface' }
+  ];
+  for (const pattern of preferencePatterns) {
+    const match = userText.match(pattern.regex);
+    if (match?.[1]) facts.push({ key: pattern.key, value: match[1].trim().toLowerCase() });
+  }
+
+  const runtimeLabel = providerModelLabel(
+    model?.activeProvider || model?.provider,
+    model?.activeModel || model?.model
+  );
+  if (runtimeLabel) facts.push({ key: 'runtime.last_model', value: runtimeLabel });
+  if (trace?.executionEnvelope?.tier) facts.push({ key: 'runtime.last_execution_tier', value: String(trace.executionEnvelope.tier) });
+  if (trace?.provider) facts.push({ key: 'runtime.last_provider', value: String(trace.provider) });
+
+  const missionStatus = combined.match(/MISSION_STATUS:\s*(DONE|CONTINUE)/i);
+  if (missionStatus?.[1]) facts.push({ key: 'runtime.last_mission_status', value: missionStatus[1].toUpperCase() });
+
+  return uniqueFacts(facts);
 }
 
 const TOOL_ROUTING_HINTS = [
@@ -567,8 +642,8 @@ export class OpenUnumAgent {
     return this.getCurrentModel();
   }
 
-  async runTool(name, args) {
-    return this.toolRuntime.run(name, args || {});
+  async runTool(name, args, context = {}) {
+    return this.toolRuntime.run(name, args || {}, context || {});
   }
 
   reloadTools() {
@@ -814,9 +889,9 @@ export class OpenUnumAgent {
       ...messages
     ];
     const baseMaxIters = executionProfile.maxIters || this.config.runtime?.maxToolIterations || 4;
-    const uiRaisedBaseMaxIters = uiCodeEditTask ? Math.max(baseMaxIters, 6) : baseMaxIters;
+    const uiRaisedBaseMaxIters = uiCodeEditTask && !executionEnvelope.verySmallModel ? Math.max(baseMaxIters, 6) : baseMaxIters;
     const envelopeMaxIters = executionEnvelope.maxToolIterations || this.config.runtime?.maxToolIterations || 4;
-    const uiRaisedEnvelopeMaxIters = uiCodeEditTask ? Math.max(envelopeMaxIters, 6) : envelopeMaxIters;
+    const uiRaisedEnvelopeMaxIters = uiCodeEditTask && !executionEnvelope.verySmallModel ? Math.max(envelopeMaxIters, 6) : envelopeMaxIters;
     const maxIters = Math.max(
       1,
       Math.min(
@@ -1160,6 +1235,14 @@ export class OpenUnumAgent {
       if (slashReply) {
         this.memoryStore.addMessage(sessionId, 'user', message);
         this.memoryStore.addMessage(sessionId, 'assistant', slashReply);
+        for (const fact of extractAutomaticFacts({
+          message,
+          reply: slashReply,
+          model: this.getCurrentModel(),
+          trace: null
+        })) {
+          this.memoryStore.rememberFact(fact.key, fact.value);
+        }
         return {
           sessionId,
           reply: slashReply,
@@ -1202,6 +1285,14 @@ export class OpenUnumAgent {
       ].join('\n');
       this.memoryStore.addMessage(sessionId, 'user', message);
       this.memoryStore.addMessage(sessionId, 'assistant', reply);
+      for (const fact of extractAutomaticFacts({
+        message,
+        reply,
+        model: this.getCurrentModel(),
+        trace: null
+      })) {
+        this.memoryStore.rememberFact(fact.key, fact.value);
+      }
       return {
         sessionId,
         reply,
@@ -1220,31 +1311,34 @@ export class OpenUnumAgent {
 
     this.memoryStore.addMessage(sessionId, 'user', message);
 
-    const skillPrompt = skills
-      .map((s) => `Skill ${s.name}:\n${s.content.substring(0, 2000)}`)
-      .join('\n\n');
-    const strategyHints = this.memoryStore.retrieveStrategyHintsSmart
-      ? this.memoryStore.retrieveStrategyHintsSmart(message, 6)
-      : this.memoryStore.retrieveStrategyHints(message, 4);
-    const strategyPrompt = strategyHints.length
-      ? strategyHints
-        .map((s, idx) => `${idx + 1}. ${s.success ? 'SUCCESS' : 'FAIL'} | ${s.strategy} | ${s.evidence}`)
-        .join('\n')
-      : '';
-
-    const facts = this.memoryStore.retrieveFacts(message, 5)
-      .map((f) => `${f.key}: ${f.value}`)
-      .join('\n');
-    const knowledgeHits = this.memoryStore.searchKnowledge
-      ? this.memoryStore.searchKnowledge(message, 6).map((k, idx) => `${idx + 1}. [${k.type}] ${k.text}`).join('\n')
-      : '';
-
     const modelForBudget = this.getCurrentModel();
     const sessionEnvelope = resolveExecutionEnvelope({
       provider: modelForBudget.activeProvider || modelForBudget.provider,
       model: modelForBudget.activeModel || modelForBudget.model,
       runtime: this.config.runtime
     });
+    const compactController = Boolean(sessionEnvelope.verySmallModel);
+    const strategyHints = this.memoryStore.retrieveStrategyHintsSmart
+      ? this.memoryStore.retrieveStrategyHintsSmart(message, compactController ? 3 : 6)
+      : this.memoryStore.retrieveStrategyHints(message, compactController ? 2 : 4);
+    const strategyPrompt = strategyHints.length
+      ? strategyHints
+        .map((s, idx) => `${idx + 1}. ${s.success ? 'SUCCESS' : 'FAIL'} | ${clipText(s.strategy, compactController ? 80 : 180)} | ${clipText(s.evidence, compactController ? 120 : 220)}`)
+        .join('\n')
+      : '';
+
+    const facts = this.memoryStore.retrieveFacts(message, compactController ? 3 : 5)
+      .map((f) => `${f.key}: ${clipText(f.value, compactController ? 80 : 160)}`)
+      .join('\n');
+    const knowledgeHits = !compactController && this.memoryStore.searchKnowledge
+      ? this.memoryStore.searchKnowledge(message, 6).map((k, idx) => `${idx + 1}. [${k.type}] ${clipText(k.text, 180)}`).join('\n')
+      : '';
+    const skillPrompt = buildSkillPrompt(
+      skills,
+      compactController
+        ? { maxSkills: 1, maxCharsPerSkill: 500 }
+        : { maxSkills: 4, maxCharsPerSkill: 2000 }
+    );
     const historyLimit = Number.isFinite(sessionEnvelope.maxHistoryMessages) ? Number(sessionEnvelope.maxHistoryMessages) : 1200;
     const rawHistory = this.memoryStore.getMessagesForContext(sessionId, historyLimit)
       .map((m) => ({ id: m.id, role: m.role, content: m.content }));
@@ -1302,7 +1396,7 @@ export class OpenUnumAgent {
           `You are OpenUnum, an Ubuntu operator agent. Current configured provider/model is ${this.config.model.provider}/${this.config.model.model}. ` +
           'If user asks which model/provider you are using, answer with exactly that runtime value and do not invent other providers.\n' +
           'Never claim an action was completed unless a tool result in this turn confirms it.\n' +
-          'Execution contract for every model: work in small proof-backed substeps and pivot after repeated route failure.\n' +
+          `Execution contract for every model: work in small proof-backed substeps and pivot after repeated route failure.${compactController ? ' Compact local mode is active: keep replies short and avoid broad exploration.\n' : '\n'}` +
           `Owner control mode: ${this.config.runtime?.ownerControlMode || 'safe'}. ` +
           'In safe mode, avoid destructive operations without explicit owner approval. ' +
           'In unlocked modes, maximize completion while still requiring tool evidence.\n' +
@@ -1389,6 +1483,14 @@ export class OpenUnumAgent {
       };
     }
     this.memoryStore.addMessage(sessionId, 'assistant', finalText);
+    for (const fact of extractAutomaticFacts({
+      message,
+      reply: finalText,
+      model: this.getCurrentModel(),
+      trace
+    })) {
+      this.memoryStore.rememberFact(fact.key, fact.value);
+    }
 
     if (message.toLowerCase().startsWith('remember ')) {
       const payload = message.slice('remember '.length);

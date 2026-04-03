@@ -370,3 +370,35 @@ OpenUnum is now oriented around:
 - evidence-backed autonomous execution
 - durable memory for strategy reuse
 - operator-facing transparency into tool behavior
+
+## 2026-04-03 Generic Autonomy Upgrade
+
+1. Planner-backed generic task framework:
+   - added `GoalTaskPlanner` for plain-language goal compilation
+   - added `TaskOrchestrator` for reusable step execution, verification, and monitoring
+   - new APIs:
+     - `POST /api/autonomy/tasks/plan`
+     - `GET /api/autonomy/tasks`
+     - `GET /api/autonomy/tasks/status`
+     - `POST /api/autonomy/tasks/run`
+2. Restart-safe task persistence:
+   - SQLite tables:
+     - `task_records`
+     - `task_step_results`
+     - `task_check_results`
+   - running tasks are marked `interrupted` after restart instead of disappearing
+3. Planner-backed chat `/auto`:
+   - `/auto <goal>` now launches a generic task, not a hardcoded single mission step
+   - preflight evidence and mission execution can share one session id
+4. New autonomy components:
+   - `worker-orchestrator`
+   - `self-edit-pipeline`
+   - `model-scout-workflow`
+   - `autonomy-registry`
+5. Runtime/autonomy docs updated:
+   - onboarding
+   - codebase map
+   - UI behavior
+   - API reference
+6. Execution-envelope classifier fix:
+   - `397b`/large cloud models no longer misclassify as compact due to substring matches such as `7b` inside `397b`

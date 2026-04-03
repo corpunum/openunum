@@ -2,12 +2,14 @@ import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 import crypto from 'node:crypto';
+import { pathToFileURL } from 'node:url';
 import { CDPBrowser } from '../browser/cdp.mjs';
 import { ExecutorDaemon } from './executor-daemon.mjs';
 import { SkillManager } from '../skills/manager.mjs';
 import { GoogleWorkspaceClient } from './google-workspace.mjs';
 import { ResearchManager } from '../research/manager.mjs';
 import { ExecutionPolicyEngine } from '../core/execution-policy-engine.mjs';
+import { getHomeDir } from '../config.mjs';
 
 const TOOL_CAPABILITY_META = {
   file_read: { class: 'read', mutatesState: false, destructive: false, proofHint: 'returned file content/path' },
@@ -106,6 +108,76 @@ function applySimplePatch(original, find, replace) {
   return original.replace(find, replace);
 }
 
+function isPlainObject(value) {
+  return value != null && typeof value === 'object' && !Array.isArray(value);
+}
+
+function firstMeaningfulLine(text, maxChars = 160) {
+  const line = String(text || '')
+    .split('\n')
+    .map((item) => item.trim())
+    .find(Boolean) || '';
+  return line.length > maxChars ? `${line.slice(0, maxChars - 3)}...` : line;
+}
+
+function parseListeningPorts(text) {
+  const ports = new Set();
+  const raw = String(text || '');
+  for (const match of raw.matchAll(/[:.]([0-9]{2,5})\b/g)) {
+    const port = Number(match[1]);
+    if (Number.isFinite(port) && port > 0 && port <= 65535) ports.add(port);
+  }
+  return [...ports].slice(0, 12);
+}
+
+function extractOperationalFacts(toolName, args = {}, result = {}) {
+  if (!result?.ok) return [];
+  const facts = [];
+  if (toolName === 'browser_navigate' && result.url) {
+    facts.push({ key: 'browser.last_url', value: String(result.url) });
+  }
+  if (toolName === 'http_request' && args?.url) {
+    facts.push({ key: 'http.last_url', value: String(args.url) });
+    if (Number.isFinite(result.status)) facts.push({ key: 'http.last_status', value: String(result.status) });
+  }
+  if (toolName !== 'shell_run') return facts;
+
+  const cmd = String(args?.cmd || '').trim().toLowerCase();
+  const stdout = String(result?.stdout || '');
+  if (!cmd) return facts;
+
+  if (cmd === 'pwd') {
+    const line = firstMeaningfulLine(stdout, 240);
+    if (line) facts.push({ key: 'workspace.last_pwd', value: line });
+  }
+  if (cmd.startsWith('uname')) {
+    const line = firstMeaningfulLine(stdout, 240);
+    if (line) facts.push({ key: 'system.uname', value: line });
+  }
+  if (cmd.includes('git status')) {
+    facts.push({ key: 'repo.git.present', value: 'true' });
+    const line = firstMeaningfulLine(stdout, 240);
+    if (line) facts.push({ key: 'repo.git.last_status', value: line });
+  }
+  if (cmd.includes('ollama list')) {
+    const lines = stdout.split('\n').map((line) => line.trim()).filter(Boolean);
+    const count = Math.max(0, lines.length - 1);
+    facts.push({ key: 'models.ollama.last_list_count', value: String(count) });
+  }
+  if (cmd.includes('ss -ltn') || cmd.includes('netstat -ltn')) {
+    const ports = parseListeningPorts(stdout);
+    if (ports.length) {
+      facts.push({ key: 'system.listen_ports', value: ports.join(',') });
+    }
+  }
+  if (cmd.includes('nvidia-smi')) {
+    facts.push({ key: 'hardware.gpu.nvidia.present', value: 'true' });
+    const line = firstMeaningfulLine(stdout, 240);
+    if (line) facts.push({ key: 'hardware.gpu.nvidia.summary', value: line });
+  }
+  return facts;
+}
+
 function tryParseCurlAsHttpRequest(cmd) {
   const text = String(cmd || '').trim();
   if (!/^curl\b/.test(text)) return null;
@@ -195,8 +267,10 @@ export class ToolRuntime {
     });
     this.policyEngine = new ExecutionPolicyEngine(config.runtime || {});
     this.backupRoot = path.join(os.homedir(), '.openunum', 'backups');
+    this.hooksRoot = path.join(getHomeDir(), 'hooks');
     this.backupIndex = [];
     fs.mkdirSync(this.backupRoot, { recursive: true });
+    fs.mkdirSync(this.hooksRoot, { recursive: true });
   }
 
   toolSchemas(options = {}) {
@@ -654,6 +728,61 @@ export class ToolRuntime {
       args,
       result
     });
+    if (this.memoryStore?.rememberFact) {
+      const facts = [
+        ...extractOperationalFacts(toolName, args, result),
+        ...(Array.isArray(result?.hookFacts) ? result.hookFacts : [])
+      ];
+      for (const fact of facts) {
+        const key = String(fact?.key || '').trim();
+        const value = String(fact?.value || '').trim();
+        if (!key || !value) continue;
+        this.memoryStore.rememberFact(key, value);
+      }
+    }
+    if (this.memoryStore?.addMemoryArtifact && Array.isArray(result?.hookEvents) && result.hookEvents.length > 0) {
+      this.memoryStore.addMemoryArtifact({
+        sessionId,
+        artifactType: 'tool_hook',
+        content: JSON.stringify(result.hookEvents),
+        sourceRef: toolName
+      });
+    }
+  }
+
+  listHookFiles(stage) {
+    if (this.config.runtime?.toolHooksEnabled === false) return [];
+    const prefix = `${stage}`;
+    const entries = fs.existsSync(this.hooksRoot) ? fs.readdirSync(this.hooksRoot) : [];
+    return entries
+      .filter((name) => name === `${prefix}.mjs` || (name.startsWith(`${prefix}.`) && name.endsWith('.mjs')))
+      .sort()
+      .map((name) => ({ name, filePath: path.join(this.hooksRoot, name) }));
+  }
+
+  async runHookStage(stage, payload) {
+    const files = this.listHookFiles(stage);
+    const outcomes = [];
+    for (const hook of files) {
+      try {
+        const mod = await import(`${pathToFileURL(hook.filePath).href}?t=${Date.now()}`);
+        const handler = typeof mod.handle === 'function' ? mod.handle : (typeof mod.default === 'function' ? mod.default : null);
+        if (!handler) continue;
+        const out = await handler(payload);
+        if (out == null) continue;
+        outcomes.push({ hook: hook.name, output: out });
+      } catch (error) {
+        outcomes.push({
+          hook: hook.name,
+          output: {
+            allow: false,
+            reason: 'hook_execution_failed',
+            stderr: String(error.message || error)
+          }
+        });
+      }
+    }
+    return outcomes;
   }
 
   getCircuitState(toolName) {
@@ -703,42 +832,148 @@ export class ToolRuntime {
   }
 
   async run(name, args, context = {}) {
-    const policy = this.evaluatePolicy(name, args, context);
+    let currentArgs = isPlainObject(args) ? { ...args } : {};
+    const hookEvents = [];
+    const hookFacts = [];
+    const hookArtifacts = [];
+
+    const policy = this.evaluatePolicy(name, currentArgs, context);
     if (!policy.allow) {
       const out = {
         ok: false,
         error: 'policy_denied',
         policyReason: policy.reason,
-        stderr: policy.details || `Tool ${name} denied by execution policy.`
+        stderr: policy.details || `Tool ${name} denied by execution policy.`,
+        hookEvents
       };
-      this.logRun(context, name, args, out);
+      this.logRun(context, name, currentArgs, out);
       return out;
     }
     if (!this.isToolAllowed(name, context)) {
       const out = {
         ok: false,
         error: 'model_profile_tool_restricted',
-        stderr: `Tool ${name} is restricted by the active model execution profile.`
+        stderr: `Tool ${name} is restricted by the active model execution profile.`,
+        hookEvents
       };
-      this.logRun(context, name, args, out);
+      this.logRun(context, name, currentArgs, out);
       return out;
     }
+
+    const preHooks = await this.runHookStage('pre-tool', {
+      stage: 'pre-tool',
+      toolName: name,
+      args: currentArgs,
+      context
+    });
+    for (const item of preHooks) {
+      const out = item.output || {};
+      const event = {
+        stage: 'pre-tool',
+        hook: item.hook,
+        decision: out.stop ? 'synthetic_result' : out.allow === false ? 'blocked' : isPlainObject(out.args) ? 'mutated_args' : 'observed',
+        note: firstMeaningfulLine(out.note || out.reason || out.stderr || '')
+      };
+      hookEvents.push(event);
+      if (Array.isArray(out.rememberFacts)) hookFacts.push(...out.rememberFacts);
+      if (Array.isArray(out.artifacts)) hookArtifacts.push(...out.artifacts);
+      if (isPlainObject(out.args)) currentArgs = { ...currentArgs, ...out.args };
+      if (out.allow === false) {
+        const blocked = {
+          ok: false,
+          error: 'hook_blocked',
+          stderr: out.stderr || out.reason || `Hook ${item.hook} blocked ${name}.`,
+          hookEvents,
+          hookFacts,
+          hookArtifacts
+        };
+        this.logRun(context, name, currentArgs, blocked);
+        return blocked;
+      }
+      if (out.stop === true && isPlainObject(out.result)) {
+        const synthetic = {
+          ...out.result,
+          ok: out.result.ok !== false,
+          hookEvents,
+          hookFacts,
+          hookArtifacts
+        };
+        this.recordToolResult(name, Boolean(synthetic?.ok));
+        this.logRun(context, name, currentArgs, synthetic);
+        return synthetic;
+      }
+    }
+
+    const postMutationPolicy = this.evaluatePolicy(name, currentArgs, context);
+    if (!postMutationPolicy.allow) {
+      const out = {
+        ok: false,
+        error: 'policy_denied',
+        policyReason: postMutationPolicy.reason,
+        stderr: postMutationPolicy.details || `Tool ${name} denied by execution policy after hook mutation.`,
+        hookEvents,
+        hookFacts,
+        hookArtifacts
+      };
+      this.logRun(context, name, currentArgs, out);
+      return out;
+    }
+    if (!this.isToolAllowed(name, context)) {
+      const out = {
+        ok: false,
+        error: 'model_profile_tool_restricted',
+        stderr: `Tool ${name} is restricted by the active model execution profile.`,
+        hookEvents,
+        hookFacts,
+        hookArtifacts
+      };
+      this.logRun(context, name, currentArgs, out);
+      return out;
+    }
+
     const circuit = this.canExecuteTool(name);
     if (!circuit.ok) {
-      const out = { ok: false, error: circuit.error, ...circuit.details };
-      this.logRun(context, name, args, out);
+      const out = { ok: false, error: circuit.error, ...circuit.details, hookEvents, hookFacts, hookArtifacts };
+      this.logRun(context, name, currentArgs, out);
       return out;
     }
 
     let result;
     try {
-      result = await this.executeTool(name, args, context);
+      result = await this.executeTool(name, currentArgs, context);
     } catch (error) {
       result = { ok: false, error: String(error.message || error) };
     }
 
+    const postHooks = await this.runHookStage('post-tool', {
+      stage: 'post-tool',
+      toolName: name,
+      args: currentArgs,
+      result,
+      context
+    });
+    for (const item of postHooks) {
+      const out = item.output || {};
+      hookEvents.push({
+        stage: 'post-tool',
+        hook: item.hook,
+        decision: isPlainObject(out.result) ? 'mutated_result' : 'observed',
+        note: firstMeaningfulLine(out.note || out.reason || out.stderr || '')
+      });
+      if (Array.isArray(out.rememberFacts)) hookFacts.push(...out.rememberFacts);
+      if (Array.isArray(out.artifacts)) hookArtifacts.push(...out.artifacts);
+      if (isPlainObject(out.result)) result = { ...result, ...out.result };
+    }
+
+    result = {
+      ...result,
+      hookEvents,
+      hookFacts,
+      hookArtifacts
+    };
+
     this.recordToolResult(name, Boolean(result?.ok));
-    this.logRun(context, name, args, result);
+    this.logRun(context, name, currentArgs, result);
     return result;
   }
 

@@ -9,6 +9,12 @@ This map is implementation-accurate as of 2026-04-03.
 - `src/server/services/*.mjs`: extracted runtime helpers (chat, auth jobs, browser runtime, telegram runtime, research runtime)
 - `src/core/agent.mjs`: provider chat loop, tool-call execution, trace generation
 - `src/core/missions.mjs`: autonomous mission runner with proof-aware completion
+- `src/core/goal-task-planner.mjs`: deterministic goal-to-task compiler for planner-backed autonomy
+- `src/core/task-orchestrator.mjs`: generic task executor with steps, verification, monitoring, and persistence
+- `src/core/worker-orchestrator.mjs`: bounded internal workers with tool allowlists
+- `src/core/self-edit-pipeline.mjs`: self-edit validation/canary/rollback promotion pipeline
+- `src/core/model-scout-workflow.mjs`: bounded online model discovery/download/monitor workflow
+- `src/core/autonomy-registry.mjs`: shared autonomy singletons wired into routes
 - `src/core/model-behavior-registry.mjs`: behavior classes + runtime learning hints per provider/model
 - `src/core/context-pack-builder.mjs`: behavior-aware context/system pack assembly
 - `src/core/execution-contract.mjs`: deterministic continuation and proof-backed completion checks
@@ -21,7 +27,7 @@ This map is implementation-accurate as of 2026-04-03.
 - `src/core/autonomy-master.mjs`: continuous autonomy coordinator (self-heal, self-test, self-improve, skill learning)
 - `src/core/context-budget.mjs`: model-aware context window estimation + token usage checks
 - `src/core/context-compact.mjs`: old-message compaction and artifact extraction
-- `src/memory/store.mjs`: SQLite persistence for sessions/messages/facts/tool runs/strategy outcomes
+- `src/memory/store.mjs`: SQLite persistence for sessions/messages/facts/tool runs/strategy outcomes plus mission/task durability
 - `src/browser/cdp.mjs`: Chrome DevTools Protocol abstraction
 - `src/providers/*`: provider adapters
 - `src/models/catalog.mjs`: provider model discovery/ranking + OpenClaw key import
@@ -40,6 +46,19 @@ This map is implementation-accurate as of 2026-04-03.
 7. Agent returns final response + structured execution trace.
 8. UI renders message + expandable trace.
 9. When the run is pending, UI polls `/api/chat/pending` and session activity per originating session id (session-safe pending loop).
+10. When the message starts with `/auto`, chat launches a planner-backed generic task and writes the task summary back into the same session.
+
+## Planner-Backed Task Flow
+
+1. UI/API calls `POST /api/autonomy/tasks/plan` or `POST /api/autonomy/tasks/run` with a plain-language goal.
+2. `GoalTaskPlanner` classifies the goal and synthesizes bounded preflight steps.
+3. `TaskOrchestrator` executes task steps (`tool`, `mission`, `worker`, `self_edit`, `model_scout`, `delay`).
+4. Verification and monitoring checks run after execution.
+5. Task state persists in SQLite:
+   - `task_records`
+   - `task_step_results`
+   - `task_check_results`
+6. `GET /api/autonomy/tasks` and `GET /api/autonomy/tasks/status` survive restart because they read persisted state.
 
 ## Autonomous Mission Flow
 
@@ -48,6 +67,7 @@ This map is implementation-accurate as of 2026-04-03.
 3. Loop checks proof: successful tool-run count must increase for true completion.
 4. `MISSION_STATUS: DONE` without new proof triggers retries.
 5. Outcomes persist to `strategy_outcomes` for future strategy hints.
+6. Missions launched from generic tasks can reuse the task session id so preflight evidence and mission execution share one thread.
 
 ## Provider Layer
 
@@ -101,12 +121,17 @@ This map is implementation-accurate as of 2026-04-03.
 - Research reports: `~/.openunum/research/research-YYYY-MM-DD.json`
 - Research approval queue: `~/.openunum/research/review-queue.json`
 - Skill manifest: `~/.openunum/skills/manifest.json`
+- Tool hooks: `~/.openunum/hooks/pre-tool*.mjs`, `~/.openunum/hooks/post-tool*.mjs`
 - Context compactions: `session_compactions` table in `~/.openunum/openunum.db`
 - Context artifacts: `memory_artifacts` table in `~/.openunum/openunum.db`
+- Task persistence: `task_records`, `task_step_results`, `task_check_results` in `~/.openunum/openunum.db`
+- Runtime inventory ledger: derived from persisted facts and exposed at `/api/runtime/inventory`
 
 ## Important Couplings
 
 - `server.mjs` -> `agent.reloadTools()` must be called after runtime/config mutations that impact tools.
 - `MissionRunner` depends on `MemoryStore.countSuccessfulToolRuns(...)` for proof checks.
+- `TaskOrchestrator` depends on `GoalTaskPlanner` when `runTask(...)` receives only a goal.
+- `MissionRunner.start(...)` now accepts external `sessionId` when task and mission evidence must land in one session.
 - UI trace display expects `out.trace` in `/api/chat` response.
 - UI OAuth connect actions can launch browser/terminal approval windows (`/api/service/connect`); routine smoke checks should use `pnpm smoke:ui:noauth`.

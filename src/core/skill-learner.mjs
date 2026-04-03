@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { getHomeDir } from '../config.mjs';
 import { logInfo, logWarn } from '../logger.mjs';
+import { SkillManager } from '../skills/manager.mjs';
 
 /**
  * SkillLearner - Automatically extracts and saves successful patterns
@@ -12,6 +13,7 @@ export class SkillLearner {
     this.memoryStore = memoryStore;
     this.skillsDir = path.join(getHomeDir(), 'skills');
     this.minSuccessThreshold = 2; // Need 2+ successes to create a skill
+    this.skillManager = new SkillManager();
     this.ensureSkillsDir();
   }
 
@@ -75,15 +77,13 @@ export class SkillLearner {
   extractSkillFromOutcomes(pattern, outcomes) {
     // Analyze tool runs from these sessions
     const toolSequences = [];
-    
-    for (const outcome of outcomes) {
-      // Find sessions related to this goal pattern
-      const sessions = this.findRelatedSessions(pattern);
-      for (const sessionId of sessions.slice(0, 3)) {
-        const toolRuns = this.memoryStore.getRecentToolRuns(sessionId, 10);
-        if (toolRuns.length > 0 && toolRuns.every(t => t.ok)) {
-          toolSequences.push(toolRuns.map(t => t.toolName));
-        }
+
+    // Derive candidate sessions from recent session activity.
+    const sessions = this.findRelatedSessions(pattern);
+    for (const sessionId of sessions.slice(0, 6)) {
+      const toolRuns = this.memoryStore.getRecentToolRuns(sessionId, 12);
+      if (toolRuns.length > 0 && toolRuns.some((t) => t.ok)) {
+        toolSequences.push(toolRuns.filter((t) => t.ok).map((t) => t.toolName));
       }
     }
 
@@ -111,9 +111,20 @@ export class SkillLearner {
    * Find sessions related to a goal pattern
    */
   findRelatedSessions(pattern) {
-    // This would ideally query the database for related sessions
-    // For now, return empty - can be enhanced with proper session tracking
-    return [];
+    const all = this.memoryStore.listSessions?.(40) || [];
+    const tokens = new Set(String(pattern || '').toLowerCase().split(/\s+/).filter((w) => w.length > 3));
+    if (!tokens.size) {
+      return all.map((s) => s.sessionId).filter(Boolean);
+    }
+    return all
+      .filter((session) => {
+        const corpus = `${session.title || ''} ${session.preview || ''}`.toLowerCase();
+        let hits = 0;
+        for (const token of tokens) if (corpus.includes(token)) hits += 1;
+        return hits > 0;
+      })
+      .map((s) => s.sessionId)
+      .filter(Boolean);
   }
 
   /**
@@ -178,8 +189,43 @@ ${new Date().toISOString()}
    * Save a skill to disk
    */
   saveSkill(skill) {
-    const skillPath = path.join(this.skillsDir, `${skill.name}.md`);
-    fs.writeFileSync(skillPath, skill.content, 'utf8');
+    const moduleSource = [
+      '// Auto-learned executable skill module.',
+      `export const metadata = ${JSON.stringify({
+        name: skill.name,
+        description: skill.description,
+        pattern: skill.pattern,
+        toolSequence: skill.toolSequence,
+        successCount: skill.successCount,
+        createdAt: skill.createdAt
+      }, null, 2)};`,
+      '',
+      'export async function execute(args = {}) {',
+      '  const steps = Array.isArray(args?.steps) && args.steps.length ? args.steps : metadata.toolSequence;',
+      '  return {',
+      '    ok: true,',
+      '    learned: true,',
+      '    skill: metadata.name,',
+      '    pattern: metadata.pattern,',
+      '    successCount: metadata.successCount,',
+      '    suggestedSteps: steps,',
+      '    args',
+      '  };',
+      '}',
+      '',
+      'export default execute;',
+      ''
+    ].join('\n');
+    const out = this.skillManager.upsertGeneratedSkill({
+      name: skill.name,
+      description: skill.description,
+      pattern: skill.pattern,
+      toolSequence: skill.toolSequence,
+      evidence: `learned_success_count=${skill.successCount}`,
+      content: moduleSource,
+      source: 'auto-learned'
+    });
+    return out;
   }
 
   /**

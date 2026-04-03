@@ -1,3 +1,44 @@
+import { getTaskOrchestrator } from '../../core/autonomy-registry.mjs';
+
+function summarizeTaskReply(task) {
+  const lines = [
+    `Autonomous task ${task.id} ${task.status}.`,
+    `Goal: ${task.goal}`
+  ];
+  const plan = Array.isArray(task.plan) ? task.plan : [];
+  if (plan.length) {
+    lines.push('Plan:');
+    for (const item of plan) {
+      lines.push(`- [${item.status}] ${item.text}`);
+    }
+  }
+  const steps = Array.isArray(task.stepResults) ? task.stepResults : [];
+  if (steps.length) {
+    lines.push('Step results:');
+    for (const step of steps) {
+      lines.push(`- step ${step.index + 1} ${step.kind}${step.tool ? `:${step.tool}` : ''} => ${step.result.ok ? 'ok' : `failed (${step.result.error || 'unknown'})`}`);
+    }
+  }
+  const verification = Array.isArray(task.verification) ? task.verification : [];
+  if (verification.length) {
+    lines.push('Verification:');
+    for (const item of verification) {
+      lines.push(`- ${item.label || item.kind}: ${item.ok ? 'ok' : `failed (${item.error || 'unknown'})`}`);
+    }
+  }
+  const monitoring = Array.isArray(task.monitoring) ? task.monitoring : [];
+  if (monitoring.length) {
+    lines.push('Monitoring:');
+    for (const item of monitoring) {
+      lines.push(`- ${item.label || item.kind}: ${item.ok ? 'ok' : `warning (${item.error || 'unknown'})`}`);
+    }
+  }
+  if (Array.isArray(task.errors) && task.errors.length) {
+    lines.push(`Errors: ${task.errors.join('; ')}`);
+  }
+  return lines.join('\n');
+}
+
 export async function handleChatToolsRoute({ req, res, url, ctx }) {
   if (req.method === 'POST' && url.pathname === '/api/chat') {
     const body = await ctx.parseBody(req);
@@ -22,6 +63,66 @@ export async function handleChatToolsRoute({ req, res, url, ctx }) {
         note: 'chat_already_running_for_session'
       });
       return true;
+    }
+
+    if (/^\/auto\b/i.test(message)) {
+      const goal = message.replace(/^\/auto\b/i, '').trim();
+      if (!goal) {
+        ctx.sendJson(res, 400, { error: 'auto_goal_required' });
+        return true;
+      }
+      const baseUrl = `http://${req.headers.host || '127.0.0.1:18880'}`;
+      ctx.agent.memoryStore?.addMessage(sessionId, 'user', message);
+      const existingAuto = ctx.pendingChats.get(sessionId);
+      if (existingAuto) {
+        ctx.sendJson(res, 202, {
+          ok: true,
+          pending: true,
+          sessionId,
+          startedAt: existingAuto.startedAt,
+          note: 'chat_already_running_for_session'
+        });
+        return true;
+      }
+      const startedAt = new Date().toISOString();
+      const orchestrator = getTaskOrchestrator(ctx);
+      const promise = orchestrator.runTask({
+        goal,
+        sessionId: `auto-task:${sessionId}:${Date.now()}`,
+        baseUrl,
+        runtime: ctx.config?.runtime
+      })
+        .then((out) => {
+          const reply = summarizeTaskReply(out.task);
+          ctx.agent.memoryStore?.addMessage(sessionId, 'assistant', reply);
+          return {
+            sessionId,
+            reply,
+            task: out.task,
+            model: ctx.agent.getCurrentModel()
+          };
+        })
+        .finally(() => {
+          ctx.pendingChats.delete(sessionId);
+        });
+      ctx.pendingChats.set(sessionId, { sessionId, message, startedAt, promise });
+      try {
+        const out = await ctx.withTimeout(promise, 20 * 1000, 'chat_timeout');
+        ctx.sendJson(res, 200, { ...out, replyHtml: ctx.renderReplyHtml(out.reply) });
+        return true;
+      } catch (error) {
+        if (String(error.message || error) === 'chat_timeout') {
+          ctx.sendJson(res, 202, {
+            ok: true,
+            pending: true,
+            sessionId,
+            startedAt,
+            note: 'chat_still_running'
+          });
+          return true;
+        }
+        throw error;
+      }
     }
 
     const entry = ctx.getOrStartChat(sessionId, message);
@@ -66,7 +167,8 @@ export async function handleChatToolsRoute({ req, res, url, ctx }) {
 
   if (req.method === 'POST' && url.pathname === '/api/tool/run') {
     const body = await ctx.parseBody(req);
-    const out = await ctx.agent.runTool(body.name, body.args || {});
+    const sessionId = String(body?.sessionId || '').trim() || `tool-run:${Date.now()}`;
+    const out = await ctx.agent.runTool(body.name, body.args || {}, { sessionId });
     ctx.sendJson(res, 200, { ok: true, result: out });
     return true;
   }
@@ -106,4 +208,3 @@ export async function handleChatToolsRoute({ req, res, url, ctx }) {
 
   return false;
 }
-

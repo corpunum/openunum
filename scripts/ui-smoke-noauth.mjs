@@ -51,6 +51,7 @@ async function main() {
     '/api/model/current',
     '/api/model-catalog',
     '/api/runtime/overview',
+    '/api/runtime/inventory',
     '/api/auth/catalog',
     '/api/config',
     '/api/providers/config',
@@ -108,4 +109,3 @@ main().catch((error) => {
   console.error('FAIL:', error?.message || error);
   process.exit(1);
 });
-

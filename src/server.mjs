@@ -699,6 +699,53 @@ async function buildRuntimeOverview() {
   };
 }
 
+function buildRuntimeInventory(limit = 300) {
+  const facts = memory.listFacts ? memory.listFacts({ limit }) : [];
+  const latest = new Map();
+  for (const row of facts) {
+    const key = String(row?.key || '').trim();
+    if (!key || latest.has(key)) continue;
+    latest.set(key, {
+      value: String(row?.value || ''),
+      createdAt: row?.createdAt || null
+    });
+  }
+  const sections = {
+    owner: {},
+    runtime: {},
+    system: {},
+    hardware: {},
+    models: {},
+    repo: {},
+    workspace: {},
+    browser: {},
+    http: {}
+  };
+  for (const [key, row] of latest.entries()) {
+    const [prefix, ...rest] = key.split('.');
+    const section = sections[prefix];
+    if (!section || rest.length === 0) continue;
+    section[rest.join('.')] = {
+      value: row.value,
+      createdAt: row.createdAt
+    };
+  }
+  return {
+    factsCount: facts.length,
+    updatedAt: new Date().toISOString(),
+    owner: sections.owner,
+    runtime: sections.runtime,
+    system: sections.system,
+    hardware: sections.hardware,
+    models: sections.models,
+    repo: sections.repo,
+    workspace: sections.workspace,
+    browser: sections.browser,
+    http: sections.http,
+    latestFacts: Object.fromEntries(latest.entries())
+  };
+}
+
 function buildAutonomyInsights({ sessionId = '', goal = '' } = {}) {
   const sid = String(sessionId || '').trim();
   const query = String(goal || '').trim();
@@ -742,6 +789,29 @@ function buildMissionTimeline(mission) {
 
 function applyAutonomyMode(mode) {
   const m = String(mode || 'autonomy-first').toLowerCase();
+  if (m === 'compact-local') {
+    config.runtime.autonomyMode = 'compact-local';
+    config.runtime.shellEnabled = true;
+    config.runtime.maxToolIterations = 4;
+    config.runtime.executorRetryAttempts = 2;
+    config.runtime.executorRetryBackoffMs = 500;
+    config.runtime.missionDefaultContinueUntilDone = true;
+    config.runtime.missionDefaultHardStepCap = 48;
+    config.runtime.missionDefaultMaxRetries = 2;
+    config.runtime.missionDefaultIntervalMs = 600;
+    config.runtime.contextProtectRecentTurns = Math.min(Number(config.runtime.contextProtectRecentTurns || 8), 4);
+    config.runtime.autonomyPolicy = {
+      ...(config.runtime.autonomyPolicy || {}),
+      enabled: true,
+      mode: 'execute',
+      enforceSelfProtection: true
+    };
+    config.model.routing.forcePrimaryProvider = true;
+    config.model.routing.fallbackEnabled = false;
+    config.model.routing.fallbackProviders = [config.model.provider];
+    autonomyMaster.stop();
+    return 'compact-local';
+  }
   if (m === 'relentless') {
     config.runtime.autonomyMode = 'relentless';
     config.runtime.shellEnabled = true;
@@ -944,6 +1014,11 @@ const server = http.createServer(async (req, res) => {
       return sendJson(res, 200, await buildRuntimeOverview());
     }
 
+    if (req.method === 'GET' && url.pathname === '/api/runtime/inventory') {
+      const limit = Number(url.searchParams.get('limit') || 300);
+      return sendJson(res, 200, buildRuntimeInventory(limit));
+    }
+
     if (req.method === 'GET' && url.pathname === '/api/autonomy/insights') {
       const sessionId = String(url.searchParams.get('sessionId') || '').trim();
       const goal = String(url.searchParams.get('goal') || '').trim();
@@ -1099,6 +1174,8 @@ const server = http.createServer(async (req, res) => {
       ctx: {
         config,
         agent,
+        memory,
+        missions,
         parseBody,
         sendJson,
         saveConfig,
@@ -1112,7 +1189,10 @@ const server = http.createServer(async (req, res) => {
       res,
       url,
       ctx: {
+        config,
         agent,
+        memory,
+        missions,
         parseBody,
         sendJson,
         pendingChats,

@@ -18,6 +18,7 @@ export function buildControllerSystemMessage({
 }) {
   const runtimeLabel = `${String(provider || '').toLowerCase()}/${String(model || '').trim()}`;
   const ownerMode = String(config?.runtime?.ownerControlMode || 'safe');
+  const compactController = Boolean(executionEnvelope?.verySmallModel);
   const routeHints = routedTools.length
     ? `Heuristic tool routing hints: ${routedTools.map((item) => `${item.tool}(score=${item.score})`).join(', ')}.`
     : 'Heuristic tool routing hints: none.';
@@ -54,6 +55,9 @@ export function buildControllerSystemMessage({
     'If user asks which model/provider you are using, answer with current runtime values only.',
     'Never claim an action completed unless tool evidence in this turn confirms it.',
     `Owner control mode: ${ownerMode}.`,
+    compactController
+      ? 'Compact local controller mode is active. Keep reasoning short, use at most one or two tool steps, and prefer read/verify before broad edits.'
+      : '',
     routeHints,
     behaviorBlock,
     executionEnvelope
@@ -62,11 +66,11 @@ export function buildControllerSystemMessage({
     linesFromList(`Execution profile: ${executionProfile.name} guidance`, executionProfile.guidance || []),
     linesFromList('Execution guardrails', executionProfile.guardrails || []),
     linesFromList('Execution verification', executionProfile.verificationHints || []),
-    openunumOverview,
-    repoOverview,
+    compactController ? '' : openunumOverview,
+    compactController ? '' : repoOverview,
     facts ? `Relevant memory:\n${facts}` : '',
-    knowledgeHits ? `Smart memory recall:\n${knowledgeHits}` : '',
+    compactController ? '' : (knowledgeHits ? `Smart memory recall:\n${knowledgeHits}` : ''),
     strategyPrompt ? `Previous strategy outcomes:\n${strategyPrompt}` : '',
-    skillPrompt ? `Loaded skills:\n${skillPrompt}` : ''
+    compactController ? '' : (skillPrompt ? `Loaded skills:\n${skillPrompt}` : '')
   ].filter(Boolean).join('\n');
 }

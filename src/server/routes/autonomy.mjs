@@ -1,3 +1,11 @@
+import {
+  getWorkerOrchestrator,
+  getSelfEditPipeline,
+  getModelScoutWorkflow,
+  getTaskOrchestrator,
+  getGoalTaskPlanner
+} from '../../core/autonomy-registry.mjs';
+
 export async function handleAutonomyRoute({ req, res, url, ctx }) {
   if (req.method === 'GET' && url.pathname === '/api/autonomy/mode') {
     ctx.sendJson(res, 200, {
@@ -63,6 +71,137 @@ export async function handleAutonomyRoute({ req, res, url, ctx }) {
     return true;
   }
 
+  if (req.method === 'GET' && url.pathname === '/api/autonomy/workers') {
+    const orchestrator = getWorkerOrchestrator(ctx);
+    const limit = Number(url.searchParams.get('limit') || 80);
+    ctx.sendJson(res, 200, orchestrator.listWorkers(limit));
+    return true;
+  }
+
+  if (req.method === 'GET' && url.pathname === '/api/autonomy/workers/status') {
+    const orchestrator = getWorkerOrchestrator(ctx);
+    const id = String(url.searchParams.get('id') || '').trim();
+    if (!id) {
+      ctx.sendJson(res, 400, { ok: false, error: 'id is required' });
+      return true;
+    }
+    const out = orchestrator.getWorker(id);
+    ctx.sendJson(res, out.ok ? 200 : 404, out);
+    return true;
+  }
+
+  if (req.method === 'POST' && url.pathname === '/api/autonomy/workers/start') {
+    const orchestrator = getWorkerOrchestrator(ctx);
+    const body = await ctx.parseBody(req);
+    const out = orchestrator.startWorker(body || {});
+    ctx.sendJson(res, out.ok ? 200 : 400, out);
+    return true;
+  }
+
+  if (req.method === 'POST' && url.pathname === '/api/autonomy/workers/stop') {
+    const orchestrator = getWorkerOrchestrator(ctx);
+    const body = await ctx.parseBody(req);
+    const out = orchestrator.stopWorker(body?.id);
+    ctx.sendJson(res, out.ok ? 200 : 404, out);
+    return true;
+  }
+
+  if (req.method === 'POST' && url.pathname === '/api/autonomy/workers/tick') {
+    const orchestrator = getWorkerOrchestrator(ctx);
+    const body = await ctx.parseBody(req);
+    const out = await orchestrator.tickWorker(body?.id);
+    ctx.sendJson(res, out.ok ? 200 : 404, out);
+    return true;
+  }
+
+  if (req.method === 'GET' && url.pathname === '/api/autonomy/self-edit') {
+    const pipeline = getSelfEditPipeline(ctx);
+    const limit = Number(url.searchParams.get('limit') || 40);
+    ctx.sendJson(res, 200, pipeline.listRuns(limit));
+    return true;
+  }
+
+  if (req.method === 'GET' && url.pathname === '/api/autonomy/self-edit/status') {
+    const pipeline = getSelfEditPipeline(ctx);
+    const id = String(url.searchParams.get('id') || '').trim();
+    if (!id) {
+      ctx.sendJson(res, 400, { ok: false, error: 'id is required' });
+      return true;
+    }
+    const out = pipeline.getRun(id);
+    ctx.sendJson(res, out.ok ? 200 : 404, out);
+    return true;
+  }
+
+  if (req.method === 'POST' && url.pathname === '/api/autonomy/self-edit/run') {
+    const pipeline = getSelfEditPipeline(ctx);
+    const body = await ctx.parseBody(req);
+    const out = await pipeline.run(body || {});
+    ctx.sendJson(res, out.ok ? 200 : 400, out);
+    return true;
+  }
+
+  if (req.method === 'GET' && url.pathname === '/api/autonomy/model-scout') {
+    const workflow = getModelScoutWorkflow(ctx);
+    const limit = Number(url.searchParams.get('limit') || 20);
+    ctx.sendJson(res, 200, workflow.listRuns(limit));
+    return true;
+  }
+
+  if (req.method === 'GET' && url.pathname === '/api/autonomy/model-scout/status') {
+    const workflow = getModelScoutWorkflow(ctx);
+    const id = String(url.searchParams.get('id') || '').trim();
+    if (!id) {
+      ctx.sendJson(res, 400, { ok: false, error: 'id is required' });
+      return true;
+    }
+    const out = workflow.getRun(id);
+    ctx.sendJson(res, out.ok ? 200 : 404, out);
+    return true;
+  }
+
+  if (req.method === 'POST' && url.pathname === '/api/autonomy/model-scout/run') {
+    const workflow = getModelScoutWorkflow(ctx);
+    const body = await ctx.parseBody(req);
+    const out = await workflow.run(body || {});
+    ctx.sendJson(res, out.ok ? 200 : 400, out);
+    return true;
+  }
+
+  if (req.method === 'GET' && url.pathname === '/api/autonomy/tasks') {
+    const orchestrator = getTaskOrchestrator(ctx);
+    const limit = Number(url.searchParams.get('limit') || 20);
+    ctx.sendJson(res, 200, orchestrator.listTasks(limit));
+    return true;
+  }
+
+  if (req.method === 'GET' && url.pathname === '/api/autonomy/tasks/status') {
+    const orchestrator = getTaskOrchestrator(ctx);
+    const id = String(url.searchParams.get('id') || '').trim();
+    if (!id) {
+      ctx.sendJson(res, 400, { ok: false, error: 'id is required' });
+      return true;
+    }
+    const out = orchestrator.getTask(id);
+    ctx.sendJson(res, out.ok ? 200 : 404, out);
+    return true;
+  }
+
+  if (req.method === 'POST' && url.pathname === '/api/autonomy/tasks/plan') {
+    const planner = getGoalTaskPlanner(ctx);
+    const body = await ctx.parseBody(req);
+    const out = planner.plan(body || {});
+    ctx.sendJson(res, out.ok ? 200 : 400, out);
+    return true;
+  }
+
+  if (req.method === 'POST' && url.pathname === '/api/autonomy/tasks/run') {
+    const orchestrator = getTaskOrchestrator(ctx);
+    const body = await ctx.parseBody(req);
+    const out = await orchestrator.runTask(body || {});
+    ctx.sendJson(res, out.ok ? 200 : 400, out);
+    return true;
+  }
+
   return false;
 }
-

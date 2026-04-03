@@ -46,7 +46,7 @@ User-defined free text remains for:
 - pending-run polling: UI continues waiting and resolves from saved session messages
 - pending state is tracked per session id, not globally
 - session switch is allowed while another session has a pending run
-- `/auto <goal>` command in chat: starts a mission loop and auto-polls until completion
+- `/auto <goal>` command in chat: starts a planner-backed generic task and auto-polls until completion
 - default auto-escalation toggle (`Auto: On/Off`) in chat header:
   when enabled, planning-style replies are automatically escalated into mission continuation
 - live activity toggle (`Live: On/Off`) in chat header:
@@ -66,6 +66,23 @@ Trace panel includes:
 - start/stop/refresh controls
 - status line with step progression
 - active mission id persisted in localStorage
+
+## 4A. Generic Task UI
+
+- `/auto` no longer posts a fixed one-step mission payload
+- chat now sends just the goal plus runtime/base-url hints to `/api/autonomy/tasks/run`
+- backend planner decides whether to preflight with:
+  - `http_request`
+  - `browser_search`
+  - `shell_run`
+  - optional `model_scout`
+  before the mission step
+- chat polls `/api/autonomy/tasks/status?id=...` and renders:
+  - plan completion state
+  - step results
+  - verification results
+  - monitoring results
+- final `/auto` result is written back into the originating chat session as an assistant summary
 
 ## 5. State Handling
 

@@ -4,21 +4,45 @@ function inferParamsB(modelId) {
   return match ? Number(match[1]) : null;
 }
 
+function hasSizedToken(modelId, sizeToken) {
+  const text = String(modelId || '').toLowerCase();
+  return new RegExp(`(^|[^0-9])${String(sizeToken)}b($|[^0-9])`).test(text);
+}
+
 function inferTier(provider, modelId) {
   const providerId = String(provider || '').toLowerCase();
   const id = String(modelId || '').toLowerCase();
   const paramsB = inferParamsB(id);
 
-  if (/nano|mini|8b|7b|9b|11b|14b|small/.test(id)) return 'compact';
+  if (/gpt-5|405b|397b|480b|sonnet|opus|pro|large/.test(id)) return 'full';
+  if (
+    /nano|mini|small/.test(id) ||
+    hasSizedToken(id, 7) ||
+    hasSizedToken(id, 8) ||
+    hasSizedToken(id, 9) ||
+    hasSizedToken(id, 11) ||
+    hasSizedToken(id, 14)
+  ) return 'compact';
   if (Number.isFinite(paramsB) && paramsB <= 14) return 'compact';
   if (Number.isFinite(paramsB) && paramsB <= 80) return 'balanced';
-  if (/gpt-5|405b|397b|480b|sonnet|opus|pro|large/.test(id)) return 'full';
   if (providerId === 'ollama' && /cloud|kimi|minimax|glm/.test(id)) return 'full';
   if (providerId === 'openai') return 'full';
   return 'balanced';
 }
 
 const REQUIRED_KERNEL_TOOLS = ['session_list', 'session_delete', 'session_clear', 'file_write', 'file_patch'];
+const VERY_SMALL_MODEL_TOOLS = [
+  'file_read',
+  'file_write',
+  'file_patch',
+  'file_restore_last',
+  'session_list',
+  'shell_run',
+  'http_request',
+  'browser_status',
+  'browser_extract',
+  'browser_snapshot'
+];
 
 function normalizeProfileMap(runtime = {}) {
   const defaults = {
@@ -77,18 +101,31 @@ export function resolveExecutionEnvelope({ provider, model, runtime = {} }) {
   const tier = inferTier(provider, model);
   const profiles = normalizeProfileMap(runtime);
   const profile = profiles[tier] || profiles.balanced;
+  const inferredParams = inferParamsB(model);
+  const verySmallModel = Number.isFinite(inferredParams) && inferredParams <= 8;
+  const constrainedProfile = verySmallModel
+    ? {
+      ...profile,
+      maxHistoryMessages: Math.min(Number(profile.maxHistoryMessages || 220), 140),
+      maxToolIterations: Math.min(Number(profile.maxToolIterations || 3), 2),
+      allowedTools: Array.isArray(profile.allowedTools) && profile.allowedTools.length
+        ? profile.allowedTools.filter((tool) => VERY_SMALL_MODEL_TOOLS.includes(tool))
+        : VERY_SMALL_MODEL_TOOLS
+    }
+    : profile;
   const enforceRestrictions = runtime?.enforceModelExecutionProfiles !== false;
-  const toolAllowlist = enforceRestrictions && Array.isArray(profile.allowedTools) && profile.allowedTools.length
-    ? [...new Set(profile.allowedTools)]
+  const toolAllowlist = enforceRestrictions && Array.isArray(constrainedProfile.allowedTools) && constrainedProfile.allowedTools.length
+    ? [...new Set(constrainedProfile.allowedTools)]
     : null;
 
   return {
     tier,
-    profile,
+    profile: constrainedProfile,
     enforceRestrictions,
     toolAllowlist,
-    maxHistoryMessages: profile.maxHistoryMessages,
-    maxToolIterations: profile.maxToolIterations,
-    inferredParamsB: inferParamsB(model)
+    maxHistoryMessages: constrainedProfile.maxHistoryMessages,
+    maxToolIterations: constrainedProfile.maxToolIterations,
+    inferredParamsB: inferredParams,
+    verySmallModel
   };
 }

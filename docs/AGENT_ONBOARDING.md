@@ -9,6 +9,8 @@ OpenUnum is a local-first autonomous coding runtime with:
 - provider routing and fallback control (`ollama`, `nvidia`, `openrouter`, `openai`)
 - browser/CDP automation
 - mission loop with proof-aware completion (`src/core/missions.mjs`)
+- generic task planning/execution with restart-safe persistence (`src/core/goal-task-planner.mjs`, `src/core/task-orchestrator.mjs`)
+- bounded workers + self-edit promotion pipeline + model scout workflows (`src/core/worker-orchestrator.mjs`, `src/core/self-edit-pipeline.mjs`, `src/core/model-scout-workflow.mjs`)
 - persistent memory/telemetry in SQLite (`src/memory/store.mjs`)
 - operator trace/timeline visibility in WebUI (`src/ui/index.html`)
 
@@ -43,6 +45,13 @@ pnpm -s phase14:e2e
 ```bash
 pnpm -s smoke:ui:noauth
 ```
+7. Confirm planner-backed autonomy surfaces:
+```bash
+curl -sS -X POST http://127.0.0.1:18880/api/autonomy/tasks/plan \
+  -H 'Content-Type: application/json' \
+  -d '{"goal":"inspect runtime state and report proof"}' | jq .
+curl -sS http://127.0.0.1:18880/api/runtime/inventory | jq .
+```
 
 ## 3. Runtime Invariants
 
@@ -51,11 +60,19 @@ pnpm -s smoke:ui:noauth
 - Secret store: `~/.openunum/secrets.json` (real provider keys/tokens, mode `0600`).
 - DB: `~/.openunum/openunum.db`.
 - Logs: `~/.openunum/logs/*`.
+- Hook scripts: `~/.openunum/hooks/*.mjs`.
 
 ### House Map (What/Where To Edit)
 
 - UI house: `src/ui/index.html` (primary UI structure + inlined CSS/JS).
 - Agent/controller house: `src/core/agent.mjs`.
+- Goal compiler house: `src/core/goal-task-planner.mjs`.
+- Generic autonomy runtime house: `src/core/task-orchestrator.mjs`.
+- Worker/self-edit/model-scout houses:
+  - `src/core/worker-orchestrator.mjs`
+  - `src/core/self-edit-pipeline.mjs`
+  - `src/core/model-scout-workflow.mjs`
+- Shared autonomy wiring house: `src/core/autonomy-registry.mjs`.
 - Tool capability house: `src/tools/runtime.mjs`.
 - API composition house: `src/server.mjs`.
 - API route house: `src/server/routes/*.mjs`.
@@ -104,11 +121,34 @@ Before broad filesystem discovery, read `GET /api/tools/catalog` and target thes
   - repeated failing routes are deprioritized
   - historically successful routes are hinted early in runtime guidance
 
-## 6. Common Failure Patterns + First Checks
+## 6. Generic Task Framework Rules
+
+- `POST /api/autonomy/tasks/plan` compiles a plain-language goal into a bounded task graph.
+- `POST /api/autonomy/tasks/run` accepts either:
+  - explicit `steps`
+  - or just a `goal`, in which case the planner synthesizes the task graph
+- Planner-backed tasks can preflight with:
+  - `browser_search`
+  - `http_request`
+  - `shell_run`
+  - optional `model_scout`
+  before handing off to a mission step.
+- Generic task runs are persisted:
+  - `task_records`
+  - `task_step_results`
+  - `task_check_results`
+- `/auto <goal>` in chat now uses this generic task framework, not a hardcoded one-step mission payload.
+- Mission steps can share the same task session id, so preflight evidence and autonomous execution land in one memory/thread.
+
+## 7. Common Failure Patterns + First Checks
 
 - Mission appears stuck:
   - check `/api/missions/status?id=...` and `/api/missions/timeline?id=...`
   - confirm `finishedAt`, `error`, and `recoveryHint` progression
+- Task appears stuck or disappears after restart:
+  - check `/api/autonomy/tasks?limit=20`
+  - inspect `/api/autonomy/tasks/status?id=...`
+  - persisted tasks should survive restart as `completed`, `failed`, or `interrupted`
 - Provider seems unavailable:
   - verify `/api/providers/config` and `/api/auth/catalog`
   - confirm current runtime model via `/api/model/current`
@@ -124,8 +164,12 @@ Before broad filesystem discovery, read `GET /api/tools/catalog` and target thes
 - Assistant returns raw tool-call XML/markup instead of a real final answer:
   - controller now normalizes non-native tool-call markup (for example `<minimax:tool_call>`) as non-final content
   - when UI no-scrollbar intent is detected and no concrete patch is produced, deterministic recovery edits `src/ui/index.html`
+- Assistant says `Tool actions executed (...) but model returned no final message`:
+  - inspect the latest executed actions in the fallback response and the execution trace
+  - this indicates tool execution succeeded but the model failed to emit a usable final answer
+  - common causes are restricted tool profiles on small models or a provider/model that stops after tool use without a final natural-language turn
 
-## 7. Operational Modes
+## 8. Operational Modes
 
 - `standard`: balanced.
 - `relentless`: higher persistence, stronger mission defaults.
@@ -137,7 +181,7 @@ curl -sS -X POST http://127.0.0.1:18880/api/autonomy/mode \
   -d '{"mode":"relentless"}'
 ```
 
-## 8. Read Next (Required Order)
+## 9. Read Next (Required Order)
 
 1. [CODEBASE_MAP.md](/home/corp-unum/openunum/docs/CODEBASE_MAP.md)
 2. [API_REFERENCE.md](/home/corp-unum/openunum/docs/API_REFERENCE.md)
@@ -148,10 +192,12 @@ curl -sS -X POST http://127.0.0.1:18880/api/autonomy/mode \
 7. [COMPETITIVE_ANALYSIS_GEMINI_CLI.md](/home/corp-unum/openunum/docs/COMPETITIVE_ANALYSIS_GEMINI_CLI.md)
 8. [OPENUNUM_MULTI_MODEL_CONTROLLER_ACTION_PLAN.md](/home/corp-unum/openunum/docs/OPENUNUM_MULTI_MODEL_CONTROLLER_ACTION_PLAN.md)
 
-## 9. Misdiagnosis to Avoid
+## 10. Misdiagnosis to Avoid
 
 - "The model said done, so the task is done."
   - Validate tool outputs and mission proof markers.
+- "`/auto` is just a mission shortcut."
+  - Not anymore. It is planner-backed generic task execution.
 - "No keys in /api/config means no credentials."
   - Wrong surface; check provider/auth endpoints above.
 - "Fallback happened unexpectedly."

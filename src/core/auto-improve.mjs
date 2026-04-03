@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { getHomeDir } from '../config.mjs';
 import { logInfo, logWarn, logError } from '../logger.mjs';
+import { SkillManager } from '../skills/manager.mjs';
 
 /**
  * AutoImprovementEngine - Learns from successful operations and enhances OpenUnum
@@ -21,6 +22,7 @@ export class AutoImprovementEngine {
     this.homeDir = getHomeDir();
     this.improvementLogPath = path.join(this.homeDir, 'improvements.json');
     this.metricsPath = path.join(this.homeDir, 'metrics.json');
+    this.skillManager = new SkillManager();
     this.loadMetrics();
     this.loadImprovementLog();
   }
@@ -180,8 +182,7 @@ export class AutoImprovementEngine {
    */
   async generateSkillsFromSuccess() {
     const improvements = [];
-    const skillsDir = path.join(this.homeDir, 'skills');
-    
+
     // Get successful strategy outcomes
     const successfulStrategies = this.memory.retrieveStrategyHints('', 20)
       .filter(s => s.success && s.evidence?.includes('completed'));
@@ -192,32 +193,26 @@ export class AutoImprovementEngine {
         .replace(/[^a-z0-9]+/g, '-')
         .substring(0, 30);
       
-      const skillPath = path.join(skillsDir, `${skillName}.md`);
-      
-      if (!fs.existsSync(skillPath)) {
-        const skillContent = `# Skill: ${strategy.strategy}
-
-## Pattern
-${strategy.evidence}
-
-## Success Indicators
-- Task completed with tool proof
-- No errors in execution chain
-
-## Application
-Use this strategy when similar goals are encountered.
-
-## Generated
-${new Date().toISOString()}
-`;
-        fs.writeFileSync(skillPath, skillContent);
-        improvements.push({
-          type: 'skill_created',
+      try {
+        const install = this.skillManager.upsertGeneratedSkill({
           name: skillName,
-          path: skillPath,
+          description: `Auto-generated strategy skill from successful outcomes: ${strategy.strategy}`,
+          pattern: strategy.strategy,
+          evidence: strategy.evidence || ''
+        });
+        improvements.push({
+          type: 'skill_upserted',
+          name: install.name,
+          path: install.filePath,
+          verdict: install.verdict,
           basedOn: strategy.strategy.substring(0, 100)
         });
-        this.metrics.learnedSkills.push(skillName);
+        this.metrics.learnedSkills.push(install.name);
+      } catch (error) {
+        logWarn('auto_improve_skill_upsert_failed', {
+          skillName,
+          error: String(error.message || error)
+        });
       }
     }
 

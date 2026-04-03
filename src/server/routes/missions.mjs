@@ -46,6 +46,55 @@ export async function handleMissionsRoute({ req, res, url, ctx }) {
     return true;
   }
 
+  if (req.method === 'GET' && url.pathname === '/api/missions/schedules') {
+    const limit = Number(url.searchParams.get('limit') || 120);
+    ctx.sendJson(res, 200, {
+      schedules: ctx.missions.listSchedules(limit)
+    });
+    return true;
+  }
+
+  if (req.method === 'POST' && url.pathname === '/api/missions/schedule') {
+    const body = await ctx.parseBody(req);
+    const out = ctx.missions.startSchedule({
+      goal: body.goal,
+      runAt: body.runAt,
+      delayMs: body.delayMs,
+      intervalMs: body.intervalMs,
+      enabled: body.enabled,
+      options: {
+        maxSteps: body.maxSteps,
+        maxRetries: body.maxRetries,
+        continueUntilDone: body.continueUntilDone,
+        hardStepCap: body.hardStepCap,
+        intervalMs: body.missionIntervalMs
+      }
+    });
+    ctx.sendJson(res, 200, out);
+    return true;
+  }
+
+  if (req.method === 'POST' && url.pathname === '/api/missions/schedule/update') {
+    const body = await ctx.parseBody(req);
+    const id = String(body?.id || '').trim();
+    if (!id) {
+      ctx.sendJson(res, 400, { error: 'schedule_id_required' });
+      return true;
+    }
+    const updated = ctx.missions.updateSchedule(id, {
+      enabled: typeof body.enabled === 'boolean' ? body.enabled : undefined,
+      status: body.status ? String(body.status) : undefined,
+      runAt: body.runAt ? String(body.runAt) : undefined,
+      nextRunAt: body.nextRunAt ? String(body.nextRunAt) : undefined,
+      intervalMs: Number.isFinite(body.intervalMs) ? Number(body.intervalMs) : undefined
+    });
+    if (!updated) {
+      ctx.sendJson(res, 404, { error: 'schedule_not_found' });
+      return true;
+    }
+    ctx.sendJson(res, 200, { ok: true, schedule: updated });
+    return true;
+  }
+
   return false;
 }
-

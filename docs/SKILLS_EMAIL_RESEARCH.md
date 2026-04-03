@@ -17,6 +17,13 @@ Manifest:
 - `~/.openunum/skills/manifest.json`
 - tracks verdict, findings, approvals, and usage metrics.
 
+Auto-generated and auto-learned skills now use the same managed runtime path:
+
+- generated modules are written as executable `.mjs` files in `~/.openunum/skills/custom`
+- metadata and approval/verdict state are stored in `~/.openunum/skills/manifest.json`
+- `loadSkills()` consumes managed manifest entries for agent context prompts
+- legacy markdown-only skill folders remain readable for backward compatibility
+
 Security notes:
 
 - Static checks include `eval`, `Function`, `child_process`, file write patterns, and network access signals.
