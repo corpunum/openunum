@@ -1,3 +1,5 @@
+import { getDatasetKnowledge, scoreDatasetWithKnowledgeBoost } from './dataset-knowledge.mjs';
+
 function clipText(text, maxChars = 1200) {
   const clean = String(text || '').trim();
   if (clean.length <= maxChars) return clean;
@@ -171,7 +173,9 @@ function datasetScore(item, requirements) {
   if (/browser/.test(text)) score += 12;
   if (/synthetic/.test(text)) score += 8;
   if (/sft|instruction/.test(text)) score += 8;
-  return { ...item, score };
+  const knowledgeBoost = scoreDatasetWithKnowledgeBoost(item);
+  score += knowledgeBoost.totalBoost;
+  return { ...item, score, knowledgeBoost };
 }
 
 function candidateScore(item, requirements, hardware) {
@@ -246,28 +250,51 @@ function buildDatasetResearchAnswer({ userMessage = '', executedTools = [] }) {
   const ranked = extractDatasetCandidates(executedTools)
     .map((item) => datasetScore(item, requirements))
     .sort((a, b) => b.score - a.score);
-  if (!ranked.length) return '';
+  const knowledge = getDatasetKnowledge();
+  if (!ranked.length && !knowledge.hasKnowledge) return '';
+
+  const merged = [...ranked];
+  const seen = new Set(merged.map((item) => String(item.id || '').toLowerCase()));
+  if (knowledge.hasKnowledge) {
+    for (const seed of knowledge.top.slice(0, 10)) {
+      const id = String(seed?.id || '').trim();
+      if (!id || seen.has(id.toLowerCase())) continue;
+      merged.push(datasetScore({
+        id,
+        downloads: Number(seed?.downloads || 0),
+        likes: Number(seed?.likes || 0),
+        tags: Array.isArray(seed?.tags) ? seed.tags.map((tag) => String(tag).toLowerCase()) : [],
+        description: String(seed?.description || ''),
+        query: 'openunum-local-knowledge'
+      }, requirements));
+      seen.add(id.toLowerCase());
+      if (merged.length >= 12) break;
+    }
+  }
+  merged.sort((a, b) => b.score - a.score);
+  if (!merged.length) return '';
 
   const lines = ['Usable Hugging Face datasets found for this ask:'];
-  for (const item of ranked.slice(0, 5)) {
+  for (const item of merged.slice(0, 5)) {
     const strengths = [];
     if (item.tags.some((tag) => /tool-calling|function-calling/.test(tag))) strengths.push('tool-calling');
     if (item.tags.some((tag) => /agent|agentic/.test(tag))) strengths.push('agent');
     if (item.tags.some((tag) => /task/.test(tag)) || /multi-step|workflow|task/i.test(item.description)) strengths.push('tasks/workflows');
     if (item.tags.some((tag) => /browser/.test(tag))) strengths.push('browser');
-    lines.push(`- ${item.id} | downloads=${formatCount(item.downloads)} | likes=${formatCount(item.likes)} | focus=${strengths.join(', ') || 'general agent data'}`);
+    const pilotNote = item.knowledgeBoost?.known?.inPilot ? ' | pilot=selected' : '';
+    lines.push(`- ${item.id} | downloads=${formatCount(item.downloads)} | likes=${formatCount(item.likes)} | focus=${strengths.join(', ') || 'general agent data'}${pilotNote}`);
     if (item.description) lines.push(`  ${item.description}`);
   }
 
   if (requirements.asksComparison) {
-    const toolCalling = ranked.filter((item) => /tool-calling|function-calling/.test(`${item.id} ${item.tags.join(' ')} ${item.description}`.toLowerCase())).slice(0, 2);
-    const planning = ranked.filter((item) => /planner|planning|workflow|multi-step|task/.test(`${item.id} ${item.tags.join(' ')} ${item.description}`.toLowerCase())).slice(0, 2);
+    const toolCalling = merged.filter((item) => /tool-calling|function-calling/.test(`${item.id} ${item.tags.join(' ')} ${item.description}`.toLowerCase())).slice(0, 2);
+    const planning = merged.filter((item) => /planner|planning|workflow|multi-step|task/.test(`${item.id} ${item.tags.join(' ')} ${item.description}`.toLowerCase())).slice(0, 2);
     lines.push('Comparison:');
     lines.push(`- best tool-calling fit: ${toolCalling[0]?.id || 'none found'}`);
     lines.push(`- best planner/tasks fit: ${planning[0]?.id || 'none found'}`);
   }
 
-  lines.push('Recommendation: use tool-calling datasets for action formatting/execution traces, and pair them with planner/task workflow datasets when you need multi-step mission evaluation. Current evidence is stronger for tool-calling than for planner-specific Hugging Face datasets.');
+  lines.push('Recommendation: use tool-calling datasets for action formatting/execution traces, pair with planner/task workflow datasets for multi-step mission evaluation, and keep benchmark datasets isolated from training to avoid leakage.');
   return lines.join('\n');
 }
 

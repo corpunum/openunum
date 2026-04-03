@@ -52,6 +52,11 @@ curl -sS -X POST http://127.0.0.1:18880/api/autonomy/tasks/plan \
   -d '{"goal":"inspect runtime state and report proof"}' | jq .
 curl -sS http://127.0.0.1:18880/api/runtime/inventory | jq .
 ```
+8. Refresh dataset intelligence artifacts used by recovery synthesis:
+```bash
+pnpm -s hf:explore
+pnpm -s hf:pilot
+```
 
 ## 3. Runtime Invariants
 

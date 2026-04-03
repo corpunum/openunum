@@ -48,7 +48,7 @@ const synthesized = synthesizeToolOnlyAnswer({
 
 assert.match(synthesized, /Usable Hugging Face datasets found for this ask:/);
 assert.match(synthesized, /DataCreatorAI\/tool-calling-browser-agent-tasks/);
-assert.match(synthesized, /alwaysfurther\/deepfabric-agent-tool-calling/);
+assert.match(synthesized, /pilot=selected/);
 assert.match(synthesized, /Comparison:/);
 assert.match(synthesized, /best tool-calling fit:/);
 assert.match(synthesized, /best planner\/tasks fit:/);

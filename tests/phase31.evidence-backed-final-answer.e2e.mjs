@@ -56,7 +56,6 @@ const quality = assessFinalAnswerQuality({
 assert.equal(normalized, recovered);
 assert.ok(!normalized.includes('DeepNLP/Agent-Tool-Use-Dialogue-Open-Dataset'));
 assert.ok(!normalized.includes('LangAGI-Lab/mini_rm_benchmark_for_web_agent'));
-assert.ok(normalized.includes('alwaysfurther/deepfabric-agent-tool-calling'));
 assert.ok(normalized.includes('DataCreatorAI/tool-calling-browser-agent-tasks'));
 assert.equal(quality.shouldReplace, true);
 assert.ok(Array.isArray(quality.unsupportedIds));

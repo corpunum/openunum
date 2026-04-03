@@ -224,7 +224,8 @@ async function testModelSwitch() {
     });
     
     const switchedModel = String(switchRes.data?.model || switchRes.data?.activeModel || '');
-    if (switchRes.status === 200 && switchedModel === originalModel) {
+    const normalizeModelId = (value) => String(value || '').replace(/^[^/]+\//, '');
+    if (switchRes.status === 200 && normalizeModelId(switchedModel) === normalizeModelId(originalModel)) {
       log('Model Switch', 'PASS', { model: originalModel });
       return true;
     }

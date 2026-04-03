@@ -1,0 +1,94 @@
+{
+  "stats": {
+    "generatedAt": "2026-04-03T13:15:59.278Z",
+    "selectedDatasets": 5,
+    "totalNormalized": 52,
+    "withToolCalls": 28,
+    "withPlan": 24,
+    "withFinal": 0
+  },
+  "pilotDatasets": [
+    {
+      "id": "obaydata/mcp-agent-trajectory-benchmark",
+      "score": 10.458,
+      "license": "apache-2.0",
+      "downloads": 597,
+      "likes": 1
+    },
+    {
+      "id": "DataCreatorAI/tool-calling-browser-agent-tasks",
+      "score": 8.791,
+      "license": "cc-by-4.0",
+      "downloads": 48,
+      "likes": 1
+    },
+    {
+      "id": "agent-eto/eto-sft-trajectory",
+      "score": 6.545,
+      "license": "apache-2.0",
+      "downloads": 203,
+      "likes": 17
+    },
+    {
+      "id": "SultanR/arxiv-to-code-agentic-tool-calling",
+      "score": 6.18,
+      "license": "mit",
+      "downloads": 23,
+      "likes": 0
+    },
+    {
+      "id": "quotientai/limbic-eval-tool-use-mcp",
+      "score": 6.001,
+      "license": "mit",
+      "downloads": 1035,
+      "likes": 13
+    }
+  ],
+  "ingestion": [
+    {
+      "dataset": "obaydata/mcp-agent-trajectory-benchmark",
+      "ok": true,
+      "rowsFetched": 24,
+      "rowsNormalized": 24,
+      "error": null,
+      "config": "default",
+      "split": "train"
+    },
+    {
+      "dataset": "DataCreatorAI/tool-calling-browser-agent-tasks",
+      "ok": true,
+      "rowsFetched": 24,
+      "rowsNormalized": 24,
+      "error": null,
+      "config": "default",
+      "split": "train"
+    },
+    {
+      "dataset": "agent-eto/eto-sft-trajectory",
+      "ok": true,
+      "rowsFetched": 24,
+      "rowsNormalized": 0,
+      "error": null,
+      "config": "default",
+      "split": "webshop"
+    },
+    {
+      "dataset": "SultanR/arxiv-to-code-agentic-tool-calling",
+      "ok": true,
+      "rowsFetched": 10,
+      "rowsNormalized": 4,
+      "error": null,
+      "config": "default",
+      "split": "train"
+    },
+    {
+      "dataset": "quotientai/limbic-eval-tool-use-mcp",
+      "ok": true,
+      "rowsFetched": 24,
+      "rowsNormalized": 0,
+      "error": null,
+      "config": "default",
+      "split": "test"
+    }
+  ]
+}
