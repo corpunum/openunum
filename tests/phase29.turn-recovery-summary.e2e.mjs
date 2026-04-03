@@ -68,11 +68,11 @@ const recovered = synthesizeToolOnlyAnswer({
   toolRuns: executedTools.length
 });
 
-assert.match(recovered, /Recovered answer from executed tool evidence\./);
 assert.match(recovered, /Hardware: AMD Ryzen Z1 Extreme/);
 assert.match(recovered, /RAM≈17\.0 GiB/);
 assert.match(recovered, /1\. HauhauCS\/Qwen3\.5-9B-Uncensored-HauhauCS-Aggressive/);
 assert.match(recovered, /No install action was taken\./);
+assert.match(recovered, /Provenance: synthesized from/);
 assert.ok(recovered.length < 2500, 'recovered answer should stay compact');
 assert.ok(!recovered.includes('aoxo/sarvam-105b-uncensored'), 'poor-fit 105B model should be filtered out');
 
@@ -86,5 +86,17 @@ const normalized = normalizeRecoveredFinalText({
 
 assert.equal(normalized, recovered);
 assert.ok(normalized.length < 2500, 'normalized fallback should stay compact');
+
+const statusRecovery = synthesizeToolOnlyAnswer({
+  userMessage: 'inspect the runtime and report status',
+  executedTools: [
+    { name: 'http_request', result: { ok: true, status: 200, url: 'http://127.0.0.1:18880/api/health' } },
+    { name: 'shell_run', result: { ok: false, error: 'command_failed' } }
+  ],
+  toolRuns: 2
+});
+assert.match(statusRecovery, /^Status: partial/m);
+assert.match(statusRecovery, /Findings:/);
+assert.match(statusRecovery, /Provenance: synthesized from 2 tool surface/);
 
 console.log('phase29.turn-recovery-summary.e2e: ok');

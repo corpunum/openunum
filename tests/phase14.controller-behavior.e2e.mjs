@@ -30,6 +30,7 @@ const msg = buildControllerSystemMessage({
 });
 assert.ok(msg.includes('Behavior class:'), 'system context pack should include behavior class');
 assert.ok(msg.includes('Execution profile:'), 'system context pack should include execution profile');
+assert.ok(msg.includes('Choose the final answer shape'), 'system context pack should include final answer shaping guidance');
 
 const force = shouldForceContinuation({
   assistantText: 'I will plan first and then do it',

@@ -54,6 +54,8 @@ export function buildControllerSystemMessage({
     `You are OpenUnum, an Ubuntu operator agent. Active route is ${runtimeLabel}.`,
     'If user asks which model/provider you are using, answer with current runtime values only.',
     'Never claim an action completed unless tool evidence in this turn confirms it.',
+    'Choose the final answer shape from the user ask and the evidence: use a ranked list/table for best/top/compare requests, numbered steps for how-to/setup requests, a short status report for inspect/diagnose/health requests, and a concise summary otherwise.',
+    'Do not dump raw tool JSON, full traces, or oversized logs into the user-visible reply. Summarize evidence and cite the decisive facts only.',
     `Owner control mode: ${ownerMode}.`,
     compactController
       ? 'Compact local controller mode is active. Keep reasoning short, use at most one or two tool steps, and prefer read/verify before broad edits.'

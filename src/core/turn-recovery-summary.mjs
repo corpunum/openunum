@@ -54,6 +54,9 @@ function extractRequirements(userMessage = '') {
   const prompt = String(userMessage || '').toLowerCase();
   return {
     asksModelRanking: /model|gguf|ollama|uncensor|unsensor|local/.test(prompt) && /top ?\d+|best|hardware|run/.test(prompt),
+    asksRanking: /top ?\d+|best|rank|ranking|compare|which is better/.test(prompt),
+    asksSteps: /\bhow\b|steps|guide|setup|configure|install|onboard|procedure/.test(prompt),
+    asksStatus: /status|health|inspect|diagnose|check|report|what happened|why failed|why is/.test(prompt),
     wantsLocal: /local|ollama|run for this hardware|run on this hardware|this hardware/.test(prompt),
     wantsUncensored: /uncensor|uncensored|unsensored|unsensor/.test(prompt),
     wantsGguf: /gguf|ollama|local/.test(prompt),
@@ -150,7 +153,7 @@ function buildModelRankingAnswer({ userMessage = '', executedTools = [] }) {
     .slice(0, topN);
   if (!candidates.length) return '';
 
-  const lines = ['Recovered answer from executed tool evidence.'];
+  const lines = [];
   const hardwareLine = formatHardwareLine(hardware);
   if (hardwareLine) lines.push(hardwareLine);
   lines.push('Top candidates for this hardware:');
@@ -171,23 +174,65 @@ function buildModelRankingAnswer({ userMessage = '', executedTools = [] }) {
   return lines.join('\n');
 }
 
-function buildGenericToolSummary({ executedTools = [], toolRuns = 0 }) {
+function overallStatusFromTools(executedTools = []) {
+  const failures = executedTools.filter((run) => run?.result?.ok === false).length;
+  if (!executedTools.length) return 'unknown';
+  if (!failures) return 'ok';
+  if (failures === executedTools.length) return 'failed';
+  return 'partial';
+}
+
+function buildStatusAnswer({ executedTools = [], toolRuns = 0 }) {
   if (!(toolRuns > 0)) return '';
-  const recent = executedTools.slice(-4).map((run, idx) => {
+  const status = overallStatusFromTools(executedTools);
+  const recent = executedTools.slice(-4).map((run) => {
     const compact = compactToolResult(run.result);
-    return `${idx + 1}. ${run.name} -> ${clipText(JSON.stringify(compact), 260)}`;
+    return `- ${run.name}: ${clipText(JSON.stringify(compact), 220)}`;
   });
   return [
-    `Recovered summary from ${toolRuns} tool actions.`,
-    'Recent executed actions:',
+    `Status: ${status}`,
+    'Findings:',
     ...recent
   ].join('\n');
 }
 
+function buildStepAnswer({ executedTools = [], toolRuns = 0 }) {
+  if (!(toolRuns > 0)) return '';
+  const lines = ['Best next steps from current evidence:'];
+  const failed = executedTools.filter((run) => run?.result?.ok === false);
+  const succeeded = executedTools.filter((run) => run?.result?.ok);
+  if (failed.length) {
+    for (const run of failed.slice(0, 3)) {
+      lines.push(`1. Resolve the blocked/failed tool path: \`${run.name}\` returned \`${clipText(run.result?.error || 'error', 80)}\`.`);
+    }
+  } else if (succeeded.length) {
+    for (const run of succeeded.slice(0, 3)) {
+      lines.push(`1. Use the verified result from \`${run.name}\` as the next execution anchor.`);
+    }
+  }
+  return lines.join('\n');
+}
+
+function buildGenericToolSummary({ executedTools = [], toolRuns = 0, requirements = null }) {
+  if (requirements?.asksSteps) return buildStepAnswer({ executedTools, toolRuns });
+  if (requirements?.asksStatus) return buildStatusAnswer({ executedTools, toolRuns });
+  return buildStatusAnswer({ executedTools, toolRuns });
+}
+
+function buildProvenanceFooter({ executedTools = [], synthesized = false }) {
+  if (!synthesized) return '';
+  const toolNames = [...new Set(executedTools.map((run) => String(run?.name || '').trim()).filter(Boolean))];
+  if (!toolNames.length) return 'Provenance: synthesized from tool evidence.';
+  return `Provenance: synthesized from ${toolNames.length} tool surface(s): ${toolNames.join(', ')}.`;
+}
+
 export function synthesizeToolOnlyAnswer({ userMessage = '', executedTools = [], toolRuns = 0 }) {
-  return buildModelRankingAnswer({ userMessage, executedTools }) ||
-    buildGenericToolSummary({ executedTools, toolRuns }) ||
+  const requirements = extractRequirements(userMessage);
+  const body = buildModelRankingAnswer({ userMessage, executedTools }) ||
+    buildGenericToolSummary({ executedTools, toolRuns, requirements }) ||
     '';
+  if (!body) return '';
+  return `${body}\n${buildProvenanceFooter({ executedTools, synthesized: true })}`.trim();
 }
 
 export function normalizeRecoveredFinalText({ finalText = '', userMessage = '', executedTools = [], toolRuns = 0, maxChars = 12000 } = {}) {
