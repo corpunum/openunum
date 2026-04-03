@@ -131,6 +131,7 @@
       display: grid;
       grid-template-rows: 56px 1fr;
       min-width: 0;
+      min-height: 0;
     }
     .header {
       border-bottom: 1px solid rgba(71, 99, 140, .38);
@@ -146,6 +147,7 @@
     .center {
       padding: 14px;
       overflow: hidden;
+      min-height: 0;
       }
     .view {
       display: none;
@@ -153,8 +155,10 @@
       border: 1px solid rgba(86, 113, 154, .3);
       border-radius: 20px;
       min-height: calc(100vh - 98px);
+      height: calc(100vh - 98px);
       padding: 12px;
       box-shadow: 0 24px 64px rgba(0, 0, 0, .34);
+      overflow: hidden;
     }
     .view.active { display: block; }
     .section-title {
@@ -196,6 +200,7 @@
       display: grid;
       grid-template-rows: auto 1fr auto;
       gap: 10px;
+      min-height: 0;
     }
     .quick-prompts {
       display: flex;
@@ -324,11 +329,14 @@
       color: var(--muted);
     }
     .messages {
-      overflow: hidden;
+      overflow-y: auto;
+      overflow-x: hidden;
       padding: 8px;
       display: flex;
       flex-direction: column;
       gap: 10px;
+      min-height: 0;
+      overscroll-behavior: contain;
     }
     .bubble-wrap { display: flex; }
     .bubble-wrap.user { justify-content: flex-end; }

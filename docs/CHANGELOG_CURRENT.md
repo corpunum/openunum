@@ -22,6 +22,11 @@ Date: 2026-04-03
    - new `tests/phase32.pending-refresh-rehydrate.e2e.mjs`
    - validates refresh-time pending recovery, retry-pane persistence, and final-answer restoration in the real WebUI
 
+4. Fixed chat-stream scrolling for normal long sessions:
+   - `.messages` is now the scroll container instead of clipping overflow
+   - grid parents now set `min-height: 0` so the chat viewport can shrink and scroll correctly
+   - added browser regression `tests/phase33.chat-scroll.e2e.mjs`
+
 ## Durability + Recovery + Benchmark Pass
 
 0. Finished the remaining autonomy framework suggestions:
