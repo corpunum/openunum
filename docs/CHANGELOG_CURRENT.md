@@ -36,6 +36,12 @@ Date: 2026-04-03
    - refreshed `local_models_report.md`
    - recorded live Ollama results for installed uncensored local models on the current AMD Z1 Extreme host
 
+8. Fixed oversized tool-dump fallbacks in chat recovery:
+   - added `src/core/turn-recovery-summary.mjs`
+   - tool-only failures now produce bounded evidence-based summaries instead of raw multi-hundred-KB dumps
+   - model-ranking questions now bias recovery output toward hardware-fit, not just popularity
+   - added regression `tests/phase29.turn-recovery-summary.e2e.mjs`
+
 ## WebUI Upgrade + Session Switching Fix + Docs Refresh
 
 0. Updated flagship `src/ui/index.html` to a Gemini-inspired glass visual direction without dropping existing backend feature wiring.
