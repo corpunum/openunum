@@ -429,6 +429,7 @@ function shouldReplaceWeakFinalText({ finalText = '', userMessage = '', executed
   if (!text) return true;
   if (text.length > 12000) return true;
   if (/Tool actions executed \(\d+\) but model returned no final message\./.test(text)) return true;
+  if (/<\s*(tool_call|function_call|minimax:tool_call)\b/i.test(text)) return true;
   if (toolRuns > 0) {
     const prefaceOnly = /^(let me|i(?:'|’)ll|i will|allow me|sure[, ]+let me|checking)\b/i.test(text);
     const danglingLeadIn = /[:;]\s*$/.test(text);

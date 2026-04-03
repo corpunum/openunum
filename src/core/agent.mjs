@@ -426,14 +426,22 @@ function detectLocalRuntimeTask(messages = []) {
     /local|gguf|ollama|llama\.cpp|runtime|launch|server|model/.test(text);
 }
 
+function recentUserText(messages = [], windowSize = 3) {
+  const userMessages = (Array.isArray(messages) ? messages : [])
+    .filter((m) => String(m?.role || '').toLowerCase() === 'user')
+    .map((m) => String(m?.content || '').trim())
+    .filter(Boolean);
+  return userMessages.slice(-Math.max(1, windowSize)).join('\n').toLowerCase();
+}
+
 function detectUiCodeEditTask(messages = []) {
-  const text = messages.map((m) => String(m?.content || '')).join('\n').toLowerCase();
+  const text = recentUserText(messages, 3);
   if (!/ui|frontend|layout|css|html|runtime/.test(text)) return false;
   return /scroll|scrollbar|fit|container|session|chat|sidebar|overflow|panel|view/.test(text);
 }
 
 function detectNoScrollbarUiIntent(messages = []) {
-  const text = messages.map((m) => String(m?.content || '')).join('\n').toLowerCase();
+  const text = recentUserText(messages, 3);
   if (!/ui|runtime|session|chat|container/.test(text)) return false;
   return /no scrollbar|without scrollbar|remove scrollbar|not to have a scrollbar|overflow/.test(text);
 }
@@ -445,6 +453,7 @@ function isNonFinalToolMarkupText(text) {
   if (/<\s*minimax:tool_call\b/i.test(trimmed)) return true;
   const hasInvokeBlock = /<\s*invoke\b/i.test(trimmed) && /<\s*parameter\b/i.test(trimmed);
   const hasToolCallTag = /<\s*(tool_call|function_call)\b/i.test(trimmed);
+  if (hasToolCallTag) return true;
   if (!hasInvokeBlock && !hasToolCallTag) return false;
   const withoutTags = trimmed.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
   if (!withoutTags) return true;

@@ -16,6 +16,19 @@ Date: 2026-04-03
    - `NEXT_TASKS.md` now includes `Training Surface Parity (Harvest from MimoUnum)`
    - target is Mimo-style `training/*` API and compact autonomy scorecard UX on top of OpenUnum architecture
 
+## Final-Answer Reliability Fixes (Preface/Tool-Tag Recovery)
+
+0. Fixed silent/partial final responses after tool execution:
+   - preface-only endings (for example, “Let me explore...:”) are now treated as weak finals and replaced by evidence-backed synthesis when tool runs exist
+   - raw tool-call XML-like markup (for example `<tool_call>...</tool_call>`) is now treated as non-final content
+
+1. Reduced false UI-task intent carry-over across long sessions:
+   - UI code-edit heuristics now read only recent user turns instead of broad historical context
+   - prevents unrelated follow-up questions from being forced into stale UI-scroll workflows
+
+2. Added regression coverage:
+   - `tests/phase35.tool-call-markup-recovery.e2e.mjs`
+
 ## Pending Chat Rehydration + Live Trace State
 
 0. Fixed WebUI refresh behavior for in-flight chat turns:
