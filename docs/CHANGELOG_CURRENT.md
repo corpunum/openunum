@@ -2,6 +2,26 @@
 
 Date: 2026-04-03
 
+## Pending Chat Rehydration + Live Trace State
+
+0. Fixed WebUI refresh behavior for in-flight chat turns:
+   - refreshed sessions now query `/api/sessions/:id/activity`
+   - pending chat bubbles are rehydrated after refresh instead of disappearing
+   - pending recovery now resumes in the background, so page bootstrap is not blocked by a long-running turn
+
+1. Improved live run-state feedback in the chat panel:
+   - pending status now progresses through `Routing request`, `Executing tools`, `Synthesizing answer`, and `Finalizing response`
+   - this replaces the previous flat “still working” state during long turns
+
+2. Preserved live trace usability across rerenders:
+   - live `Activity` and `Attempts & Retries` panel open/closed state now persists in local storage
+   - trace pane scrollability improved with bounded heights and `overflow: auto`
+   - open retry panes no longer collapse on the next live rerender
+
+3. Added browser-level regression coverage:
+   - new `tests/phase32.pending-refresh-rehydrate.e2e.mjs`
+   - validates refresh-time pending recovery, retry-pane persistence, and final-answer restoration in the real WebUI
+
 ## Durability + Recovery + Benchmark Pass
 
 0. Finished the remaining autonomy framework suggestions:

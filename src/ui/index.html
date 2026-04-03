@@ -1160,6 +1160,12 @@
     let hiddenProviderRows = [];
     let hiddenServiceRows = [];
     let authJobPrompted = {};
+    let detailPanelState = {};
+    try {
+      detailPanelState = JSON.parse(localStorage.getItem('openunum_detail_panels') || '{}') || {};
+    } catch {
+      detailPanelState = {};
+    }
     q('chatMeta').textContent = sessionId;
     q('autoEscalateToggle').textContent = `Auto: ${autoEscalateEnabled ? 'On' : 'Off'}`;
     q('liveActivityToggle').textContent = `Live: ${liveActivityEnabled ? 'On' : 'Off'}`;
@@ -1172,6 +1178,34 @@
       q('message').placeholder = pending
         ? 'Session is still running. Switch sessions or wait for completion.'
         : 'Type a message. Enter sends, Shift+Enter adds a new line';
+    }
+    function detailPanelKey(scope, name) {
+      return `${scope || sessionId || 'global'}:${name}`;
+    }
+    function rememberDetailPanelState(key, patch) {
+      detailPanelState[key] = { ...(detailPanelState[key] || {}), ...patch };
+      localStorage.setItem('openunum_detail_panels', JSON.stringify(detailPanelState));
+    }
+    function bindPersistentDetailPanels(root) {
+      if (!root) return;
+      root.querySelectorAll('details[data-persist-key]').forEach((details) => {
+        const key = details.dataset.persistKey;
+        if (!key) return;
+        const saved = detailPanelState[key] || {};
+        if (typeof saved.open === 'boolean') details.open = saved.open;
+        const body = details.querySelector('.trace-body');
+        if (body && Number.isFinite(saved.scrollTop)) {
+          body.scrollTop = saved.scrollTop;
+        }
+        details.addEventListener('toggle', () => {
+          rememberDetailPanelState(key, { open: details.open });
+        });
+        if (body) {
+          body.addEventListener('scroll', () => {
+            rememberDetailPanelState(key, { scrollTop: body.scrollTop });
+          }, { passive: true });
+        }
+      });
     }
 
     const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -1362,6 +1396,7 @@
       const bubble = document.createElement('div');
       bubble.className = `bubble ${role === 'user' ? 'user' : 'ai'}`;
       bubble.innerHTML = html || escapeHtml(text || '');
+      bindPersistentDetailPanels(bubble);
       wrap.appendChild(bubble);
       chat.appendChild(wrap);
       chat.scrollTop = chat.scrollHeight;
@@ -1374,6 +1409,7 @@
       node.pollCount = 0;
       node.lastToolCount = 0;
       node.lastStep = '';
+      node.persistScope = `session:${sessionId}:live`;
       node.bubble.innerHTML = `<div class="typing" aria-label="Agent is working">
         <div class="typing-head">
           <span class="typing-label">Agent Running</span>
@@ -1395,6 +1431,7 @@
     }
 
     function renderLiveBubble(typing, statusText, tools = []) {
+      const scope = typing.persistScope || sessionId || 'pending';
       const events = (typing.liveEvents || []).slice(-16).map((e) => `<div class="trace-line">${escapeHtml(e)}</div>`).join('');
       const lastTools = (tools || []).slice(-8).map((t) => {
         const args = escapeHtml(JSON.stringify(t.args || {}));
@@ -1408,20 +1445,22 @@
         </div>
         <div class="typing-status">${escapeHtml(statusText || 'Agent is working...')}</div>
       </div>
-        <details class="trace" open>
+        <details class="trace" open data-persist-key="${escapeHtml(detailPanelKey(scope, 'live-activity'))}">
           <summary>Live Activity (${tools.length} tool calls)</summary>
           <div class="trace-body">${lastTools || '<div class="trace-line">No tool call observed yet.</div>'}</div>
         </details>
-        <details class="trace">
+        <details class="trace" data-persist-key="${escapeHtml(detailPanelKey(scope, 'live-retries'))}">
           <summary>Attempts & Retries (${(typing.liveEvents || []).length})</summary>
           <div class="trace-body">${events || '<div class="trace-line">No events yet.</div>'}</div>
         </details>`;
+      bindPersistentDetailPanels(typing.bubble);
     }
 
     function renderTrace(trace) {
       if (!trace || (!Array.isArray(trace.iterations) && !trace.failures)) return '';
       const details = document.createElement('details');
       details.className = 'trace';
+      details.dataset.persistKey = detailPanelKey(sessionId || 'session', 'execution-trace');
       const summary = document.createElement('summary');
       const iterCount = Array.isArray(trace.iterations) ? trace.iterations.length : 0;
       summary.textContent = `Execution trace (${iterCount} steps)`;
@@ -1610,11 +1649,14 @@
       pendingSessions.add(sid);
       updateComposerPendingState();
       const typing = appendTypingBubble();
+      typing.persistScope = `pending:${sid}:${activity.pendingStartedAt}`;
       typing.liveEvents = [`[${new Date().toLocaleTimeString()}] recovered pending run after refresh`];
       typing.lastToolCount = Array.isArray(activity.toolRuns) ? activity.toolRuns.length : 0;
       renderLiveBubble(typing, buildPendingStatus(typing, activity, activity), activity.toolRuns || []);
       const requestToken = ++requestTokenSeq;
-      await resolvePendingReply(typing, activity.pendingStartedAt, sid, requestToken);
+      resolvePendingReply(typing, activity.pendingStartedAt, sid, requestToken).catch((error) => {
+        typing.bubble.textContent = `Pending recovery failed: ${String(error?.message || error)}`;
+      });
       return true;
     }
 
@@ -3073,6 +3115,7 @@ ${verificationSummary || preview}`)}</pre>`;
       pushMsg('user', message);
       const typing = appendTypingBubble();
       const startedAtIso = new Date().toISOString();
+      typing.persistScope = `pending:${requestSessionId}:${startedAtIso}`;
       try {
         if (/^\/auto\b/i.test(message)) {
           await runAutoMissionFromChat(message, typing);
