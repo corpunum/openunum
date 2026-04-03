@@ -15,8 +15,13 @@ import { getAutonomyMaster } from './core/autonomy-master.mjs';
 import { estimateMessagesTokens } from './core/context-budget.mjs';
 import { resolveExecutionEnvelope } from './core/model-execution-envelope.mjs';
 import { CDPBrowser } from './browser/cdp.mjs';
-import { TelegramChannel } from './channels/telegram.mjs';
 import { logInfo, logError } from './logger.mjs';
+import {
+  noCacheHeaders,
+  parseBody,
+  sendApiError as sendApiErrorBase,
+  sendJson
+} from './server/http.mjs';
 import {
   AUTH_CATALOG_CONTRACT_VERSION,
   AUTH_TARGET_DEFS,
@@ -60,6 +65,23 @@ import {
   importProviderSecretsFromOpenClaw,
   normalizeProviderId
 } from './models/catalog.mjs';
+import { handleHealthRoute } from './server/routes/health.mjs';
+import { handleBrowserRoute } from './server/routes/browser.mjs';
+import { handleTelegramRoute } from './server/routes/telegram.mjs';
+import { handleUiRoute } from './server/routes/ui.mjs';
+import { handleSessionsRoute } from './server/routes/sessions.mjs';
+import { handleMissionsRoute } from './server/routes/missions.mjs';
+import { handleModelRoute } from './server/routes/model.mjs';
+import { handleAuthRoute } from './server/routes/auth.mjs';
+import { handleConfigRoute } from './server/routes/config.mjs';
+import { handleAutonomyRoute } from './server/routes/autonomy.mjs';
+import { handleChatToolsRoute } from './server/routes/chat_tools.mjs';
+import { handleSkillsResearchRoute } from './server/routes/skills_research.mjs';
+import { createAuthJobsService } from './server/services/auth_jobs.mjs';
+import { createBrowserRuntimeService } from './server/services/browser_runtime.mjs';
+import { createTelegramRuntimeService } from './server/services/telegram_runtime.mjs';
+import { createResearchRuntimeService } from './server/services/research_runtime.mjs';
+import { createChatRuntimeService } from './server/services/chat_runtime.mjs';
 
 const config = loadConfig();
 normalizeModelSettings();
@@ -69,233 +91,60 @@ const missions = new MissionRunner({ agent, memoryStore: memory, config });
 let browser = new CDPBrowser(config.browser?.cdpUrl);
 const autonomyMaster = getAutonomyMaster({ config, agent, memoryStore: memory, browser });
 const selfHealMonitor = new SelfHealMonitor({ config, agent, browser, memory });
-let telegramLoopRunning = false;
-let telegramLoopStopRequested = false;
-let telegramLoopPromise = null;
-const pendingChats = new Map();
-let researchDailyTimer = null;
-const authJobs = new Map();
 const API_ERROR_CONTRACT_VERSION = '2026-04-02.api-errors.v1';
 const TOOL_CATALOG_CONTRACT_VERSION = '2026-04-02.tool-catalog.v1';
 
-function createDeferred() {
-  let resolve;
-  let reject;
-  const promise = new Promise((res, rej) => {
-    resolve = res;
-    reject = rej;
-  });
-  return { promise, resolve, reject };
-}
+const chatRuntime = createChatRuntimeService({
+  agent,
+  saveConfig: () => saveConfig(config)
+});
+const pendingChats = chatRuntime.pendingChats;
+const withTimeout = chatRuntime.withTimeout;
+const getOrStartChat = chatRuntime.getOrStartChat;
+const prunePendingChats = chatRuntime.prunePendingChats;
 
-function pruneAuthJobs() {
-  const cutoff = Date.now() - (30 * 60 * 1000);
-  for (const [id, job] of authJobs.entries()) {
-    if ((job.updatedAt || 0) < cutoff) authJobs.delete(id);
-  }
-}
+const telegramRuntime = createTelegramRuntimeService({ config, agent, logError });
+const runTelegramLoop = telegramRuntime.runTelegramLoop;
+const stopTelegramLoop = telegramRuntime.stopTelegramLoop;
+const telegramLoopRunning = () => telegramRuntime.isRunning();
+const telegramLoopStopRequested = () => telegramRuntime.isStopRequested();
 
-function openUrlInDesktopBrowser(url) {
-  try {
-    const child = spawn('xdg-open', [url], { detached: true, stdio: 'ignore' });
-    child.unref();
-    return { opened: true };
-  } catch {
-    return { opened: false };
-  }
-}
+const researchRuntime = createResearchRuntimeService({ config, agent, logInfo, logError });
+const startResearchDailyLoop = researchRuntime.startResearchDailyLoop;
+const stopResearchDailyLoop = researchRuntime.stopResearchDailyLoop;
 
-function summarizeAuthJob(job) {
-  if (!job) return null;
-  return {
-    id: job.id,
-    service: job.service,
-    status: job.status,
-    progress: job.progress || null,
-    authUrl: job.authUrl || null,
-    browserOpened: Boolean(job.browserOpened),
-    promptMessage: job.promptMessage || null,
-    error: job.error || null,
-    account: job.account || null,
-    source: job.source || null,
-    createdAt: job.createdAt,
-    updatedAt: job.updatedAt
-  };
-}
+const browserRuntime = createBrowserRuntimeService({
+  config,
+  saveConfig,
+  agent,
+  CDPBrowser,
+  setBrowser: (nextBrowser) => { browser = nextBrowser; }
+});
+const launchDebugBrowser = browserRuntime.launchDebugBrowser;
 
-async function waitForAuthUrl(job, timeoutMs = 1500) {
-  const started = Date.now();
-  while (Date.now() - started < timeoutMs) {
-    if (job.authUrl || job.status === 'failed' || job.status === 'completed') break;
-    await new Promise((resolve) => setTimeout(resolve, 50));
-  }
-}
-
-async function startOpenAICodexOAuthJob() {
-  pruneAuthJobs();
-  const id = crypto.randomUUID();
-  const manualInput = createDeferred();
-  const job = {
-    id,
-    service: 'openai-oauth',
-    status: 'starting',
-    progress: 'starting oauth',
-    authUrl: null,
-    browserOpened: false,
-    promptMessage: null,
-    error: null,
-    account: null,
-    source: 'openunum',
-    createdAt: new Date().toISOString(),
-    updatedAt: Date.now(),
-    manualInput
-  };
-  authJobs.set(id, job);
-
-  (async () => {
-    try {
-      const { loginOpenAICodex } = await import('@mariozechner/pi-ai/oauth');
-      const creds = await loginOpenAICodex({
-        onAuth: (info) => {
-          job.status = 'awaiting_browser';
-          job.authUrl = info?.url || null;
-          job.progress = info?.instructions || 'Open the browser to continue OAuth';
-          job.updatedAt = Date.now();
-          if (job.authUrl) {
-            const opened = openUrlInDesktopBrowser(job.authUrl);
-            job.browserOpened = opened.opened;
-          }
-        },
-        onProgress: (message) => {
-          job.progress = String(message || '').trim() || job.progress;
-          job.updatedAt = Date.now();
-        },
-        onPrompt: async (prompt) => {
-          job.status = 'awaiting_input';
-          job.promptMessage = prompt?.message || 'Paste the authorization code or redirect URL';
-          job.updatedAt = Date.now();
-          return await manualInput.promise;
-        },
-        onManualCodeInput: async () => {
-          job.status = 'awaiting_input';
-          job.promptMessage = 'Paste the authorization code or full redirect URL';
-          job.updatedAt = Date.now();
-          return await manualInput.promise;
-        }
-      });
-      saveOpenAICodexOAuth({ ...creds, source: 'openunum' });
-      job.status = 'completed';
-      job.progress = 'oauth complete';
-      job.account = creds?.email || creds?.accountId || null;
-      job.updatedAt = Date.now();
-    } catch (error) {
-      job.status = 'failed';
-      job.error = String(error.message || error);
-      job.updatedAt = Date.now();
-    }
-  })();
-
-  await waitForAuthUrl(job);
-  return { ok: true, started: true, job: summarizeAuthJob(job) };
-}
-
-async function startGoogleWorkspaceOAuthJob() {
-  pruneAuthJobs();
-  const oauthConfig = getGoogleWorkspaceOAuthConfig();
-  const validation = validateGoogleWorkspaceOAuthConfig(oauthConfig);
-  if (!validation.ok) return { ok: false, started: false, ...validation };
-  const id = crypto.randomUUID();
-  const { verifier, challenge, state } = createGoogleWorkspacePkce();
-  const redirectUri = buildGoogleWorkspaceRedirectUri(config.server);
-  const authUrl = buildGoogleWorkspaceAuthUrl({
-    clientId: oauthConfig.clientId,
-    redirectUri,
-    scopes: oauthConfig.scopes || GOOGLE_WORKSPACE_DEFAULT_SCOPES.join(' '),
-    state,
-    challenge
-  });
-  const job = {
-    id,
-    service: 'google-workspace',
-    status: 'awaiting_browser',
-    progress: 'Open the browser and approve Google Workspace access',
-    authUrl,
-    browserOpened: false,
-    promptMessage: null,
-    error: null,
-    account: null,
-    source: 'openunum',
-    createdAt: new Date().toISOString(),
-    updatedAt: Date.now(),
-    state,
-    verifier,
-    redirectUri,
-    clientId: oauthConfig.clientId,
-    clientSecret: oauthConfig.clientSecret || '',
-    scopes: oauthConfig.scopes || GOOGLE_WORKSPACE_DEFAULT_SCOPES.join(' ')
-  };
-  authJobs.set(id, job);
-  const opened = openUrlInDesktopBrowser(authUrl);
-  job.browserOpened = opened.opened;
-  return { ok: true, started: true, job: summarizeAuthJob(job) };
-}
-
-function findGoogleWorkspaceAuthJobByState(state) {
-  pruneAuthJobs();
-  const expected = String(state || '').trim();
-  if (!expected) return null;
-  for (const job of authJobs.values()) {
-    if (job.service === 'google-workspace' && String(job.state || '').trim() === expected) return job;
-  }
-  return null;
-}
-
-async function completeGoogleWorkspaceAuthJob(job, code) {
-  const token = await exchangeGoogleWorkspaceAuthorizationCode({
-    clientId: job.clientId,
-    clientSecret: job.clientSecret,
-    code,
-    verifier: job.verifier,
-    redirectUri: job.redirectUri
-  });
-  let email = '';
-  try {
-    const user = await fetchGoogleWorkspaceUser(token.access_token);
-    email = String(user?.email || '').trim();
-  } catch {
-    email = '';
-  }
-  saveGoogleWorkspaceOAuth({
-    access: token.access_token,
-    refresh: token.refresh_token,
-    expires: Date.now() + (Number(token.expires_in || 3600) * 1000),
-    email,
-    scope: String(token.scope || job.scopes || '').trim(),
-    tokenType: String(token.token_type || 'Bearer').trim() || 'Bearer',
-    source: 'openunum'
-  });
-  job.status = 'completed';
-  job.progress = 'oauth complete';
-  job.account = email || null;
-  job.updatedAt = Date.now();
-}
-
-function getAuthJob(id) {
-  pruneAuthJobs();
-  return authJobs.get(String(id || '').trim()) || null;
-}
-
-function completeAuthJob(id, input) {
-  const job = getAuthJob(id);
-  if (!job) return { ok: false, error: 'auth_job_not_found' };
-  if (!job.manualInput?.resolve) return { ok: false, error: 'auth_job_not_waiting_for_input' };
-  job.promptMessage = null;
-  job.progress = 'processing authorization code';
-  job.status = 'processing_input';
-  job.updatedAt = Date.now();
-  job.manualInput.resolve(String(input || '').trim());
-  return { ok: true, accepted: true, job: summarizeAuthJob(job) };
-}
+const authJobsService = createAuthJobsService({
+  config,
+  agent,
+  getGoogleWorkspaceOAuthConfig,
+  validateGoogleWorkspaceOAuthConfig,
+  createGoogleWorkspacePkce,
+  buildGoogleWorkspaceRedirectUri,
+  buildGoogleWorkspaceAuthUrl,
+  GOOGLE_WORKSPACE_DEFAULT_SCOPES,
+  exchangeGoogleWorkspaceAuthorizationCode,
+  fetchGoogleWorkspaceUser,
+  saveGoogleWorkspaceOAuth,
+  saveOpenAICodexOAuth,
+  launchOauthCommand
+});
+const authJobs = authJobsService.authJobs;
+const summarizeAuthJob = authJobsService.summarizeAuthJob;
+const startOpenAICodexOAuthJob = authJobsService.startOpenAICodexOAuthJob;
+const startGoogleWorkspaceOAuthJob = authJobsService.startGoogleWorkspaceOAuthJob;
+const findGoogleWorkspaceAuthJobByState = authJobsService.findGoogleWorkspaceAuthJobByState;
+const completeGoogleWorkspaceAuthJob = authJobsService.completeGoogleWorkspaceAuthJob;
+const getAuthJob = authJobsService.getAuthJob;
+const completeAuthJob = authJobsService.completeAuthJob;
 
 function normalizeModelSettings() {
   config.model.provider = normalizeProviderId(config.model.provider);
@@ -949,193 +798,15 @@ function renderReplyHtml(text) {
   });
 }
 
-async function runTelegramLoop() {
-  if (!config.channels.telegram?.botToken) {
-    throw new Error('Missing Telegram bot token');
-  }
-  if (telegramLoopRunning) return;
-  telegramLoopStopRequested = false;
-  telegramLoopRunning = true;
-  const tg = new TelegramChannel(config.channels.telegram, async (text, sessionId) => {
-    const out = await agent.chat({ message: text, sessionId });
-    return out.reply;
-  });
-  telegramLoopPromise = (async () => {
-    while (!telegramLoopStopRequested) {
-      try {
-        await tg.pollOnce();
-      } catch (error) {
-        logError('telegram_poll_error', { error: String(error.message || error) });
-        await new Promise((r) => setTimeout(r, 2000));
-      }
-    }
-    telegramLoopRunning = false;
-  })();
-}
-
-async function stopTelegramLoop() {
-  telegramLoopStopRequested = true;
-  if (telegramLoopPromise) {
-    await Promise.race([telegramLoopPromise, new Promise((r) => setTimeout(r, 3000))]);
-  }
-  telegramLoopRunning = false;
-}
-
-function resolveChromeBin() {
-  const candidates = ['/snap/bin/chromium', '/usr/bin/chromium', '/usr/bin/google-chrome', '/usr/bin/chromium-browser'];
-  for (const c of candidates) {
-    if (fs.existsSync(c)) return c;
-  }
-  return null;
-}
-
-async function launchDebugBrowser() {
-  const chromeBin = resolveChromeBin();
-  if (!chromeBin) {
-    throw new Error('No Chromium/Chrome executable found on host');
-  }
-  const port = 9333;
-  // Kill stale debug instances so a new visible window can be created reliably.
-  try {
-    spawn('pkill', ['-f', 'openunum-chrome-debug'], { stdio: 'ignore' });
-  } catch {
-    // ignore best-effort cleanup errors
-  }
-
-  const args = [
-    `--remote-debugging-port=${port}`,
-    '--user-data-dir=/tmp/openunum-chrome-debug',
-    '--no-first-run',
-    '--no-default-browser-check',
-    '--disable-gpu',
-    '--new-window',
-    'about:blank'
-  ];
-  const child = spawn(chromeBin, args, {
-    detached: true,
-    stdio: 'ignore'
-  });
-  child.unref();
-
-  // Verify endpoint is actually up before reporting success.
-  let ready = false;
-  for (let i = 0; i < 20; i += 1) {
-    try {
-      const res = await fetch(`http://127.0.0.1:${port}/json/version`);
-      if (res.ok) {
-        ready = true;
-        break;
-      }
-    } catch {
-      // keep waiting
-    }
-    await new Promise((r) => setTimeout(r, 200));
-  }
-
-  if (!ready) {
-    return {
-      ok: false,
-      error: 'debug_browser_not_ready',
-      hint: 'Chromium did not expose CDP on port 9333 after launch.'
-    };
-  }
-
-  config.browser.cdpUrl = `http://127.0.0.1:${port}`;
-  saveConfig(config);
-  browser = new CDPBrowser(config.browser.cdpUrl);
-  agent.reloadTools();
-  return { ok: true, cdpUrl: config.browser.cdpUrl, pid: child.pid };
-}
-
-function msUntilNextHour(hour) {
-  const now = new Date();
-  const next = new Date(now);
-  next.setMinutes(0, 0, 0);
-  next.setHours(Number(hour));
-  if (next <= now) next.setDate(next.getDate() + 1);
-  return Math.max(60 * 1000, next.getTime() - now.getTime());
-}
-
-function stopResearchDailyLoop() {
-  if (researchDailyTimer) {
-    clearTimeout(researchDailyTimer);
-    researchDailyTimer = null;
-  }
-}
-
-function startResearchDailyLoop() {
-  stopResearchDailyLoop();
-  if (!config.runtime?.researchDailyEnabled) return;
-  const run = async () => {
-    try {
-      await agent.runTool('research_run_daily', { simulate: false });
-      logInfo('research_daily_completed', {});
-    } catch (error) {
-      logError('research_daily_failed', { error: String(error.message || error) });
-    } finally {
-      researchDailyTimer = setTimeout(run, msUntilNextHour(config.runtime.researchScheduleHour ?? 3));
-    }
-  };
-  researchDailyTimer = setTimeout(run, msUntilNextHour(config.runtime.researchScheduleHour ?? 3));
-}
-
-function noCacheHeaders(contentType) {
-  return {
-    'Content-Type': contentType,
-    'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
-    'Pragma': 'no-cache',
-    'Expires': '0',
-    'Surrogate-Control': 'no-store',
-    'Access-Control-Allow-Origin': '*',
-    'Access-Control-Allow-Methods': 'GET, POST, OPTIONS, PUT, DELETE, PATCH',
-    'Access-Control-Allow-Headers': 'Content-Type, Authorization'
-  };
-}
-
-function sendJson(res, code, obj) {
-  res.writeHead(code, noCacheHeaders('application/json'));
-  res.end(JSON.stringify(obj));
-}
-
 function sendApiError(res, status, code, message, details = {}) {
-  return sendJson(res, status, {
-    ok: false,
-    error: code,
-    message: String(message || code),
-    contract_version: API_ERROR_CONTRACT_VERSION,
-    ...details
-  });
-}
-
-async function withTimeout(promise, timeoutMs, timeoutMessage = 'operation_timeout') {
-  let timer;
-  try {
-    return await Promise.race([
-      promise,
-      new Promise((_, reject) => {
-        timer = setTimeout(() => reject(new Error(timeoutMessage)), timeoutMs);
-      })
-    ]);
-  } finally {
-    clearTimeout(timer);
-  }
-}
-
-async function parseBody(req) {
-  return new Promise((resolve, reject) => {
-    const chunks = [];
-    req.on('data', (c) => chunks.push(c));
-    req.on('end', () => {
-      try {
-        const raw = Buffer.concat(chunks).toString('utf8');
-        resolve(raw ? JSON.parse(raw) : {});
-      } catch (e) {
-        e.code = 'invalid_json';
-        reject(e);
-      }
-    });
-    req.on('error', reject);
-  });
+  return sendApiErrorBase(
+    res,
+    status,
+    code,
+    message,
+    details,
+    API_ERROR_CONTRACT_VERSION
+  );
 }
 
 async function runHealthCheck() {
@@ -1224,36 +895,6 @@ async function runSelfHeal(dryRun = false) {
   return { ok: results.every(r => r.success !== false), actions, results, dryRun };
 }
 
-function getOrStartChat(sessionId, message) {
-  const sid = String(sessionId || '').trim();
-  if (!sid) throw new Error('sessionId is required');
-  const existing = pendingChats.get(sid);
-  if (existing) return existing;
-  const startedAt = new Date().toISOString();
-  const promise = agent.chat({ message, sessionId: sid })
-    .then((out) => {
-      saveConfig(config);
-      return out;
-    })
-    .finally(() => {
-      pendingChats.delete(sid);
-    });
-  const entry = { sessionId: sid, message, startedAt, promise };
-  pendingChats.set(sid, entry);
-  return entry;
-}
-
-function prunePendingChats({ keepSessionId = '' } = {}) {
-  const keep = String(keepSessionId || '').trim();
-  let removed = 0;
-  for (const sid of pendingChats.keys()) {
-    if (keep && sid === keep) continue;
-    pendingChats.delete(sid);
-    removed += 1;
-  }
-  return removed;
-}
-
 const server = http.createServer(async (req, res) => {
   try {
     const url = new URL(req.url || '/', `http://${req.headers.host || '127.0.0.1'}`);
@@ -1264,65 +905,22 @@ const server = http.createServer(async (req, res) => {
       return;
     }
 
-    if (req.method === 'GET' && (url.pathname === '/health' || url.pathname === '/api/health')) {
-      const health = await runHealthCheck();
-      return sendJson(res, 200, {
-        ok: true,
-        service: 'openunum',
-        health
-      });
-    }
-
-    if (req.method === 'GET' && url.pathname === '/api/self-heal') {
-      const dryRun = url.searchParams.get('dryRun') !== 'false';
-      const result = await runSelfHeal(dryRun);
-      return sendJson(res, 200, result);
-    }
-
-    if (req.method === 'POST' && url.pathname === '/api/self-heal') {
-      const body = await parseBody(req);
-      const dryRun = body.dryRun !== false;
-      const result = await runSelfHeal(dryRun);
-      return sendJson(res, 200, result);
-    }
-
-    if (req.method === 'POST' && url.pathname === '/api/self-heal/fix') {
-      const result = await runSelfHeal(false);
-      return sendJson(res, 200, result);
-    }
-
-    if (req.method === 'GET' && url.pathname === '/api/health/check') {
-      const health = await runHealthCheck();
-      return sendJson(res, health.ok ? 200 : 503, health);
-    }
-
-    if (req.method === 'POST' && url.pathname === '/api/selfheal/run') {
-      const body = await parseBody(req);
-      const dryRun = Boolean(body?.dryRun);
-      const result = await runSelfHeal(dryRun);
-      if (!dryRun && result.ok) {
-        logInfo('selfheal_executed', { actions: result.actions.length, results: result.results.length });
+    if (await handleHealthRoute({
+      req,
+      res,
+      url,
+      ctx: {
+        config,
+        agent,
+        pendingChats,
+        parseBody,
+        sendJson,
+        runHealthCheck,
+        runSelfHeal,
+        logInfo,
+        telegramLoopRunning
       }
-      return sendJson(res, result.ok ? 200 : 500, result);
-    }
-
-    if (req.method === 'GET' && url.pathname === '/api/selfheal/status') {
-      const status = {
-        ok: true,
-        uptime: process.uptime(),
-        pendingChats: pendingChats.size,
-        telegramRunning: telegramLoopRunning,
-        config: {
-          autonomyMode: config.runtime.autonomyMode,
-          shellEnabled: config.runtime.shellEnabled,
-          maxToolIterations: config.runtime.maxToolIterations
-        },
-        model: agent.getCurrentModel(),
-        browser: { cdpUrl: config.browser?.cdpUrl },
-        timestamp: new Date().toISOString()
-      };
-      return sendJson(res, 200, status);
-    }
+    })) return;
 
     if (req.method === 'GET' && url.pathname === '/api/capabilities') {
       return sendJson(res, 200, buildCapabilitiesPayload());
@@ -1419,876 +1017,192 @@ const server = http.createServer(async (req, res) => {
       return sendJson(res, 200, { ok: true, removed, key });
     }
 
-    if (req.method === 'GET' && url.pathname === '/api/model-catalog') {
-      normalizeModelSettings();
-      const catalog = await buildModelCatalog(config.model);
-      return sendJson(res, 200, catalog);
-    }
-
-    if (req.method === 'GET' && url.pathname === '/api/auth/catalog') {
-      return sendJson(res, 200, await buildAuthCatalogPayload());
-    }
-
-    if (req.method === 'POST' && url.pathname === '/api/auth/catalog') {
-      const body = await parseBody(req);
-      const providerBaseUrls = body?.providerBaseUrls || {};
-      const secretUpdates = body?.secrets || {};
-      const oauthConfig = body?.oauthConfig || {};
-      const clear = Array.isArray(body?.clear) ? body.clear : [];
-
-      if (typeof providerBaseUrls.ollamaBaseUrl === 'string' && providerBaseUrls.ollamaBaseUrl.trim()) config.model.ollamaBaseUrl = providerBaseUrls.ollamaBaseUrl.trim();
-      if (typeof providerBaseUrls.openrouterBaseUrl === 'string' && providerBaseUrls.openrouterBaseUrl.trim()) config.model.openrouterBaseUrl = providerBaseUrls.openrouterBaseUrl.trim();
-      if (typeof providerBaseUrls.nvidiaBaseUrl === 'string' && providerBaseUrls.nvidiaBaseUrl.trim()) config.model.nvidiaBaseUrl = providerBaseUrls.nvidiaBaseUrl.trim();
-      if (typeof providerBaseUrls.openaiBaseUrl === 'string' && providerBaseUrls.openaiBaseUrl.trim()) config.model.openaiBaseUrl = providerBaseUrls.openaiBaseUrl.trim();
-      if (typeof body?.telegram?.enabled === 'boolean') {
-        config.channels.telegram = config.channels.telegram || {};
-        config.channels.telegram.enabled = body.telegram.enabled;
+    if (await handleModelRoute({
+      req,
+      res,
+      url,
+      ctx: {
+        config,
+        agent,
+        parseBody,
+        sendJson,
+        saveConfig,
+        buildModelCatalog,
+        buildLegacyProviderModels,
+        normalizeModelSettings,
+        normalizeProviderId,
+        PROVIDER_ORDER
       }
+    })) return;
 
-      persistSecretUpdates(secretUpdates, clear);
-      if (oauthConfig.googleWorkspace && typeof oauthConfig.googleWorkspace === 'object') {
-        saveGoogleWorkspaceOAuthConfig(normalizeGoogleWorkspaceOAuthConfig({
-          clientId: oauthConfig.googleWorkspace.clientId,
-          clientSecret: oauthConfig.googleWorkspace.clientSecret,
-          scopes: oauthConfig.googleWorkspace.scopes
-        }));
+    if (await handleAuthRoute({
+      req,
+      res,
+      url,
+      ctx: {
+        config,
+        agent,
+        parseBody,
+        sendJson,
+        noCacheHeaders,
+        sanitizeHtml,
+        buildAuthCatalogPayload,
+        persistSecretUpdates,
+        saveConfig,
+        scanLocalAuthSources,
+        providerConnectionOverrides,
+        testProviderConnection,
+        testServiceConnection,
+        secretForService,
+        getAuthJob,
+        summarizeAuthJob,
+        findGoogleWorkspaceAuthJobByState,
+        completeGoogleWorkspaceAuthJob,
+        completeAuthJob,
+        startOpenAICodexOAuthJob,
+        startGoogleWorkspaceOAuthJob,
+        launchOauthCommand,
+        saveGoogleWorkspaceOAuthConfig,
+        normalizeGoogleWorkspaceOAuthConfig
       }
-      saveConfig(config);
-      agent.reloadTools();
+    })) return;
 
-      return sendJson(res, 200, {
-        ok: true,
-        catalog: await buildAuthCatalogPayload()
-      });
-    }
-
-    if (req.method === 'POST' && url.pathname === '/api/auth/prefill-local') {
-      const body = await parseBody(req);
-      const scan = scanLocalAuthSources();
-      const overwriteBaseUrls = body?.overwriteBaseUrls === true;
-      persistSecretUpdates(scan.secrets);
-      if (scan.providerBaseUrls.ollamaBaseUrl && (overwriteBaseUrls || !config.model.ollamaBaseUrl)) config.model.ollamaBaseUrl = scan.providerBaseUrls.ollamaBaseUrl;
-      if (scan.providerBaseUrls.openrouterBaseUrl && (overwriteBaseUrls || !config.model.openrouterBaseUrl)) config.model.openrouterBaseUrl = scan.providerBaseUrls.openrouterBaseUrl;
-      if (scan.providerBaseUrls.nvidiaBaseUrl && (overwriteBaseUrls || !config.model.nvidiaBaseUrl)) config.model.nvidiaBaseUrl = scan.providerBaseUrls.nvidiaBaseUrl;
-      if (scan.providerBaseUrls.openaiBaseUrl && (overwriteBaseUrls || !config.model.openaiBaseUrl)) config.model.openaiBaseUrl = scan.providerBaseUrls.openaiBaseUrl;
-      saveConfig(config);
-      agent.reloadTools();
-      return sendJson(res, 200, {
-        ok: true,
-        imported: {
-          openrouterApiKey: Boolean(scan.secrets.openrouterApiKey),
-          nvidiaApiKey: Boolean(scan.secrets.nvidiaApiKey),
-          openaiApiKey: Boolean(scan.secrets.openaiApiKey),
-          githubToken: Boolean(scan.secrets.githubToken),
-          huggingfaceApiKey: Boolean(scan.secrets.huggingfaceApiKey),
-          elevenlabsApiKey: Boolean(scan.secrets.elevenlabsApiKey),
-          telegramBotToken: Boolean(scan.secrets.telegramBotToken)
-        },
-        scannedFiles: scan.filesScanned,
-        catalog: await buildAuthCatalogPayload()
-      });
-    }
-
-    if (req.method === 'POST' && url.pathname === '/api/provider/test') {
-      const body = await parseBody(req);
-      const connection = providerConnectionOverrides(body.provider, body);
-      try {
-        return sendJson(res, 200, await testProviderConnection(connection));
-      } catch (error) {
-        return sendJson(res, 200, {
-          ok: false,
-          provider: connection.provider,
-          status: 'degraded',
-          error: String(error.message || error)
-        });
+    if (await handleConfigRoute({
+      req,
+      res,
+      url,
+      ctx: {
+        config,
+        agent,
+        parseBody,
+        sendJson,
+        saveConfig,
+        normalizeModelSettings,
+        normalizeProviderId,
+        reloadConfigSecrets,
+        buildModelCatalog,
+        scrubSecretsFromConfig,
+        buildCapabilitiesPayload,
+        getProviderConfigPayload,
+        buildAuthCatalogPayload,
+        startResearchDailyLoop,
+        stopResearchDailyLoop,
+        persistSecretUpdates,
+        importProviderSecretsFromOpenClaw
       }
-    }
+    })) return;
 
-    if (req.method === 'POST' && url.pathname === '/api/service/test') {
-      const body = await parseBody(req);
-      try {
-        return sendJson(res, 200, await testServiceConnection({
-          service: body.service,
-          secret: secretForService(String(body.service || '').trim().toLowerCase(), body.secret)
-        }));
-      } catch (error) {
-        return sendJson(res, 200, {
-          ok: false,
-          service: String(body.service || '').trim().toLowerCase(),
-          status: 'degraded',
-          error: String(error.message || error)
-        });
+    if (await handleAutonomyRoute({
+      req,
+      res,
+      url,
+      ctx: {
+        config,
+        agent,
+        parseBody,
+        sendJson,
+        saveConfig,
+        applyAutonomyMode,
+        autonomyMaster
       }
-    }
+    })) return;
 
-    if (req.method === 'GET' && url.pathname === '/api/auth/job') {
-      const id = String(url.searchParams.get('id') || '').trim();
-      const job = getAuthJob(id);
-      if (!job) return sendJson(res, 404, { error: 'auth_job_not_found' });
-      return sendJson(res, 200, { ok: true, job: summarizeAuthJob(job) });
-    }
-
-    if (req.method === 'GET' && url.pathname === '/oauth/google-workspace/callback') {
-      const state = String(url.searchParams.get('state') || '').trim();
-      const code = String(url.searchParams.get('code') || '').trim();
-      const error = String(url.searchParams.get('error') || '').trim();
-      const errorDescription = String(url.searchParams.get('error_description') || '').trim();
-      const job = findGoogleWorkspaceAuthJobByState(state);
-      if (!job) {
-        res.writeHead(404, noCacheHeaders('text/html; charset=utf-8'));
-        res.end('<html><body><h1>Google Workspace OAuth</h1><p>Auth job not found.</p></body></html>');
-        return;
+    if (await handleChatToolsRoute({
+      req,
+      res,
+      url,
+      ctx: {
+        agent,
+        parseBody,
+        sendJson,
+        pendingChats,
+        getOrStartChat,
+        withTimeout,
+        renderReplyHtml
       }
-      if (error) {
-        job.status = 'failed';
-        job.error = errorDescription || error;
-        job.updatedAt = Date.now();
-        res.writeHead(400, noCacheHeaders('text/html; charset=utf-8'));
-        res.end(`<html><body><h1>Google Workspace OAuth</h1><p>${sanitizeHtml(job.error)}</p></body></html>`);
-        return;
+    })) return;
+
+    if (await handleSkillsResearchRoute({
+      req,
+      res,
+      url,
+      ctx: {
+        agent,
+        parseBody,
+        sendJson
       }
-      if (!code) {
-        job.status = 'failed';
-        job.error = 'google_workspace_code_missing';
-        job.updatedAt = Date.now();
-        res.writeHead(400, noCacheHeaders('text/html; charset=utf-8'));
-        res.end('<html><body><h1>Google Workspace OAuth</h1><p>Missing authorization code.</p></body></html>');
-        return;
+    })) return;
+
+    if (await handleSessionsRoute({
+      req,
+      res,
+      url,
+      ctx: {
+        memory,
+        pendingChats,
+        parseBody,
+        sendJson,
+        sendApiError,
+        prunePendingChats,
+        estimateMessagesTokens,
+        renderReplyHtml
       }
-      try {
-        await completeGoogleWorkspaceAuthJob(job, code);
-        agent.reloadTools();
-        res.writeHead(200, noCacheHeaders('text/html; charset=utf-8'));
-        res.end('<html><body><h1>Google Workspace OAuth</h1><p>Authentication completed. You can close this window.</p></body></html>');
-        return;
-      } catch (callbackError) {
-        job.status = 'failed';
-        job.error = String(callbackError.message || callbackError);
-        job.updatedAt = Date.now();
-        res.writeHead(400, noCacheHeaders('text/html; charset=utf-8'));
-        res.end(`<html><body><h1>Google Workspace OAuth</h1><p>${sanitizeHtml(job.error)}</p></body></html>`);
-        return;
+    })) return;
+
+    if (await handleMissionsRoute({
+      req,
+      res,
+      url,
+      ctx: {
+        config,
+        missions,
+        parseBody,
+        sendJson,
+        buildMissionTimeline
       }
-    }
+    })) return;
 
-    if (req.method === 'POST' && url.pathname === '/api/auth/job/input') {
-      const body = await parseBody(req);
-      const out = completeAuthJob(body?.id, body?.input);
-      const code = out.ok ? 200 : 404;
-      return sendJson(res, code, out);
-    }
-
-    if (req.method === 'POST' && url.pathname === '/api/service/connect') {
-      const body = await parseBody(req);
-      const service = String(body?.service || '').trim().toLowerCase();
-      if (service === 'openai-oauth') {
-        return sendJson(res, 200, await startOpenAICodexOAuthJob());
+    if (await handleBrowserRoute({
+      req,
+      res,
+      url,
+      ctx: {
+        config,
+        agent,
+        parseBody,
+        sendJson,
+        saveConfig,
+        CDPBrowser,
+        launchDebugBrowser,
+        getBrowser: () => browser,
+        setBrowser: (nextBrowser) => { browser = nextBrowser; }
       }
-      if (service === 'google-workspace') {
-        return sendJson(res, 200, await startGoogleWorkspaceOAuthJob());
+    })) return;
+
+    if (await handleTelegramRoute({
+      req,
+      res,
+      url,
+      ctx: {
+        config,
+        parseBody,
+        sendJson,
+        saveConfig,
+        reloadConfigSecrets,
+        persistSecretUpdates,
+        runTelegramLoop,
+        stopTelegramLoop,
+        telegramLoopRunning,
+        telegramLoopStopRequested
       }
-      return sendJson(res, 200, launchOauthCommand(body.service));
-    }
-
-    if (req.method === 'GET' && url.pathname === '/api/config') {
-      reloadConfigSecrets();
-      normalizeModelSettings();
-      const catalog = await buildModelCatalog(config.model);
-      const sanitized = scrubSecretsFromConfig(config);
-      return sendJson(res, 200, {
-        model: sanitized.model,
-        runtime: sanitized.runtime,
-        research: sanitized.research,
-        integrations: sanitized.integrations,
-        browser: sanitized.browser,
-        channels: { telegram: { enabled: Boolean(config.channels?.telegram?.enabled), hasToken: Boolean(config.channels?.telegram?.botToken) } },
-        capabilities: buildCapabilitiesPayload(),
-        modelCatalog: catalog,
-        providerConfig: getProviderConfigPayload(),
-        authCatalog: await buildAuthCatalogPayload()
-      });
-    }
-
-    if (req.method === 'POST' && url.pathname === '/api/config') {
-      const body = await parseBody(req);
-      if (body.runtime && typeof body.runtime.shellEnabled === 'boolean') {
-        config.runtime.shellEnabled = body.runtime.shellEnabled;
-      }
-      if (body.runtime && typeof body.runtime.workspaceRoot === 'string' && body.runtime.workspaceRoot.trim()) {
-        config.runtime.workspaceRoot = body.runtime.workspaceRoot.trim();
-      }
-      if (body.runtime && typeof body.runtime.ownerControlMode === 'string' && body.runtime.ownerControlMode.trim()) {
-        config.runtime.ownerControlMode = body.runtime.ownerControlMode.trim();
-      }
-      if (body.runtime && typeof body.runtime.selfPokeEnabled === 'boolean') {
-        config.runtime.selfPokeEnabled = body.runtime.selfPokeEnabled;
-      }
-      if (body.runtime && Number.isFinite(body.runtime.toolCircuitFailureThreshold)) {
-        config.runtime.toolCircuitFailureThreshold = Number(body.runtime.toolCircuitFailureThreshold);
-      }
-      if (body.runtime && Number.isFinite(body.runtime.toolCircuitCooldownMs)) {
-        config.runtime.toolCircuitCooldownMs = Number(body.runtime.toolCircuitCooldownMs);
-      }
-      if (body.runtime && typeof body.runtime.autonomyMasterAutoStart === 'boolean') {
-        config.runtime.autonomyMasterAutoStart = body.runtime.autonomyMasterAutoStart;
-      }
-      if (body.runtime && typeof body.runtime.researchDailyEnabled === 'boolean') {
-        config.runtime.researchDailyEnabled = body.runtime.researchDailyEnabled;
-      }
-      if (body.runtime && Number.isFinite(body.runtime.researchScheduleHour)) {
-        config.runtime.researchScheduleHour = Number(body.runtime.researchScheduleHour);
-      }
-      if (body.runtime && typeof body.runtime.contextCompactionEnabled === 'boolean') {
-        config.runtime.contextCompactionEnabled = body.runtime.contextCompactionEnabled;
-      }
-      if (body.runtime && Number.isFinite(body.runtime.contextCompactTriggerPct)) {
-        config.runtime.contextCompactTriggerPct = Number(body.runtime.contextCompactTriggerPct);
-      }
-      if (body.runtime && Number.isFinite(body.runtime.contextCompactTargetPct)) {
-        config.runtime.contextCompactTargetPct = Number(body.runtime.contextCompactTargetPct);
-      }
-      if (body.runtime && Number.isFinite(body.runtime.contextHardFailPct)) {
-        config.runtime.contextHardFailPct = Number(body.runtime.contextHardFailPct);
-      }
-      if (body.runtime && Number.isFinite(body.runtime.contextProtectRecentTurns)) {
-        config.runtime.contextProtectRecentTurns = Number(body.runtime.contextProtectRecentTurns);
-      }
-      if (body.runtime && Number.isFinite(body.runtime.contextFallbackTokens)) {
-        config.runtime.contextFallbackTokens = Number(body.runtime.contextFallbackTokens);
-      }
-      if (body.runtime && Number.isFinite(body.runtime.maxToolIterations)) {
-        config.runtime.maxToolIterations = Number(body.runtime.maxToolIterations);
-      }
-      if (body.runtime && Number.isFinite(body.runtime.executorRetryAttempts)) {
-        config.runtime.executorRetryAttempts = Number(body.runtime.executorRetryAttempts);
-      }
-      if (body.runtime && Number.isFinite(body.runtime.executorRetryBackoffMs)) {
-        config.runtime.executorRetryBackoffMs = Number(body.runtime.executorRetryBackoffMs);
-      }
-      if (body.runtime && typeof body.runtime.autonomyMode === 'string') {
-        config.runtime.autonomyMode = body.runtime.autonomyMode;
-      }
-      if (body.runtime && typeof body.runtime.missionDefaultContinueUntilDone === 'boolean') {
-        config.runtime.missionDefaultContinueUntilDone = body.runtime.missionDefaultContinueUntilDone;
-      }
-      if (body.runtime && Number.isFinite(body.runtime.missionDefaultHardStepCap)) {
-        config.runtime.missionDefaultHardStepCap = Number(body.runtime.missionDefaultHardStepCap);
-      }
-      if (body.runtime && Number.isFinite(body.runtime.missionDefaultMaxRetries)) {
-        config.runtime.missionDefaultMaxRetries = Number(body.runtime.missionDefaultMaxRetries);
-      }
-      if (body.runtime && Number.isFinite(body.runtime.missionDefaultIntervalMs)) {
-        config.runtime.missionDefaultIntervalMs = Number(body.runtime.missionDefaultIntervalMs);
-      }
-      if (body.runtime && typeof body.runtime.enforceModelExecutionProfiles === 'boolean') {
-        config.runtime.enforceModelExecutionProfiles = body.runtime.enforceModelExecutionProfiles;
-      }
-      if (body.runtime && body.runtime.modelExecutionProfiles && typeof body.runtime.modelExecutionProfiles === 'object') {
-        const nextProfiles = {};
-        for (const tier of ['compact', 'balanced', 'full']) {
-          const source = body.runtime.modelExecutionProfiles?.[tier];
-          if (!source || typeof source !== 'object') continue;
-          const out = {};
-          if (Number.isFinite(source.maxHistoryMessages)) out.maxHistoryMessages = Number(source.maxHistoryMessages);
-          if (Number.isFinite(source.maxToolIterations)) out.maxToolIterations = Number(source.maxToolIterations);
-          if (Array.isArray(source.allowedTools)) {
-            out.allowedTools = source.allowedTools.map((tool) => String(tool || '').trim()).filter(Boolean);
-          }
-          nextProfiles[tier] = out;
-        }
-        config.runtime.modelExecutionProfiles = {
-          ...(config.runtime.modelExecutionProfiles || {}),
-          ...nextProfiles
-        };
-      }
-      if (body.runtime && body.runtime.autonomyPolicy && typeof body.runtime.autonomyPolicy === 'object') {
-        const nextPolicy = { ...(config.runtime.autonomyPolicy || {}) };
-        if (typeof body.runtime.autonomyPolicy.enabled === 'boolean') nextPolicy.enabled = body.runtime.autonomyPolicy.enabled;
-        if (typeof body.runtime.autonomyPolicy.mode === 'string') nextPolicy.mode = body.runtime.autonomyPolicy.mode.trim().toLowerCase() === 'plan' ? 'plan' : 'execute';
-        if (typeof body.runtime.autonomyPolicy.enforceSelfProtection === 'boolean') nextPolicy.enforceSelfProtection = body.runtime.autonomyPolicy.enforceSelfProtection;
-        if (typeof body.runtime.autonomyPolicy.blockShellSelfDestruct === 'boolean') nextPolicy.blockShellSelfDestruct = body.runtime.autonomyPolicy.blockShellSelfDestruct;
-        if (typeof body.runtime.autonomyPolicy.denyMutatingToolsInPlan === 'boolean') nextPolicy.denyMutatingToolsInPlan = body.runtime.autonomyPolicy.denyMutatingToolsInPlan;
-        if (typeof body.runtime.autonomyPolicy.allowRecoveryToolsInPlan === 'boolean') nextPolicy.allowRecoveryToolsInPlan = body.runtime.autonomyPolicy.allowRecoveryToolsInPlan;
-        config.runtime.autonomyPolicy = nextPolicy;
-      }
-      if (body.model && typeof body.model.provider === 'string' && body.model.provider.trim()) {
-        config.model.provider = normalizeProviderId(body.model.provider.trim());
-      }
-      if (body.model && typeof body.model.model === 'string' && body.model.model.trim()) {
-        config.model.model = body.model.model.trim().replace(/^generic\//, 'openai/');
-        config.model.providerModels = config.model.providerModels || {};
-        config.model.providerModels[config.model.provider] = config.model.model;
-      }
-      if (body.model && body.model.providerModels && typeof body.model.providerModels === 'object') {
-        config.model.providerModels = config.model.providerModels || {};
-        for (const [provider, model] of Object.entries(body.model.providerModels)) {
-          const normalizedProvider = normalizeProviderId(provider);
-          if (typeof model === 'string' && model.trim()) {
-            config.model.providerModels[normalizedProvider] = model.trim().replace(/^generic\//, 'openai/');
-          }
-        }
-      }
-      if (body.model && body.model.routing) {
-        config.model.routing = { ...config.model.routing, ...body.model.routing };
-        if (Array.isArray(body.model.routing.fallbackProviders)) {
-          config.model.routing.fallbackProviders = body.model.routing.fallbackProviders.map((provider) => normalizeProviderId(provider));
-        }
-      }
-      if (body.integrations?.googleWorkspace && typeof body.integrations.googleWorkspace.cliCommand === 'string') {
-        config.integrations.googleWorkspace.cliCommand = body.integrations.googleWorkspace.cliCommand.trim() || 'gws';
-      }
-      normalizeModelSettings();
-      saveConfig(config);
-      agent.reloadTools();
-      if (config.runtime.researchDailyEnabled) startResearchDailyLoop();
-      else stopResearchDailyLoop();
-      return sendJson(res, 200, { ok: true, runtime: config.runtime });
-    }
-
-    if (req.method === 'GET' && url.pathname === '/api/autonomy/mode') {
-      return sendJson(res, 200, {
-        mode: config.runtime.autonomyMode || 'standard',
-        runtime: config.runtime,
-        routing: config.model.routing
-      });
-    }
-
-    if (req.method === 'POST' && url.pathname === '/api/autonomy/mode') {
-      const body = await parseBody(req);
-      const mode = applyAutonomyMode(body.mode);
-      saveConfig(config);
-      agent.reloadTools();
-      return sendJson(res, 200, {
-        ok: true,
-        mode,
-        runtime: config.runtime,
-        routing: config.model.routing
-      });
-    }
-
-    if (req.method === 'GET' && url.pathname === '/api/autonomy/master/status') {
-      return sendJson(res, 200, { ok: true, status: autonomyMaster.getStatus() });
-    }
-
-    if (req.method === 'POST' && url.pathname === '/api/autonomy/master/start') {
-      const started = autonomyMaster.start();
-      return sendJson(res, 200, { ok: true, started, status: autonomyMaster.getStatus() });
-    }
-
-    if (req.method === 'POST' && url.pathname === '/api/autonomy/master/stop') {
-      const stopped = autonomyMaster.stop();
-      return sendJson(res, 200, { ok: true, stopped, status: autonomyMaster.getStatus() });
-    }
-
-    if (req.method === 'POST' && url.pathname === '/api/autonomy/master/cycle') {
-      const out = await autonomyMaster.runCycle();
-      return sendJson(res, 200, { ok: true, result: out });
-    }
-
-    if (req.method === 'POST' && url.pathname === '/api/autonomy/master/self-improve') {
-      const out = await autonomyMaster.selfImprove();
-      return sendJson(res, 200, { ok: true, result: out });
-    }
-
-    if (req.method === 'POST' && url.pathname === '/api/autonomy/master/learn-skills') {
-      const out = await autonomyMaster.learnSkills();
-      return sendJson(res, 200, { ok: true, result: out });
-    }
-
-    if (req.method === 'POST' && url.pathname === '/api/autonomy/master/self-test') {
-      const out = await autonomyMaster.fullSelfTest();
-      return sendJson(res, 200, { ok: true, result: out });
-    }
-
-    if (req.method === 'GET' && url.pathname === '/api/providers/config') {
-      reloadConfigSecrets();
-      normalizeModelSettings();
-      return sendJson(res, 200, getProviderConfigPayload());
-    }
-
-    if (req.method === 'POST' && url.pathname === '/api/providers/config') {
-      const body = await parseBody(req);
-      const up = body || {};
-      if (typeof up.ollamaBaseUrl === 'string') config.model.ollamaBaseUrl = up.ollamaBaseUrl.trim();
-      if (typeof up.openrouterBaseUrl === 'string') config.model.openrouterBaseUrl = up.openrouterBaseUrl.trim();
-      if (typeof up.nvidiaBaseUrl === 'string') config.model.nvidiaBaseUrl = up.nvidiaBaseUrl.trim();
-      if (typeof up.openaiBaseUrl === 'string') config.model.openaiBaseUrl = up.openaiBaseUrl.trim();
-      if (typeof up.genericBaseUrl === 'string') config.model.openaiBaseUrl = up.genericBaseUrl.trim();
-      const secretUpdates = {};
-      if (typeof up.openrouterApiKey === 'string') secretUpdates.openrouterApiKey = up.openrouterApiKey.trim();
-      if (typeof up.nvidiaApiKey === 'string') secretUpdates.nvidiaApiKey = up.nvidiaApiKey.trim();
-      if (typeof up.openaiApiKey === 'string') secretUpdates.openaiApiKey = up.openaiApiKey.trim();
-      if (typeof up.genericApiKey === 'string') secretUpdates.openaiApiKey = up.genericApiKey.trim();
-      persistSecretUpdates(secretUpdates);
-      normalizeModelSettings();
-      saveConfig(config);
-      agent.reloadTools();
-      return sendJson(res, 200, { ok: true });
-    }
-
-    if (req.method === 'POST' && url.pathname === '/api/providers/import-openclaw') {
-      const imported = importProviderSecretsFromOpenClaw();
-      persistSecretUpdates({
-        openrouterApiKey: imported.openrouterApiKey || '',
-        nvidiaApiKey: imported.nvidiaApiKey || '',
-        openaiApiKey: imported.openaiApiKey || '',
-        githubToken: imported.githubToken || '',
-        huggingfaceApiKey: imported.huggingfaceApiKey || '',
-        elevenlabsApiKey: imported.elevenlabsApiKey || '',
-        telegramBotToken: imported.telegramBotToken || ''
-      });
-      if (imported.openrouterBaseUrl) config.model.openrouterBaseUrl = imported.openrouterBaseUrl;
-      if (imported.nvidiaBaseUrl) config.model.nvidiaBaseUrl = imported.nvidiaBaseUrl;
-      if (imported.openaiBaseUrl) config.model.openaiBaseUrl = imported.openaiBaseUrl;
-      if (imported.ollamaBaseUrl) config.model.ollamaBaseUrl = imported.ollamaBaseUrl;
-      normalizeModelSettings();
-      saveConfig(config);
-      agent.reloadTools();
-      return sendJson(res, 200, {
-        ok: true,
-        imported: {
-          openrouterApiKey: Boolean(imported.openrouterApiKey),
-          nvidiaApiKey: Boolean(imported.nvidiaApiKey),
-          openaiApiKey: Boolean(imported.openaiApiKey),
-          githubToken: Boolean(imported.githubToken),
-          huggingfaceApiKey: Boolean(imported.huggingfaceApiKey),
-          elevenlabsApiKey: Boolean(imported.elevenlabsApiKey),
-          telegramBotToken: Boolean(imported.telegramBotToken),
-          openrouterBaseUrl: imported.openrouterBaseUrl || config.model.openrouterBaseUrl,
-          nvidiaBaseUrl: imported.nvidiaBaseUrl || config.model.nvidiaBaseUrl,
-          openaiBaseUrl: imported.openaiBaseUrl || config.model.openaiBaseUrl,
-          ollamaBaseUrl: imported.ollamaBaseUrl || config.model.ollamaBaseUrl
-        }
-      });
-    }
-
-    if (req.method === 'GET' && url.pathname === '/api/models') {
-      normalizeModelSettings();
-      const provider = normalizeProviderId(url.searchParams.get('provider') || config.model.provider || 'ollama');
-      if (!PROVIDER_ORDER.includes(provider)) {
-        return sendJson(res, 400, { error: `unsupported_provider:${provider}` });
-      }
-      const models = await buildLegacyProviderModels(config.model, provider);
-      return sendJson(res, 200, { provider, models });
-    }
-
-    if (req.method === 'GET' && url.pathname === '/api/model/current') {
-      return sendJson(res, 200, agent.getCurrentModel());
-    }
-
-    if (req.method === 'POST' && url.pathname === '/api/model/switch') {
-      const body = await parseBody(req);
-      const out = agent.switchModel(normalizeProviderId(body.provider), String(body.model || '').replace(/^generic\//, 'openai/'));
-      normalizeModelSettings();
-      saveConfig(config);
-      return sendJson(res, 200, out);
-    }
-
-    if (req.method === 'POST' && url.pathname === '/api/chat') {
-      const body = await parseBody(req);
-      const sessionId = String(body.sessionId || '').trim();
-      const message = String(body.message || '').trim();
-      if (!sessionId) return sendJson(res, 400, { error: 'sessionId is required' });
-      if (!message) return sendJson(res, 400, { error: 'message is required' });
-
-      const existing = pendingChats.get(sessionId);
-      if (existing) {
-        return sendJson(res, 202, {
-          ok: true,
-          pending: true,
-          sessionId,
-          startedAt: existing.startedAt,
-          note: 'chat_already_running_for_session'
-        });
-      }
-
-      const entry = getOrStartChat(sessionId, message);
-      try {
-        const out = await withTimeout(entry.promise, 20 * 1000, 'chat_timeout');
-        return sendJson(res, 200, { ...out, replyHtml: renderReplyHtml(out.reply) });
-      } catch (error) {
-        if (String(error.message || error) === 'chat_timeout') {
-          return sendJson(res, 202, {
-            ok: true,
-            pending: true,
-            sessionId,
-            startedAt: entry.startedAt,
-            note: 'chat_still_running'
-          });
-        }
-        throw error;
-      }
-    }
-
-    if (req.method === 'GET' && url.pathname === '/api/chat/pending') {
-      const sessionId = String(url.searchParams.get('sessionId') || '').trim();
-      if (!sessionId) return sendJson(res, 400, { error: 'sessionId is required' });
-      const existing = pendingChats.get(sessionId);
-      if (!existing) return sendJson(res, 200, { ok: true, pending: false, sessionId });
-      return sendJson(res, 200, {
-        ok: true,
-        pending: true,
-        sessionId,
-        startedAt: existing.startedAt
-      });
-    }
-
-    if (req.method === 'POST' && url.pathname === '/api/tool/run') {
-      const body = await parseBody(req);
-      const out = await agent.runTool(body.name, body.args || {});
-      return sendJson(res, 200, { ok: true, result: out });
-    }
-
-    if (req.method === 'GET' && url.pathname === '/api/context/status') {
-      const sessionId = String(url.searchParams.get('sessionId') || '').trim();
-      const out = agent.getContextStatus(sessionId);
-      return sendJson(res, 200, out);
-    }
-
-    if (req.method === 'POST' && url.pathname === '/api/context/compact') {
-      const body = await parseBody(req);
-      const out = agent.compactSessionContext({
-        sessionId: body.sessionId,
-        dryRun: Boolean(body.dryRun)
-      });
-      return sendJson(res, 200, out);
-    }
-
-    if (req.method === 'GET' && url.pathname === '/api/context/compactions') {
-      const sessionId = String(url.searchParams.get('sessionId') || '').trim();
-      const limit = Number(url.searchParams.get('limit') || 20);
-      const out = agent.listContextCompactions(sessionId, limit);
-      return sendJson(res, 200, out);
-    }
-
-    if (req.method === 'GET' && url.pathname === '/api/context/artifacts') {
-      const sessionId = String(url.searchParams.get('sessionId') || '').trim();
-      const limit = Number(url.searchParams.get('limit') || 40);
-      const out = agent.listContextArtifacts(sessionId, limit);
-      return sendJson(res, 200, out);
-    }
-
-    if (req.method === 'GET' && url.pathname === '/api/skills') {
-      const out = await agent.runTool('skill_list', {});
-      return sendJson(res, 200, out);
-    }
-
-    if (req.method === 'POST' && url.pathname === '/api/skills/install') {
-      const body = await parseBody(req);
-      const out = await agent.runTool('skill_install', body || {});
-      return sendJson(res, 200, out);
-    }
-
-    if (req.method === 'POST' && url.pathname === '/api/skills/review') {
-      const body = await parseBody(req);
-      const out = await agent.runTool('skill_review', { name: body.name });
-      return sendJson(res, 200, out);
-    }
-
-    if (req.method === 'POST' && url.pathname === '/api/skills/approve') {
-      const body = await parseBody(req);
-      const out = await agent.runTool('skill_approve', { name: body.name });
-      return sendJson(res, 200, out);
-    }
-
-    if (req.method === 'POST' && url.pathname === '/api/skills/execute') {
-      const body = await parseBody(req);
-      const out = await agent.runTool('skill_execute', { name: body.name, args: body.args || {} });
-      return sendJson(res, 200, out);
-    }
-
-    if (req.method === 'POST' && url.pathname === '/api/skills/uninstall') {
-      const body = await parseBody(req);
-      const out = await agent.runTool('skill_uninstall', { name: body.name });
-      return sendJson(res, 200, out);
-    }
-
-    if (req.method === 'GET' && url.pathname === '/api/email/status') {
-      const out = await agent.runTool('email_status', {});
-      return sendJson(res, 200, out);
-    }
-
-    if (req.method === 'POST' && url.pathname === '/api/email/send') {
-      const body = await parseBody(req);
-      const out = await agent.runTool('email_send', body || {});
-      return sendJson(res, 200, out);
-    }
-
-    if (req.method === 'POST' && url.pathname === '/api/email/list') {
-      const body = await parseBody(req);
-      const out = await agent.runTool('email_list', body || {});
-      return sendJson(res, 200, out);
-    }
-
-    if (req.method === 'POST' && url.pathname === '/api/email/read') {
-      const body = await parseBody(req);
-      const out = await agent.runTool('email_read', body || {});
-      return sendJson(res, 200, out);
-    }
-
-    if (req.method === 'POST' && url.pathname === '/api/gworkspace/call') {
-      const body = await parseBody(req);
-      const out = await agent.runTool('gworkspace_call', body || {});
-      return sendJson(res, 200, out);
-    }
-
-    if (req.method === 'POST' && url.pathname === '/api/research/run') {
-      const body = await parseBody(req);
-      const out = await agent.runTool('research_run_daily', { simulate: Boolean(body?.simulate) });
-      return sendJson(res, 200, out);
-    }
-
-    if (req.method === 'GET' && url.pathname === '/api/research/recent') {
-      const out = await agent.runTool('research_list_recent', {
-        limit: Number(url.searchParams.get('limit') || 10)
-      });
-      return sendJson(res, 200, out);
-    }
-
-    if (req.method === 'GET' && url.pathname === '/api/research/queue') {
-      const out = await agent.runTool('research_review_queue', {
-        limit: Number(url.searchParams.get('limit') || 50)
-      });
-      return sendJson(res, 200, out);
-    }
-
-    if (req.method === 'POST' && url.pathname === '/api/research/approve') {
-      const body = await parseBody(req);
-      const out = await agent.runTool('research_approve', {
-        url: String(body?.url || ''),
-        note: String(body?.note || '')
-      });
-      return sendJson(res, 200, out);
-    }
-
-    if (req.method === 'GET' && url.pathname === '/api/sessions') {
-      const limit = Number(url.searchParams.get('limit') || 80);
-      return sendJson(res, 200, { sessions: memory.listSessions(limit) });
-    }
-
-    if (req.method === 'POST' && url.pathname === '/api/sessions') {
-      const body = await parseBody(req);
-      const sessionId = String(body?.sessionId || '').trim();
-      if (!sessionId) return sendApiError(res, 400, 'session_id_required', 'sessionId is required');
-      const session = memory.createSession(sessionId);
-      return sendJson(res, 200, { ok: true, session });
-    }
-
-    if (req.method === 'POST' && url.pathname === '/api/sessions/import') {
-      const body = await parseBody(req);
-      const imported = memory.importSession({
-        sessionId: String(body?.sessionId || '').trim(),
-        messages: Array.isArray(body?.messages) ? body.messages : []
-      });
-      return sendJson(res, 200, { ok: true, session: imported });
-    }
-
-    if (req.method === 'POST' && url.pathname === '/api/sessions/clone') {
-      const body = await parseBody(req);
-      const session = memory.cloneSession({
-        sourceSessionId: String(body?.sourceSessionId || '').trim(),
-        targetSessionId: String(body?.targetSessionId || '').trim()
-      });
-      return sendJson(res, 200, { ok: true, session });
-    }
-
-    if (req.method === 'POST' && url.pathname === '/api/sessions/clear') {
-      const body = await parseBody(req);
-      const keepSessionId = String(body?.keepSessionId || '').trim();
-      const force = Boolean(body?.force);
-      const operationId = String(body?.operationId || '').trim();
-      if (!keepSessionId && !force) {
-        return sendApiError(
-          res,
-          400,
-          'keep_session_required',
-          'keepSessionId is required unless force=true'
-        );
-      }
-      const out = memory.clearSessions({ keepSessionId, operationId });
-      const pendingRemoved = prunePendingChats({ keepSessionId });
-      return sendJson(res, 200, { ok: true, ...out, pendingRemoved });
-    }
-
-    if (req.method === 'DELETE' && url.pathname.startsWith('/api/sessions/')) {
-      const parts = url.pathname.split('/');
-      const sessionId = decodeURIComponent(parts[3] || '');
-      if (!sessionId || parts.length !== 4) {
-        return sendApiError(res, 400, 'session_id_required', 'sessionId is required');
-      }
-      const operationId = String(url.searchParams.get('operationId') || '').trim();
-      const out = memory.deleteSession(sessionId, { operationId });
-      const pendingRemoved = pendingChats.delete(sessionId) ? 1 : 0;
-      return sendJson(res, 200, { ok: true, ...out, pendingRemoved });
-    }
-
-    if (req.method === 'GET' && url.pathname === '/api/operations/recent') {
-      const limit = Number(url.searchParams.get('limit') || 50);
-      return sendJson(res, 200, {
-        contract_version: '2026-04-02.operation-receipts.v1',
-        receipts: memory.listOperationReceipts(limit)
-      });
-    }
-
-    if (req.method === 'GET' && url.pathname.startsWith('/api/sessions/')) {
-      if (url.pathname.endsWith('/activity')) {
-        const parts = url.pathname.split('/');
-        const sessionId = decodeURIComponent(parts[3] || '');
-        const since = String(url.searchParams.get('since') || '');
-        const pending = pendingChats.get(sessionId);
-        const toolRuns = memory.getToolRunsSince(sessionId, since, 80);
-        const messages = memory.getMessagesSince(sessionId, since, 80);
-        return sendJson(res, 200, {
-          sessionId,
-          since: since || null,
-          pending: Boolean(pending),
-          pendingStartedAt: pending?.startedAt || null,
-          toolRuns,
-          messages
-        });
-      }
-      if (url.pathname.endsWith('/export')) {
-        const parts = url.pathname.split('/');
-        const sessionId = decodeURIComponent(parts[3] || '');
-        const summary = memory.getSessionSummary(sessionId);
-        if (!summary) return sendJson(res, 404, { error: 'session_not_found' });
-        const messages = memory.getAllMessagesForSession(sessionId);
-        return sendJson(res, 200, {
-          sessionId,
-          summary,
-          exportedAt: new Date().toISOString(),
-          estimatedTokens: estimateMessagesTokens(messages.map((m) => ({ role: m.role, content: m.content }))),
-          messages
-        });
-      }
-      const sessionId = decodeURIComponent(url.pathname.split('/').pop() || '');
-      const skipHtml = url.searchParams.get('html') === 'false';
-      const msgs = memory.getMessages(sessionId || '', 500)
-        .map((m) => ({
-          ...m,
-          html: (!skipHtml && m.role === 'assistant') ? renderReplyHtml(m.content || '') : null
-        }));
-      return sendJson(res, 200, { sessionId, messages: msgs });
-    }
-
-    if (req.method === 'GET' && url.pathname === '/api/missions') {
-      return sendJson(res, 200, { missions: missions.list() });
-    }
-
-    if (req.method === 'GET' && url.pathname === '/api/missions/status') {
-      const id = url.searchParams.get('id') || '';
-      const mission = missions.get(id);
-      if (!mission) return sendJson(res, 404, { error: 'mission_not_found' });
-      return sendJson(res, 200, { mission });
-    }
-
-    if (req.method === 'GET' && url.pathname === '/api/missions/timeline') {
-      const id = String(url.searchParams.get('id') || '').trim();
-      const mission = missions.get(id);
-      if (!mission) return sendJson(res, 404, { error: 'mission_not_found' });
-      return sendJson(res, 200, buildMissionTimeline(mission));
-    }
-
-    if (req.method === 'POST' && url.pathname === '/api/missions/start') {
-      const body = await parseBody(req);
-      const out = missions.start({
-        goal: body.goal,
-        maxSteps: body.maxSteps,
-        intervalMs: body.intervalMs ?? config.runtime.missionDefaultIntervalMs,
-        maxRetries: body.maxRetries ?? config.runtime.missionDefaultMaxRetries,
-        continueUntilDone: body.continueUntilDone ?? config.runtime.missionDefaultContinueUntilDone,
-        hardStepCap: body.hardStepCap ?? config.runtime.missionDefaultHardStepCap
-      });
-      return sendJson(res, 200, out);
-    }
-
-    if (req.method === 'POST' && url.pathname === '/api/missions/stop') {
-      const body = await parseBody(req);
-      return sendJson(res, 200, missions.stop(body.id));
-    }
-
-    if (req.method === 'GET' && url.pathname === '/api/browser/status') {
-      const out = await browser.status();
-      return sendJson(res, 200, out);
-    }
-
-    if (req.method === 'POST' && url.pathname === '/api/browser/navigate') {
-      const body = await parseBody(req);
-      return sendJson(res, 200, await browser.navigate(body.url));
-    }
-
-    if (req.method === 'POST' && url.pathname === '/api/browser/search') {
-      const body = await parseBody(req);
-      return sendJson(res, 200, await browser.search(body.query));
-    }
-
-    if (req.method === 'POST' && url.pathname === '/api/browser/extract') {
-      const body = await parseBody(req);
-      return sendJson(res, 200, await browser.extractText(body.selector || 'body'));
-    }
-
-    if (req.method === 'GET' && url.pathname === '/api/browser/config') {
-      return sendJson(res, 200, { cdpUrl: config.browser?.cdpUrl || 'http://127.0.0.1:9222' });
-    }
-
-    if (req.method === 'POST' && url.pathname === '/api/browser/config') {
-      const body = await parseBody(req);
-      if (!config.browser) config.browser = {};
-      if (typeof body.cdpUrl === 'string' && body.cdpUrl.trim()) {
-        config.browser.cdpUrl = body.cdpUrl.trim();
-      }
-      saveConfig(config);
-      browser = new CDPBrowser(config.browser.cdpUrl);
-      agent.reloadTools();
-      return sendJson(res, 200, { ok: true, cdpUrl: config.browser.cdpUrl });
-    }
-
-    if (req.method === 'POST' && url.pathname === '/api/browser/launch') {
-      const out = await launchDebugBrowser();
-      return sendJson(res, 200, out);
-    }
-
-    if (req.method === 'GET' && url.pathname === '/api/telegram/config') {
-      reloadConfigSecrets();
-      const tg = config.channels.telegram || { botToken: '', enabled: false };
-      return sendJson(res, 200, { enabled: Boolean(tg.enabled), hasToken: Boolean(tg.botToken) });
-    }
-
-    if (req.method === 'POST' && url.pathname === '/api/telegram/config') {
-      const body = await parseBody(req);
-      const tg = config.channels.telegram || {};
-      const secretUpdates = {};
-      if (typeof body.botToken === 'string') secretUpdates.telegramBotToken = body.botToken.trim();
-      if (typeof body.enabled === 'boolean') tg.enabled = body.enabled;
-      config.channels.telegram = tg;
-      persistSecretUpdates(secretUpdates);
-      saveConfig(config);
-      return sendJson(res, 200, {
-        ok: true,
-        enabled: Boolean(config.channels?.telegram?.enabled),
-        hasToken: Boolean(config.channels?.telegram?.botToken)
-      });
-    }
-
-    if (req.method === 'GET' && url.pathname === '/api/telegram/status') {
-      return sendJson(res, 200, { running: telegramLoopRunning, stopRequested: telegramLoopStopRequested });
-    }
-
-    if (req.method === 'POST' && url.pathname === '/api/telegram/start') {
-      await runTelegramLoop();
-      return sendJson(res, 200, { ok: true, running: telegramLoopRunning });
-    }
-
-    if (req.method === 'POST' && url.pathname === '/api/telegram/stop') {
-      await stopTelegramLoop();
-      return sendJson(res, 200, { ok: true, running: telegramLoopRunning });
-    }
-
-    if (req.method === 'GET' && (url.pathname === '/' || url.pathname === '/index.html')) {
-      const html = fs.readFileSync(path.join(process.cwd(), 'src/ui/index.html'), 'utf8');
-      res.writeHead(200, noCacheHeaders('text/html; charset=utf-8'));
-      return res.end(html);
-    }
+    })) return;
+
+    if (await handleUiRoute({
+      req,
+      res,
+      url,
+      ctx: { noCacheHeaders }
+    })) return;
 
     return sendApiError(res, 404, 'not_found', 'Unknown API route');
   } catch (error) {

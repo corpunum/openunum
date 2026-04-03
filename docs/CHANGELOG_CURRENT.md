@@ -1,5 +1,30 @@
 # Changelog (Current Consolidated)
 
+Date: 2026-04-03
+
+## WebUI Upgrade + Session Switching Fix + Docs Refresh
+
+0. Updated flagship `src/ui/index.html` to a Gemini-inspired glass visual direction without dropping existing backend feature wiring.
+
+1. Fixed chat session switching bug in WebUI:
+   - pending run handling is now scoped per originating `sessionId`
+   - pending polling uses request-scoped session targets instead of mutable global state
+   - switching sessions during a pending run no longer cross-wires message/activity polling
+
+2. Reduced menu label ambiguity and repetition:
+   - standardized sidebar groups to `Chat`, `Missions`, `Runtime`, `Settings`
+   - updated submenu/view labels (for example `Execution Trace`, `Provider Vault`, `Browser Ops`, `Control Plane API`)
+
+3. Added OAuth-safe smoke coverage:
+   - new script `scripts/ui-smoke-noauth.mjs`
+   - new npm command `pnpm smoke:ui:noauth`
+   - validates UI/API surfaces while intentionally avoiding OAuth launcher endpoints (`/api/service/connect`, `/api/auth/job/input`)
+
+4. Completed server refactor checkpoint:
+   - route handlers extracted under `src/server/routes/*.mjs`
+   - runtime helpers extracted under `src/server/services/*.mjs`
+   - `src/server.mjs` now acts as composition/distribution shell across route/service modules
+
 Date: 2026-04-02
 
 ## Kernel/Overlay Contracts + Session Destruction Reliability

@@ -27,7 +27,20 @@ pnpm e2e
 
 Always run before/after major changes.
 
-## 3. Systemd User Service
+## 3. OAuth-Safe UI Smoke Gate
+
+Use this for routine frontend/backend wiring checks without launching GitHub/Google OAuth approval windows:
+
+```bash
+cd /home/corp-unum/openunum
+pnpm smoke:ui:noauth
+```
+
+This flow intentionally avoids:
+- `POST /api/service/connect`
+- `POST /api/auth/job/input`
+
+## 4. Systemd User Service
 
 Install:
 ```bash
@@ -42,14 +55,14 @@ systemctl --user restart openunum.service
 journalctl --user -u openunum.service -n 200 --no-pager
 ```
 
-## 4. Recommended Runtime Baseline
+## 5. Recommended Runtime Baseline
 
 For high autonomy stability:
 - `autonomyMode=relentless`
 - `shellEnabled=true`
 - strict provider routing lock when model consistency matters
 
-## 5. Browser Automation Checklist
+## 6. Browser Automation Checklist
 
 1. Verify config endpoint:
 ```bash
@@ -64,7 +77,7 @@ curl -sS http://127.0.0.1:18880/api/browser/status
 curl -sS -X POST http://127.0.0.1:18880/api/browser/launch -H 'Content-Type: application/json' -d '{}'
 ```
 
-## 6. Telegram Checklist
+## 7. Telegram Checklist
 
 1. Save token via API/UI.
 2. Start loop:
@@ -76,7 +89,7 @@ curl -sS -X POST http://127.0.0.1:18880/api/telegram/start -H 'Content-Type: app
 curl -sS http://127.0.0.1:18880/api/telegram/status
 ```
 
-## 7. Data / Logs
+## 8. Data / Logs
 
 - Config: `~/.openunum/openunum.json`
 - DB: `~/.openunum/openunum.db`
@@ -88,7 +101,7 @@ sqlite3 ~/.openunum/openunum.db '.tables'
 sqlite3 ~/.openunum/openunum.db 'select tool_name, ok, created_at from tool_runs order by id desc limit 20;'
 ```
 
-## 8. Troubleshooting
+## 9. Troubleshooting
 
 ### Symptom: "No response generated"
 - Check provider/model reachability.
@@ -119,3 +132,8 @@ curl -sS http://127.0.0.1:18880/api/providers/config
 - Inspect mission status and tool proof counts.
 - Reduce ambiguity in prompt (artifact/path required).
 - Increase hard step cap if the task is large.
+
+### Symptom: OAuth browser/terminal prompts appear during smoke testing
+- Do not click provider `Connect` actions during routine smoke tests.
+- Run `pnpm smoke:ui:noauth` for safe verification.
+- Reserve OAuth launcher checks for explicit auth-flow validation runs.

@@ -4,18 +4,23 @@ UI source: `src/ui/index.html`
 
 ## 1. Structure
 
-- Left fixed menu with categories/submenus
+- Left fixed menu with grouped categories and non-repeating labels:
+  - `Chat`
+  - `Missions`
+  - `Runtime`
+  - `Settings`
 - Center dynamic panel switched by selected submenu
 - Chat is a dedicated center view
 
 Views:
-- Chat
-- Operator Tools
+- Chat Terminal
+- Execution Trace
 - Model Routing
-- Provider Config
-- Browser Control
-- Telegram
-- Missions
+- Provider Vault
+- Browser Ops
+- Telegram Bridge
+- Mission Runner
+- Control Plane API
 
 ## 2. Dropdown-First Configuration
 
@@ -39,6 +44,8 @@ User-defined free text remains for:
 - expandable execution trace (`details/summary`)
 - duplicate-send guard while one request is active
 - pending-run polling: UI continues waiting and resolves from saved session messages
+- pending state is tracked per session id, not globally
+- session switch is allowed while another session has a pending run
 - `/auto <goal>` command in chat: starts a mission loop and auto-polls until completion
 - default auto-escalation toggle (`Auto: On/Off`) in chat header:
   when enabled, planning-style replies are automatically escalated into mission continuation
@@ -65,6 +72,8 @@ Trace panel includes:
 Local browser storage keys:
 - `openunum_session`
 - `openunum_mission`
+- `openunum_auto_escalate`
+- `openunum_live_activity`
 
 Persistence behavior:
 - chat/session history is stored locally in SQLite on server side (`~/.openunum/openunum.db`)
@@ -84,3 +93,16 @@ On load:
 ## 7. Mobile Behavior
 
 At smaller widths, layout collapses into stacked menu + center panel while preserving same view logic.
+
+## 8. OAuth-Safe Smoke Testing
+
+Routine UI/API smoke tests should avoid OAuth launch endpoints.
+
+Use:
+```bash
+pnpm smoke:ui:noauth
+```
+
+This intentionally does not call:
+- `POST /api/service/connect`
+- `POST /api/auth/job/input`

@@ -1,10 +1,10 @@
 # Project State Snapshot
 
-Snapshot date: 2026-03-30
+Snapshot date: 2026-04-03
 
 ## What Works End-to-End
 
-- Web UI chat with in-flight animation and expandable execution traces
+- Web UI chat with in-flight animation, expandable execution traces, and Gemini-style visual shell
 - Provider/model selection and ranked model catalog loading
 - Strict provider locking and autonomy mode presets
 - Tool execution with retry/backoff via executor daemon
@@ -12,6 +12,8 @@ Snapshot date: 2026-03-30
 - Telegram channel polling and send loop
 - Mission runner with proof-based done criteria + retries + hard caps
 - Memory persistence and strategy outcome reuse
+- Session-safe pending chat handling during cross-session switching
+- Modularized server route/service layer (`src/server/routes`, `src/server/services`)
 
 ## Reliability Mechanisms
 
@@ -32,6 +34,7 @@ Snapshot date: 2026-03-30
 cd /home/corp-unum/openunum
 pnpm install
 pnpm e2e
+pnpm smoke:ui:noauth
 node src/server.mjs
 curl -sS http://127.0.0.1:18880/api/health
 curl -sS http://127.0.0.1:18880/api/config

@@ -6,27 +6,27 @@
   <title>OpenUnum Console</title>
   <style>
     :root {
-      --bg: #0a1020;
-      --bg2: #101b35;
-      --panel: #121f3c;
-      --panel2: #17284d;
-      --text: #eaf1ff;
-      --muted: #92a5c9;
-      --line: #2a4070;
-      --accent: #16b9d4;
+      --bg: #02040a;
+      --bg2: #060b14;
+      --panel: rgba(10, 16, 30, .76);
+      --panel2: rgba(9, 14, 26, .84);
+      --text: #eaf2ff;
+      --muted: #8ba2c4;
+      --line: rgba(81, 110, 153, .34);
+      --accent: #4f8dfc;
       --good: #22c55e;
-      --warn: #eab308;
+      --warn: #f59e0b;
       --bad: #ef4444;
     }
     * { box-sizing: border-box; }
     body {
       margin: 0;
       color: var(--text);
-      font-family: "IBM Plex Sans", "Manrope", system-ui, sans-serif;
+      font-family: "Manrope", "Avenir Next", "Segoe UI", system-ui, sans-serif;
       background:
-        radial-gradient(900px 520px at 92% -5%, #173565 0%, transparent 58%),
-        radial-gradient(760px 460px at -12% 8%, #2d164e 0%, transparent 52%),
-        linear-gradient(162deg, var(--bg), var(--bg2));
+        radial-gradient(900px 520px at 104% -10%, rgba(59,130,246,.28) 0%, transparent 60%),
+        radial-gradient(780px 460px at -8% 0%, rgba(22,163,184,.18) 0%, transparent 56%),
+        linear-gradient(164deg, var(--bg), var(--bg2));
       min-height: 100vh;
     }
     .layout {
@@ -39,17 +39,18 @@
       top: 0;
       height: 100vh;
       overflow: auto;
-      border-right: 1px solid var(--line);
-      background: linear-gradient(180deg, #0f1b34, #0c162b);
-      padding: 12px;
+      border-right: 1px solid rgba(109, 138, 182, .22);
+      background: linear-gradient(180deg, rgba(7, 12, 23, .7), rgba(4, 9, 17, .84));
+      backdrop-filter: blur(14px);
+      padding: 14px 12px;
     }
-    .brand { font-weight: 700; letter-spacing: .2px; margin-bottom: 4px; }
-    .status { color: var(--muted); font-size: 12px; margin-bottom: 12px; }
+    .brand { font-weight: 800; letter-spacing: .2px; margin-bottom: 4px; font-size: 18px; }
+    .status { color: var(--muted); font-size: 11px; margin-bottom: 12px; font-weight: 600; }
     details {
-      border: 1px solid var(--line);
-      border-radius: 12px;
+      border: 1px solid rgba(88, 113, 154, .3);
+      border-radius: 16px;
       margin-bottom: 10px;
-      background: linear-gradient(180deg, #111f3c, #0f1a32);
+      background: linear-gradient(180deg, rgba(16, 26, 47, .46), rgba(10, 17, 32, .64));
       overflow: hidden;
     }
     summary {
@@ -60,7 +61,7 @@
       text-transform: uppercase;
       letter-spacing: .6px;
       color: #d8e7ff;
-      border-bottom: 1px solid rgba(42,64,112,.45);
+      border-bottom: 1px solid rgba(73, 98, 142, .35);
     }
     summary::-webkit-details-marker { display: none; }
     .submenu { display: grid; padding: 8px; gap: 6px; }
@@ -72,9 +73,9 @@
       padding: 8px;
     }
     .session-item {
-      border: 1px solid #2f4a80;
-      background: linear-gradient(180deg, #172848, #14233f);
-      border-radius: 10px;
+      border: 1px solid rgba(85, 112, 156, .38);
+      background: linear-gradient(180deg, rgba(18, 31, 56, .92), rgba(14, 25, 45, .92));
+      border-radius: 12px;
       padding: 8px 9px;
       cursor: pointer;
       text-align: left;
@@ -82,12 +83,12 @@
       width: 100%;
     }
     .session-item:hover {
-      border-color: #4d72bd;
-      background: linear-gradient(180deg, #1b3158, #162a4b);
+      border-color: #5b82cf;
+      background: linear-gradient(180deg, rgba(26, 44, 77, .95), rgba(19, 34, 60, .95));
     }
     .session-item.active {
-      border-color: #3dd4ee;
-      background: linear-gradient(180deg, #11687a, #0f5263);
+      border-color: rgba(96, 165, 250, .95);
+      background: linear-gradient(180deg, rgba(25, 55, 99, .95), rgba(18, 41, 76, .95));
     }
     .session-title {
       font-size: 12px;
@@ -111,18 +112,19 @@
       color: #7e9bcb;
     }
     .menu-btn {
-      border: 1px solid #2f4a80;
-      background: linear-gradient(180deg, #172848, #14233f);
+      border: 1px solid rgba(85, 112, 155, .38);
+      background: linear-gradient(180deg, rgba(17, 28, 50, .84), rgba(13, 22, 41, .88));
       color: var(--text);
-      border-radius: 10px;
-      padding: 8px 10px;
+      border-radius: 14px;
+      padding: 9px 11px;
       text-align: left;
       cursor: pointer;
       font-size: 13px;
+      font-weight: 600;
     }
     .menu-btn.active {
-      border-color: #3dd4ee;
-      background: linear-gradient(180deg, #11687a, #0f5263);
+      border-color: rgba(96, 165, 250, .85);
+      background: linear-gradient(180deg, rgba(37, 99, 235, .36), rgba(29, 78, 216, .28));
     }
     .main {
       height: 100vh;
@@ -131,13 +133,13 @@
       min-width: 0;
     }
     .header {
-      border-bottom: 1px solid var(--line);
+      border-bottom: 1px solid rgba(71, 99, 140, .38);
       display: flex;
       align-items: center;
       justify-content: space-between;
       padding: 0 14px;
-      background: rgba(10,16,31,.74);
-      backdrop-filter: blur(6px);
+      background: rgba(7, 12, 23, .66);
+      backdrop-filter: blur(13px);
     }
     .title { font-weight: 600; font-size: 14px; }
     .subtitle { color: var(--muted); font-size: 12px; }
@@ -148,10 +150,11 @@
     .view {
       display: none;
       background: linear-gradient(180deg, var(--panel), var(--panel2));
-      border: 1px solid var(--line);
-      border-radius: 14px;
+      border: 1px solid rgba(86, 113, 154, .3);
+      border-radius: 20px;
       min-height: calc(100vh - 98px);
       padding: 12px;
+      box-shadow: 0 24px 64px rgba(0, 0, 0, .34);
     }
     .view.active { display: block; }
     .section-title {
@@ -167,21 +170,22 @@
     .field { display: grid; gap: 6px; }
     .field label { color: var(--muted); font-size: 12px; }
     input, select, textarea, button {
-      border-radius: 10px;
-      border: 1px solid #2f4a80;
-      background: #0d1a31;
+      border-radius: 12px;
+      border: 1px solid rgba(83, 111, 153, .44);
+      background: rgba(9, 16, 30, .88);
       color: var(--text);
       font-size: 13px;
       padding: 9px 10px;
     }
     button {
       cursor: pointer;
-      background: linear-gradient(180deg, #284981, #1f3a67);
+      background: linear-gradient(180deg, rgba(28, 50, 88, .9), rgba(21, 39, 70, .92));
       white-space: nowrap;
+      font-weight: 600;
     }
     button.primary {
-      background: linear-gradient(180deg, #0ea7bc, #0f7e92);
-      border-color: #29cbe0;
+      background: linear-gradient(180deg, rgba(37, 99, 235, .92), rgba(29, 78, 216, .88));
+      border-color: rgba(96, 165, 250, .82);
     }
     .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
     .pill { font-size: 12px; color: var(--muted); }
@@ -201,9 +205,9 @@
     }
     .quick-prompt {
       border-radius: 999px;
-      border: 1px solid #35558e;
-      background: linear-gradient(180deg, #11233f, #0f1b31);
-      color: #dbe8ff;
+      border: 1px solid rgba(83, 110, 152, .46);
+      background: linear-gradient(180deg, rgba(14, 24, 44, .8), rgba(10, 17, 31, .86));
+      color: #d7e8ff;
       padding: 8px 12px;
       font-size: 12px;
     }
@@ -338,8 +342,8 @@
       box-shadow: 0 8px 18px rgba(0,0,0,.24);
     }
     .bubble.user {
-      background: linear-gradient(180deg, #2058dd, #1e46b1);
-      border-color: #588dff;
+      background: linear-gradient(180deg, #2563eb, #1e40af);
+      border-color: #60a5fa;
       border-bottom-right-radius: 6px;
     }
     .bubble.ai {
@@ -479,9 +483,18 @@
     .composer textarea { min-height: 54px; max-height: 180px; resize: vertical; }
     .composer button { height: 54px; border-radius: 999px; min-width: 100px; }
 
+    .menu::-webkit-scrollbar, .sessions-list::-webkit-scrollbar, .messages::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+    .menu::-webkit-scrollbar-thumb, .sessions-list::-webkit-scrollbar-thumb, .messages::-webkit-scrollbar-thumb {
+      background: rgba(102, 131, 180, .45);
+      border-radius: 999px;
+    }
+
     @media (max-width: 1080px) {
       .layout { grid-template-columns: 1fr; grid-template-rows: 44vh 56vh; }
-      .menu { position: relative; height: auto; border-right: none; border-bottom: 1px solid var(--line); }
+      .menu { position: relative; height: auto; border-right: none; border-bottom: 1px solid rgba(71, 99, 140, .38); }
       .main { height: 56vh; }
       .view { min-height: calc(56vh - 28px); }
       .chat-wrap { height: calc(56vh - 56px); }
@@ -492,27 +505,15 @@
 <body>
   <div class="layout">
     <aside class="menu">
-      <div class="brand">OpenUnum Control</div>
+      <div class="brand">OpenUnum Next</div>
       <div class="status" id="topStatus" data-testid="status-bar">booting...</div>
 
       <details open>
         <summary>Chat</summary>
         <div class="submenu">
-          <button class="menu-btn active" data-view="chat">Chat</button>
-          <button class="menu-btn" data-view="operator">Trace</button>
+          <button class="menu-btn active" data-view="chat">Chat Terminal</button>
+          <button class="menu-btn" data-view="operator">Execution Trace</button>
         </div>
-      </details>
-
-      <details open>
-        <summary>Settings</summary>
-        <div class="submenu">
-          <button class="menu-btn" data-view="model-routing">Model Routing</button>
-          <button class="menu-btn" data-view="provider-config">Providers</button>
-        </div>
-      </details>
-
-      <details open>
-        <summary>Runtime</summary>
         <div class="submenu">
           <input id="sessionSearch" placeholder="Search sessions" data-testid="session-search" />
         </div>
@@ -520,23 +521,26 @@
       </details>
 
       <details open>
+        <summary>Missions</summary>
+        <div class="submenu">
+          <button class="menu-btn" data-view="missions">Mission Runner</button>
+        </div>
+      </details>
+
+      <details>
         <summary>Runtime</summary>
         <div class="submenu">
-          <button class="menu-btn" data-view="browser">Browser</button>
+          <button class="menu-btn" data-view="browser">Browser Ops</button>
+          <button class="menu-btn" data-view="telegram">Telegram Bridge</button>
+          <button class="menu-btn" data-view="control-plane">Control Plane API</button>
         </div>
       </details>
 
       <details>
         <summary>Settings</summary>
         <div class="submenu">
-          <button class="menu-btn" data-view="telegram">Telegram</button>
-        </div>
-      </details>
-
-      <details>
-        <summary>Missions</summary>
-        <div class="submenu">
-          <button class="menu-btn" data-view="missions">Missions</button>
+          <button class="menu-btn" data-view="model-routing">Model Routing</button>
+          <button class="menu-btn" data-view="provider-config">Provider Vault</button>
         </div>
       </details>
     </aside>
@@ -902,19 +906,104 @@
           </div>
           <div class="hint" id="runtimeStatus"></div>
         </div>
+
+        <div class="view" id="view-control-plane">
+          <h3 class="section-title">Control Plane</h3>
+          <div class="hint">Backend coverage panel for self-heal, autonomy master, research, operations, and direct API execution.</div>
+
+          <div class="card-grid">
+            <div class="card">
+              <h4>Self Heal</h4>
+              <div class="row">
+                <button id="cpSelfHealDry">Dry Run</button>
+                <button id="cpSelfHealFix">Apply Fix</button>
+                <button id="cpSelfHealStatus">Status</button>
+              </div>
+            </div>
+            <div class="card">
+              <h4>Autonomy Master</h4>
+              <div class="row">
+                <button id="cpMasterStatus">Status</button>
+                <button id="cpMasterStart">Start</button>
+                <button id="cpMasterStop">Stop</button>
+                <button id="cpMasterCycle">Cycle</button>
+                <button id="cpMasterImprove">Self Improve</button>
+                <button id="cpMasterLearnSkills">Learn Skills</button>
+                <button id="cpMasterSelfTest">Self Test</button>
+              </div>
+            </div>
+            <div class="card">
+              <h4>Research</h4>
+              <div class="row">
+                <button id="cpResearchRun">Run Daily</button>
+                <button id="cpResearchRecent">Recent</button>
+                <button id="cpResearchQueue">Queue</button>
+              </div>
+              <div class="grid" style="margin-top:8px;">
+                <input id="cpResearchUrl" placeholder="proposal URL for approve" />
+                <input id="cpResearchNote" placeholder="approval note (optional)" />
+                <button id="cpResearchApprove">Approve Proposal</button>
+              </div>
+            </div>
+          </div>
+
+          <div class="grid two">
+            <div class="field">
+              <label>Delete Session By ID</label>
+              <input id="cpSessionDeleteId" placeholder="session uuid" />
+            </div>
+            <div class="field">
+              <label>Clear Sessions (Keep ID)</label>
+              <input id="cpSessionClearKeep" placeholder="session uuid to keep" />
+            </div>
+          </div>
+          <div class="row" style="margin-top:8px;">
+            <button id="cpSessionDelete">Delete Session</button>
+            <button id="cpSessionClearKeepBtn">Clear Others</button>
+            <button id="cpSessionClearAllBtn">Clear All</button>
+            <button id="cpOpsRecent">Recent Operations</button>
+          </div>
+
+          <hr style="border:none;border-top:1px solid var(--line);margin:14px 0;" />
+          <h4 class="section-title">API Console</h4>
+          <div class="grid two">
+            <div class="field">
+              <label>Method</label>
+              <select id="cpMethod">
+                <option value="GET">GET</option>
+                <option value="POST">POST</option>
+                <option value="DELETE">DELETE</option>
+              </select>
+            </div>
+            <div class="field">
+              <label>Path</label>
+              <input id="cpPath" placeholder="/api/skills" />
+            </div>
+          </div>
+          <div class="field" style="margin-top:8px;">
+            <label>JSON Body (POST/DELETE)</label>
+            <textarea id="cpBody" rows="6" placeholder='{"dryRun": true}'></textarea>
+          </div>
+          <div class="row" style="margin-top:8px;">
+            <button class="primary" id="cpRun">Run Request</button>
+            <span class="hint" id="cpStatus">idle</span>
+          </div>
+          <textarea id="cpOutput" readonly style="margin-top:10px; min-height:220px;" placeholder="response..."></textarea>
+        </div>
       </section>
     </main>
   </div>
 
   <script>
     const VIEW_META = {
-      chat: ['Chat', 'Autonomous agent conversation'],
-      'operator': ['Trace', 'Runtime, tools, and live execution state'],
-      'model-routing': ['Settings', 'Primary model selection and fallback strategy'],
-      'provider-config': ['Settings', 'Provider matrix, models, and secure auth vault'],
-      'browser': ['Runtime', 'Browser and hardware control'],
-      'telegram': ['Settings', 'Channel connectivity and polling control'],
-      'missions': ['Missions', 'Autonomous execution loops']
+      chat: ['Chat Terminal', 'Autonomous agent conversation'],
+      'operator': ['Execution Trace', 'Runtime, tools, and live execution state'],
+      'model-routing': ['Model Routing', 'Primary model selection and fallback strategy'],
+      'provider-config': ['Provider Vault', 'Provider matrix, models, and secure auth vault'],
+      'browser': ['Browser Ops', 'Browser and hardware control'],
+      'telegram': ['Telegram Bridge', 'Channel connectivity and polling control'],
+      'missions': ['Mission Runner', 'Autonomous execution loops'],
+      'control-plane': ['Control Plane API', 'Backend operations and full API access']
     };
 
     let MODEL_PROVIDER_IDS = ['ollama', 'nvidia', 'openrouter', 'openai'];
@@ -963,6 +1052,9 @@
     let authCatalog = null;
     let runtimeOverview = null;
     let missionTimelineCache = null;
+    let sessionLoadToken = 0;
+    let requestTokenSeq = 0;
+    const pendingSessions = new Set();
     let fallbackSequence = [];
     let providerAdvancedOpen = {};
     let serviceAdvancedOpen = {};
@@ -972,6 +1064,16 @@
     q('chatMeta').textContent = sessionId;
     q('autoEscalateToggle').textContent = `Auto: ${autoEscalateEnabled ? 'On' : 'Off'}`;
     q('liveActivityToggle').textContent = `Live: ${liveActivityEnabled ? 'On' : 'Off'}`;
+    function isCurrentSessionPending() {
+      return pendingSessions.has(sessionId);
+    }
+    function updateComposerPendingState() {
+      const pending = isCurrentSessionPending();
+      q('send').disabled = pending;
+      q('message').placeholder = pending
+        ? 'Session is still running. Switch sessions or wait for completion.'
+        : 'Type a message. Enter sends, Shift+Enter adds a new line';
+    }
 
     const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
     function isTransientFetchError(error) {
@@ -1053,6 +1155,37 @@
         clearTimeout(timer);
       }
     }
+    async function jrequest(method, path, body = undefined, opts = {}) {
+      const timeoutMs = Number.isFinite(opts.timeoutMs) ? Number(opts.timeoutMs) : 30000;
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(new Error('request_timeout')), timeoutMs);
+      try {
+        const m = String(method || 'GET').toUpperCase();
+        const init = { method: m, signal: controller.signal };
+        if (m !== 'GET') {
+          init.headers = { 'Content-Type': 'application/json' };
+          init.body = JSON.stringify(body || {});
+        }
+        const res = await fetchWithRetry(path, init, 2, 500);
+        const raw = await res.text();
+        let parsed;
+        try {
+          parsed = raw ? JSON.parse(raw) : {};
+        } catch {
+          parsed = { ok: false, error: `invalid_json_response status=${res.status}`, raw };
+        }
+        if (!res.ok) {
+          const msg = parsed?.error || `${res.status} ${res.statusText}`;
+          throw new Error(msg);
+        }
+        return parsed;
+      } catch (error) {
+        if (String(error?.name || '') === 'AbortError') throw new Error('request_timeout');
+        throw error;
+      } finally {
+        clearTimeout(timer);
+      }
+    }
 
     function showView(viewId) {
       qa('.menu-btn').forEach((b) => b.classList.toggle('active', b.dataset.view === viewId));
@@ -1101,15 +1234,7 @@
           <div class="session-preview">${escapeHtml(s.preview || 'No messages yet')}</div>
           <div class="session-meta">${escapeHtml(formatRelativeTime(s.lastMessageAt || s.createdAt))} · ${Number(s.messageCount || 0)} msgs</div>
         `;
-        btn.onclick = async () => {
-          if (chatPending) return;
-          sessionId = s.sessionId;
-          localStorage.setItem('openunum_session', sessionId);
-          q('chatMeta').textContent = sessionId;
-          await loadSession();
-          renderSessionList();
-          showView('chat');
-        };
+        btn.onclick = async () => switchToSession(s.sessionId);
         sessionListEl.appendChild(btn);
       }
     }
@@ -1118,7 +1243,13 @@
 
     async function refreshSessionList() {
       const out = await jget('/api/sessions?limit=120');
-      sessionCache = Array.isArray(out.sessions) ? out.sessions : [];
+      sessionCache = (Array.isArray(out.sessions) ? out.sessions : [])
+        .slice()
+        .sort((a, b) => {
+          const at = Date.parse(a.lastMessageAt || a.updatedAt || a.createdAt || 0) || 0;
+          const bt = Date.parse(b.lastMessageAt || b.updatedAt || b.createdAt || 0) || 0;
+          return bt - at;
+        });
       renderSessionList();
     }
 
@@ -1284,9 +1415,28 @@
       return details.outerHTML;
     }
 
-    async function loadSession() {
+    async function switchToSession(nextSessionId) {
+      const target = String(nextSessionId || '').trim();
+      if (!target) return;
+      sessionId = target;
+      localStorage.setItem('openunum_session', sessionId);
+      q('chatMeta').textContent = sessionId;
+      updateComposerPendingState();
+      await ensureSessionExists(sessionId);
+      await loadSession(sessionId);
+      await refreshContextStatus().catch(() => {});
+      await refreshTacticalLedger().catch(() => {});
+      renderSessionList();
+      showView('chat');
+    }
+
+    async function loadSession(targetSessionId = sessionId) {
+      const sid = String(targetSessionId || '').trim();
+      const token = ++sessionLoadToken;
+      chat.innerHTML = '<div class="hint">Loading session...</div>';
+      const out = await jget(`/api/sessions/${encodeURIComponent(sid)}`);
+      if (token !== sessionLoadToken || sid !== sessionId) return;
       chat.innerHTML = '';
-      const out = await jget(`/api/sessions/${encodeURIComponent(sessionId)}`);
       for (const m of out.messages || []) {
         pushMsg(m.role === 'assistant' ? 'assistant' : 'user', m.content, m.role === 'assistant' ? m.html : '');
       }
@@ -1297,8 +1447,7 @@
       localStorage.setItem('openunum_session', sessionId);
       q('chatMeta').textContent = sessionId;
       chat.innerHTML = '';
-      chatPending = false;
-      q('send').disabled = false;
+      updateComposerPendingState();
       await ensureSessionExists(sessionId);
       await refreshSessionList();
     }
@@ -1314,13 +1463,14 @@
       return candidate;
     }
 
-    async function resolvePendingReply(typing, startedAtIso) {
+    async function resolvePendingReply(typing, startedAtIso, requestSessionId, requestToken) {
       const deadline = Date.now() + 10 * 60 * 1000;
       while (Date.now() < deadline) {
         await sleep(2000);
+        if (requestToken !== requestTokenSeq) return false;
         typing.pollCount = (typing.pollCount || 0) + 1;
         if (liveActivityEnabled) {
-          const act = await jget(`/api/sessions/${encodeURIComponent(sessionId)}/activity?since=${encodeURIComponent(startedAtIso)}`);
+          const act = await jget(`/api/sessions/${encodeURIComponent(requestSessionId)}/activity?since=${encodeURIComponent(startedAtIso)}`);
           const tools = Array.isArray(act.toolRuns) ? act.toolRuns : [];
           if ((typing.lastToolCount || 0) !== tools.length) {
             addLiveEvent(typing, `tool count ${typing.lastToolCount || 0} -> ${tools.length}`);
@@ -1332,9 +1482,9 @@
         } else {
           typing.bubble.textContent = 'Agent is still working...';
         }
-        const p = await jget(`/api/chat/pending?sessionId=${encodeURIComponent(sessionId)}`);
+        const p = await jget(`/api/chat/pending?sessionId=${encodeURIComponent(requestSessionId)}`);
         if (p.pending) continue;
-        const out = await jget(`/api/sessions/${encodeURIComponent(sessionId)}`);
+        const out = await jget(`/api/sessions/${encodeURIComponent(requestSessionId)}`);
         const msg = newestAssistantSince(out.messages || [], startedAtIso);
         if (msg?.content) {
           addLiveEvent(typing, 'assistant final response received');
@@ -2604,17 +2754,85 @@
     q('missionTimelineFilter').onchange = () => renderMissionTimeline();
     q('missionTimelineSearch').oninput = () => renderMissionTimeline();
 
-    let chatPending = false;
+    async function runControlPlaneRequest(method, path, body = undefined) {
+      const output = q('cpOutput');
+      const status = q('cpStatus');
+      if (!output || !status) return;
+      status.textContent = `${method} ${path} ...`;
+      try {
+        const out = await jrequest(method, path, body, { timeoutMs: 45000 });
+        output.value = JSON.stringify(out, null, 2);
+        status.textContent = `${method} ${path} ok`;
+        if (path.startsWith('/api/sessions')) {
+          await refreshSessionList().catch(() => {});
+        }
+      } catch (error) {
+        output.value = JSON.stringify({ ok: false, error: String(error.message || error) }, null, 2);
+        status.textContent = `${method} ${path} failed`;
+      }
+    }
+
+    q('cpSelfHealDry').onclick = () => runControlPlaneRequest('POST', '/api/self-heal', { dryRun: true });
+    q('cpSelfHealFix').onclick = () => runControlPlaneRequest('POST', '/api/self-heal/fix', {});
+    q('cpSelfHealStatus').onclick = () => runControlPlaneRequest('GET', '/api/selfheal/status');
+
+    q('cpMasterStatus').onclick = () => runControlPlaneRequest('GET', '/api/autonomy/master/status');
+    q('cpMasterStart').onclick = () => runControlPlaneRequest('POST', '/api/autonomy/master/start', {});
+    q('cpMasterStop').onclick = () => runControlPlaneRequest('POST', '/api/autonomy/master/stop', {});
+    q('cpMasterCycle').onclick = () => runControlPlaneRequest('POST', '/api/autonomy/master/cycle', {});
+    q('cpMasterImprove').onclick = () => runControlPlaneRequest('POST', '/api/autonomy/master/self-improve', {});
+    q('cpMasterLearnSkills').onclick = () => runControlPlaneRequest('POST', '/api/autonomy/master/learn-skills', {});
+    q('cpMasterSelfTest').onclick = () => runControlPlaneRequest('POST', '/api/autonomy/master/self-test', {});
+
+    q('cpResearchRun').onclick = () => runControlPlaneRequest('POST', '/api/research/run', { simulate: false });
+    q('cpResearchRecent').onclick = () => runControlPlaneRequest('GET', '/api/research/recent?limit=25');
+    q('cpResearchQueue').onclick = () => runControlPlaneRequest('GET', '/api/research/queue?limit=50');
+    q('cpResearchApprove').onclick = () =>
+      runControlPlaneRequest('POST', '/api/research/approve', {
+        url: q('cpResearchUrl').value.trim(),
+        note: q('cpResearchNote').value.trim()
+      });
+
+    q('cpOpsRecent').onclick = () => runControlPlaneRequest('GET', '/api/operations/recent?limit=50');
+    q('cpSessionDelete').onclick = () => {
+      const sid = q('cpSessionDeleteId').value.trim();
+      if (!sid) return;
+      runControlPlaneRequest('DELETE', `/api/sessions/${encodeURIComponent(sid)}`);
+    };
+    q('cpSessionClearKeepBtn').onclick = () =>
+      runControlPlaneRequest('POST', '/api/sessions/clear', { keepSessionId: q('cpSessionClearKeep').value.trim() });
+    q('cpSessionClearAllBtn').onclick = () =>
+      runControlPlaneRequest('POST', '/api/sessions/clear', { force: true, keepSessionId: '' });
+
+    q('cpRun').onclick = async () => {
+      const method = q('cpMethod').value;
+      const path = q('cpPath').value.trim();
+      if (!path) return;
+      let body;
+      const raw = q('cpBody').value.trim();
+      if (method !== 'GET' && raw) {
+        try {
+          body = JSON.parse(raw);
+        } catch {
+          q('cpStatus').textContent = 'invalid JSON body';
+          return;
+        }
+      }
+      await runControlPlaneRequest(method, path, body);
+    };
+
     q('send').onclick = async () => {
-      if (chatPending) return;
+      if (isCurrentSessionPending()) return;
       const message = q('message').value.trim();
       if (!message) return;
       if (!isStatusCheckMessage(message) && !/^\/\w+/.test(message)) {
         lastTaskPrompt = message;
         localStorage.setItem('openunum_last_task_prompt', lastTaskPrompt);
       }
-      chatPending = true;
-      q('send').disabled = true;
+      const requestSessionId = sessionId;
+      const requestToken = ++requestTokenSeq;
+      pendingSessions.add(requestSessionId);
+      updateComposerPendingState();
       q('message').value = '';
       pushMsg('user', message);
       const typing = appendTypingBubble();
@@ -2624,9 +2842,9 @@
           await runAutoMissionFromChat(message, typing);
           return;
         }
-        const out = await jpost('/api/chat', { sessionId, message }, { timeoutMs: 70000 });
+        const out = await jpost('/api/chat', { sessionId: requestSessionId, message }, { timeoutMs: 70000 });
         if (out?.pending) {
-          await resolvePendingReply(typing, out.startedAt || startedAtIso);
+          await resolvePendingReply(typing, out.startedAt || startedAtIso, requestSessionId, requestToken);
           return;
         }
         if (shouldEscalateToAuto(message, out)) {
@@ -2651,13 +2869,13 @@
         const msg = String(error.message || error);
         if (msg.includes('request_timeout')) {
           typing.bubble.textContent = 'Request is still running. Switching to live pending view...';
-          await resolvePendingReply(typing, startedAtIso);
+          await resolvePendingReply(typing, startedAtIso, requestSessionId, requestToken);
         } else {
           typing.bubble.textContent = `request failed: ${msg}`;
         }
       } finally {
-        chatPending = false;
-        q('send').disabled = false;
+        pendingSessions.delete(requestSessionId);
+        updateComposerPendingState();
       }
     };
 
@@ -2675,6 +2893,8 @@
     (async () => {
       try {
         showView('chat');
+        if (q('cpPath')) q('cpPath').value = '/api/health';
+        if (q('cpBody')) q('cpBody').value = '{\n  "dryRun": true\n}';
         await ensureSessionExists(sessionId);
         await refreshCapabilities();
         await refreshModel();

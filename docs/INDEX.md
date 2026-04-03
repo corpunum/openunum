@@ -17,12 +17,13 @@ This folder is optimized for fast machine onboarding (fresh agent session, no pr
 11. [SKILLS_EMAIL_RESEARCH.md](/home/corp-unum/openunum/docs/SKILLS_EMAIL_RESEARCH.md)
 12. [CONTEXT_COMPACTION.md](/home/corp-unum/openunum/docs/CONTEXT_COMPACTION.md)
 13. [PROJECT_STATE_SNAPSHOT.md](/home/corp-unum/openunum/docs/PROJECT_STATE_SNAPSHOT.md)
-14. [CHANGELOG_CURRENT.md](/home/corp-unum/openunum/docs/CHANGELOG_CURRENT.md)
-15. [MODEL_AWARE_CONTROLLER.md](/home/corp-unum/openunum/docs/MODEL_AWARE_CONTROLLER.md)
-16. [COMPETITIVE_ANALYSIS_CLAW_CODE.md](/home/corp-unum/openunum/docs/COMPETITIVE_ANALYSIS_CLAW_CODE.md)
-17. [COMPETITIVE_ANALYSIS_OPENAI_CODEX.md](/home/corp-unum/openunum/docs/COMPETITIVE_ANALYSIS_OPENAI_CODEX.md)
-18. [COMPETITIVE_ANALYSIS_GEMINI_CLI.md](/home/corp-unum/openunum/docs/COMPETITIVE_ANALYSIS_GEMINI_CLI.md)
-19. [OPENUNUM_MULTI_MODEL_CONTROLLER_ACTION_PLAN.md](/home/corp-unum/openunum/docs/OPENUNUM_MULTI_MODEL_CONTROLLER_ACTION_PLAN.md)
+14. [SERVER_REFACTOR_BLUEPRINT.md](/home/corp-unum/openunum/docs/SERVER_REFACTOR_BLUEPRINT.md)
+15. [CHANGELOG_CURRENT.md](/home/corp-unum/openunum/docs/CHANGELOG_CURRENT.md)
+16. [MODEL_AWARE_CONTROLLER.md](/home/corp-unum/openunum/docs/MODEL_AWARE_CONTROLLER.md)
+17. [COMPETITIVE_ANALYSIS_CLAW_CODE.md](/home/corp-unum/openunum/docs/COMPETITIVE_ANALYSIS_CLAW_CODE.md)
+18. [COMPETITIVE_ANALYSIS_OPENAI_CODEX.md](/home/corp-unum/openunum/docs/COMPETITIVE_ANALYSIS_OPENAI_CODEX.md)
+19. [COMPETITIVE_ANALYSIS_GEMINI_CLI.md](/home/corp-unum/openunum/docs/COMPETITIVE_ANALYSIS_GEMINI_CLI.md)
+20. [OPENUNUM_MULTI_MODEL_CONTROLLER_ACTION_PLAN.md](/home/corp-unum/openunum/docs/OPENUNUM_MULTI_MODEL_CONTROLLER_ACTION_PLAN.md)
 
 ## Legacy Planning Docs
 

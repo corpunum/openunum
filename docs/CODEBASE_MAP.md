@@ -1,10 +1,12 @@
 # Codebase Map
 
-This map is implementation-accurate as of 2026-04-01.
+This map is implementation-accurate as of 2026-04-03.
 
 ## Top-Level Structure
 
 - `src/server.mjs`: HTTP API server and Web UI host
+- `src/server/routes/*.mjs`: extracted route handlers (health, ui, sessions, missions, model, auth, config, autonomy, chat/tools, browser, telegram, research)
+- `src/server/services/*.mjs`: extracted runtime helpers (chat, auth jobs, browser runtime, telegram runtime, research runtime)
 - `src/core/agent.mjs`: provider chat loop, tool-call execution, trace generation
 - `src/core/missions.mjs`: autonomous mission runner with proof-aware completion
 - `src/core/model-behavior-registry.mjs`: behavior classes + runtime learning hints per provider/model
@@ -37,6 +39,7 @@ This map is implementation-accurate as of 2026-04-01.
 6. Tool results persist in `tool_runs` table.
 7. Agent returns final response + structured execution trace.
 8. UI renders message + expandable trace.
+9. When the run is pending, UI polls `/api/chat/pending` and session activity per originating session id (session-safe pending loop).
 
 ## Autonomous Mission Flow
 
@@ -106,3 +109,4 @@ This map is implementation-accurate as of 2026-04-01.
 - `server.mjs` -> `agent.reloadTools()` must be called after runtime/config mutations that impact tools.
 - `MissionRunner` depends on `MemoryStore.countSuccessfulToolRuns(...)` for proof checks.
 - UI trace display expects `out.trace` in `/api/chat` response.
+- UI OAuth connect actions can launch browser/terminal approval windows (`/api/service/connect`); routine smoke checks should use `pnpm smoke:ui:noauth`.

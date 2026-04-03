@@ -39,6 +39,10 @@ curl -sS http://127.0.0.1:18880/api/auth/catalog | jq .
 ```bash
 pnpm -s phase14:e2e
 ```
+6. Run safe UI/API smoke (does not trigger OAuth browser/terminal approval flows):
+```bash
+pnpm -s smoke:ui:noauth
+```
 
 ## 3. Runtime Invariants
 
@@ -53,7 +57,9 @@ pnpm -s phase14:e2e
 - UI house: `src/ui/index.html` (primary UI structure + inlined CSS/JS).
 - Agent/controller house: `src/core/agent.mjs`.
 - Tool capability house: `src/tools/runtime.mjs`.
-- API/router house: `src/server.mjs`.
+- API composition house: `src/server.mjs`.
+- API route house: `src/server/routes/*.mjs`.
+- API service/runtime house: `src/server/services/*.mjs`.
 - Persistence house: `src/memory/store.mjs`.
 
 Before broad filesystem discovery, read `GET /api/tools/catalog` and target these canonical files first.
@@ -150,3 +156,5 @@ curl -sS -X POST http://127.0.0.1:18880/api/autonomy/mode \
   - Wrong surface; check provider/auth endpoints above.
 - "Fallback happened unexpectedly."
   - Inspect `model.routing.forcePrimaryProvider`, `fallbackEnabled`, and `fallbackProviders`.
+- "OAuth popups during basic smoke checks are normal."
+  - They are not required for routine checks. Use `pnpm smoke:ui:noauth` and avoid `/api/service/connect` unless explicitly validating OAuth flows.

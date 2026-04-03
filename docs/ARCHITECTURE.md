@@ -1,69 +1,61 @@
-# OpenUnum Architecture (Lean)
+# OpenUnum Architecture (Current)
 
 ## Runtime
-- Node.js 22+ (Ubuntu-native, stable ecosystem)
-- TypeScript
-- SQLite (single local DB file)
 
-Note: Bun is possible later; Node first reduces integration risk with channel and browser SDKs.
+- Node.js 22+ (ES modules)
+- SQLite local persistence
+- Ubuntu/Linux-first operation
 
-## Modules
+## Server Shape
 
-## `core/`
-- `agent.ts`: main loop
-- `session.ts`: context window, turns, metadata
-- `router.ts`: model/provider routing + hot-switch
+- Entry/composition: `src/server.mjs`
+- Route modules: `src/server/routes/*.mjs`
+- Runtime/service modules: `src/server/services/*.mjs`
+- HTTP helpers: `src/server/http.mjs`
 
-## `providers/`
-- `ollama.ts`
-- `openrouter.ts`
-- `nvidia.ts`
-- `openai_compatible.ts`
+`src/server.mjs` now primarily wires context, shared state, and route dispatch.
 
-All providers implement:
-- `generate()`
-- `stream()`
-- `listModels()`
+## Core Engine
 
-## `tools/`
-- `file.*`
-- `shell.*`
-- `browser.*`
+- `src/core/agent.mjs`: provider chat loop, tool-call orchestration, trace generation
+- `src/core/missions.mjs`: mission runner + proof-backed completion
+- `src/core/execution-policy-engine.mjs`: autonomous policy decisions and safety blocks
+- `src/core/provider-fallback-policy.mjs`: failure classification + deterministic fallback
+- `src/core/model-execution-envelope.mjs`: profile-aware tool/context limits
 
-Guardrails:
-- per-tool timeout
-- allowlist/denylist
-- explicit approval for high-risk operations
+## Providers
 
-## `browser/`
-- `cdp_client.ts` for `127.0.0.1:9222`
-- `managed_chromium.ts` fallback launcher
+- `src/providers/ollama.mjs`
+- `src/providers/openai-compatible.mjs`
+- `src/providers/openai-codex-oauth.mjs`
+- `src/providers/index.mjs` (provider selection + normalization)
 
-## `memory/`
-- `store.ts` (SQLite tables: sessions, messages, facts, tool_events)
-- `retrieval.ts` (keyword first, vector optional)
+## Tools + Channels
 
-## `channels/`
-- `telegram.ts` (grammY)
-- `whatsapp.ts` (Baileys)
+- Tool runtime: `src/tools/runtime.mjs`
+- Executor daemon: `src/tools/executor-daemon.mjs`
+- Browser/CDP: `src/browser/cdp.mjs`
+- Telegram: `src/channels/telegram.mjs`
+- Google Workspace native OAuth/API: `src/tools/google-workspace.mjs`, `src/oauth/google-workspace.mjs`
 
-## `skills/`
-- file-based local skills registry
-- strict schema validation
+## UI
 
-## `ui/`
-- lightweight web app
-- mobile-first responsive layout
-- no heavyweight dashboard framework initially
+- Primary UI: `src/ui/index.html`
+- Legacy standalone visual preview: `src/ui/new_ui.html`
+- UI is capability-driven via backend endpoints (`/api/capabilities`, `/api/model-catalog`, `/api/runtime/overview`, `/api/auth/catalog`).
+
+## Persistence + Data Paths
+
+- Config: `~/.openunum/openunum.json` (sanitized)
+- Secrets: `~/.openunum/secrets.json` (0600)
+- DB: `~/.openunum/openunum.db`
+- Logs: `~/.openunum/logs/*`
+- Skills: `~/.openunum/skills/*`
+- Backups: `~/.openunum/backups/*`
 
 ## Security Defaults
-- CDP bind only `127.0.0.1`
-- secrets only in env + local config file with strict permissions
-- shell tool off by default until explicit enable
 
-## Data Layout
-- `~/.openunum/openunum.db`
-- `~/.openunum/openunum.json`
-- `~/.openunum/logs/`
-- `~/.openunum/skills/`
+- CDP expected on localhost endpoint
+- Secret values never returned from `GET /api/config`
+- Shell/tool safety policy enabled by default through execution policy engine
 

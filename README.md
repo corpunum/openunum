@@ -2,8 +2,8 @@
 
 OpenUnum is an Ubuntu-first autonomous assistant framework focused on high tool reliability, strict model control, and agent-operable runtime behavior.
 
-Current state (2026-04-02):
-- Web UI with menu/submenu navigation and chat-centered workflow
+Current state (2026-04-03):
+- Web UI with Gemini-inspired glass styling while preserving full backend feature coverage
 - Visible/traceable tool execution from chat (expand/collapse execution traces)
 - Multi-provider model handling with strict primary-provider lock option
 - Model-execution envelopes (`compact` / `balanced` / `full`) to constrain tool/memory exposure for smaller models
@@ -15,6 +15,7 @@ Current state (2026-04-02):
 - Manual model-behavior controls (override/reset) for operator correction
 - Autonomy mode presets (`standard`, `relentless`)
 - Pending chat handling (`/api/chat` + `/api/chat/pending`) to avoid "stuck loading"
+- Session-aware pending handling in UI to prevent cross-session reply bleed when switching chats
 - Local session history persistence in SQLite until user clicks `New Chat`
 
 ## Fast Start
@@ -30,12 +31,17 @@ node src/server.mjs
 ```
 
 3. Open Web UI:
-- http://127.0.0.1:18880 (Classic Control UI)
-- http://127.0.0.1:19928 (NextGen Glassmorphism UI - Mobile Friendly)
+- http://127.0.0.1:18880 (Primary Web UI)
+- http://127.0.0.1:19928 (legacy standalone preview shell in `src/ui/new_ui.html`)
 
 4. Optional full test gate:
 ```bash
 pnpm e2e
+```
+
+5. Optional safe UI/API smoke gate (no OAuth popups):
+```bash
+pnpm smoke:ui:noauth
 ```
 
 ## New Session Onboarding (for another agent)
@@ -57,6 +63,7 @@ Read in this exact order:
 ```bash
 pnpm start
 pnpm e2e
+pnpm smoke:ui:noauth
 node src/cli.mjs health
 node src/cli.mjs chat --message "hello"
 node src/cli.mjs model switch --provider ollama --model ollama/qwen3.5:397b-cloud
