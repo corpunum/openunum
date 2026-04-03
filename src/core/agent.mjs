@@ -1026,7 +1026,8 @@ export class OpenUnumAgent {
           toolRuns,
           iteration: i + 1,
           maxIters,
-          priorForcedCount: forcedContinueCount
+          priorForcedCount: forcedContinueCount,
+          taskGoal: originalUserMessage
         });
         // Shadow scoring — log only, no behavior change
         try {
@@ -1046,7 +1047,33 @@ export class OpenUnumAgent {
           continue;
         }
 
-        // Check if we should auto-continue based on self-monitoring
+        // PREVENTIVE CHECK: Is the original task actually complete?
+        // This runs BEFORE deciding to stop, preventing premature "I feel done" stalls
+        try {
+          const isActuallyDone = isProofBackedDone({
+            text: normalizedContent || finalText,
+            toolRuns: executedTools || [],
+            requireProofForDone: true,
+            taskGoal: originalUserMessage
+          });
+          
+          if (!isActuallyDone && executedTools && executedTools.length > 0) {
+            // Task NOT complete but model wants to stop → inject preventive continuation
+            messages.push({
+              role: 'system',
+              content: [
+                'Preventive continuation: The original task is not yet complete.',
+                `Goal: ${originalUserMessage}`,
+                'You have executed tools but have not verified full task completion.',
+                'Continue with remaining steps. Do not generate a completion summary yet.',
+                'Only claim done when you have proof-backed evidence that the full goal is satisfied.'
+              ].join('\n')
+            });
+            continue;
+          }
+        } catch (_) { /* non-critical, fall through to other checks */ }
+
+        // Check if we should auto-continue based on self-monitoring (reactive)
         if (this.selfMonitor.shouldAutoContinue(sessionId, normalizedContent || finalText, executedTools || [])) {
           const autoContinuePrompt = this.selfMonitor.generateContinuationPrompt(
             sessionId,

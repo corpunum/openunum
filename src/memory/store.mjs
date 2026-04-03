@@ -163,6 +163,12 @@ export class MemoryStore {
         created_at TEXT NOT NULL,
         updated_at TEXT NOT NULL
       );
+      CREATE TABLE IF NOT EXISTS channel_state (
+        channel_name TEXT PRIMARY KEY,
+        state_key TEXT NOT NULL,
+        state_value TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      );
       CREATE TABLE IF NOT EXISTS task_records (
         id TEXT PRIMARY KEY,
         goal TEXT NOT NULL,
@@ -1505,5 +1511,33 @@ export class MemoryStore {
         lastSeen: r.last_seen || null
       };
     });
+  }
+
+  /**
+   * Channel State Persistence (for Telegram offset, etc.)
+   */
+  getChannelState(channelName, stateKey, defaultValue = null) {
+    const row = this.db
+      .prepare('SELECT state_value FROM channel_state WHERE channel_name = ? AND state_key = ?')
+      .get(channelName, stateKey);
+    if (!row) return defaultValue;
+    try {
+      return JSON.parse(row.state_value);
+    } catch {
+      return row.state_value;
+    }
+  }
+
+  setChannelState(channelName, stateKey, stateValue) {
+    const valueJson = typeof stateValue === 'string' ? stateValue : JSON.stringify(stateValue);
+    this.db
+      .prepare(
+        `INSERT INTO channel_state (channel_name, state_key, state_value, updated_at)
+         VALUES (?, ?, ?, ?)
+         ON CONFLICT(channel_name, state_key) DO UPDATE SET
+           state_value = excluded.state_value,
+           updated_at = excluded.updated_at`
+      )
+      .run(channelName, stateKey, valueJson, new Date().toISOString());
   }
 }

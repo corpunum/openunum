@@ -1,9 +1,16 @@
 export class TelegramChannel {
-  constructor(config, onMessage) {
+  constructor(config, onMessage, initialOffset = 0) {
     this.config = config;
     this.onMessage = onMessage;
-    this.offset = 0;
+    this.offset = initialOffset;
     this.maxLength = 4096; // Telegram message limit
+  }
+
+  /**
+   * Get current offset (for persistence)
+   */
+  getOffset() {
+    return this.offset;
   }
 
   api(path) {
