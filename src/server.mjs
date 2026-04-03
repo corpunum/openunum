@@ -155,6 +155,8 @@ function normalizeModelSettings() {
   delete config.model.providerModels.generic;
   config.model.openaiBaseUrl = config.model.openaiBaseUrl || config.model.genericBaseUrl || 'https://api.openai.com/v1';
   config.model.openaiApiKey = config.model.openaiApiKey || config.model.genericApiKey || '';
+  config.model.xiaomimimoBaseUrl = config.model.xiaomimimoBaseUrl || 'https://token-plan-ams.xiaomimimo.com/v1';
+  config.model.xiaomimimoAnthropicBaseUrl = config.model.xiaomimimoAnthropicBaseUrl || 'https://token-plan-ams.xiaomimimo.com/anthropic';
   config.model.genericBaseUrl = config.model.openaiBaseUrl;
   config.model.genericApiKey = config.model.openaiApiKey;
   config.model.model = String(config.model.model || '').replace(/^generic\//, 'openai/');
@@ -189,10 +191,13 @@ function getProviderConfigPayload() {
     ollamaBaseUrl: config.model.ollamaBaseUrl,
     openrouterBaseUrl: config.model.openrouterBaseUrl,
     nvidiaBaseUrl: config.model.nvidiaBaseUrl,
+    xiaomimimoBaseUrl: config.model.xiaomimimoBaseUrl,
+    xiaomimimoAnthropicBaseUrl: config.model.xiaomimimoAnthropicBaseUrl,
     openaiBaseUrl: config.model.openaiBaseUrl || config.model.genericBaseUrl,
     genericBaseUrl: config.model.openaiBaseUrl || config.model.genericBaseUrl,
     hasOpenrouterApiKey: Boolean(config.model.openrouterApiKey),
     hasNvidiaApiKey: Boolean(config.model.nvidiaApiKey),
+    hasXiaomimimoApiKey: Boolean(config.model.xiaomimimoApiKey),
     hasOpenaiApiKey: Boolean(config.model.openaiApiKey || config.model.genericApiKey),
     hasGenericApiKey: Boolean(config.model.openaiApiKey || config.model.genericApiKey)
   };
@@ -310,6 +315,7 @@ const PROVIDER_SECRET_FIELD = {
   ollama: null,
   nvidia: 'nvidiaApiKey',
   openrouter: 'openrouterApiKey',
+  xiaomimimo: 'xiaomimimoApiKey',
   openai: 'openaiApiKey'
 };
 
@@ -317,6 +323,7 @@ const PROVIDER_BASE_FIELD = {
   ollama: 'ollamaBaseUrl',
   nvidia: 'nvidiaBaseUrl',
   openrouter: 'openrouterBaseUrl',
+  xiaomimimo: 'xiaomimimoBaseUrl',
   openai: 'openaiBaseUrl'
 };
 
@@ -530,12 +537,14 @@ async function buildAuthCatalogPayload() {
     ollama: null,
     nvidia: 'nvidiaApiKey',
     openrouter: 'openrouterApiKey',
+    xiaomimimo: 'xiaomimimoApiKey',
     openai: 'openaiApiKey'
   };
   const providerBaseField = {
     ollama: 'ollamaBaseUrl',
     nvidia: 'nvidiaBaseUrl',
     openrouter: 'openrouterBaseUrl',
+    xiaomimimo: 'xiaomimimoBaseUrl',
     openai: 'openaiBaseUrl'
   };
 

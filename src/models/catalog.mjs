@@ -2,12 +2,13 @@ import fs from 'node:fs';
 import { getEffectiveOpenAICodexOAuthStatus, scanLocalAuthSources } from '../secrets/store.mjs';
 
 export const MODEL_CATALOG_CONTRACT_VERSION = '2026-04-01.model-catalog.v1';
-export const PROVIDER_ORDER = ['ollama', 'nvidia', 'openrouter', 'openai'];
+export const PROVIDER_ORDER = ['ollama', 'nvidia', 'openrouter', 'xiaomimimo', 'openai'];
 
 const PROVIDER_LABELS = {
   ollama: 'Ollama',
   nvidia: 'Nvidia',
   openrouter: 'OpenRouter',
+  xiaomimimo: 'XiaomiMimo',
   openai: 'OpenAI'
 };
 
@@ -36,6 +37,10 @@ const MODEL_SEEDS = {
   openrouter: [
     seedModel('openrouter', 'anthropic/claude-3.5-sonnet', 'Claude 3.5 Sonnet', 200000, 97, 'medium', 'high', true, true, true),
     seedModel('openrouter', 'openai/gpt-4o-mini', 'GPT-4o Mini', 128000, 89, 'low', 'medium', true, true, true)
+  ],
+  xiaomimimo: [
+    seedModel('xiaomimimo', 'gpt-4o-mini', 'GPT-4o Mini (XiaomiMimo)', 128000, 89, 'low', 'medium', true, true, true),
+    seedModel('xiaomimimo', 'gpt-4.1-mini', 'GPT-4.1 Mini (XiaomiMimo)', 128000, 88, 'low', 'medium', true, true, true)
   ],
   openai: [
     seedModel('openai', 'gpt-5.4-pro', 'GPT-5.4 Pro', 262144, 102, 'medium', 'high', true, true, true),
@@ -236,6 +241,7 @@ export function importProviderSecretsFromOpenClaw() {
   return {
     openrouterApiKey: scan.secrets.openrouterApiKey || '',
     nvidiaApiKey: scan.secrets.nvidiaApiKey || '',
+    xiaomimimoApiKey: scan.secrets.xiaomimimoApiKey || '',
     openaiApiKey: scan.secrets.openaiApiKey || '',
     githubToken: scan.secrets.githubToken || '',
     huggingfaceApiKey: scan.secrets.huggingfaceApiKey || '',
@@ -243,6 +249,8 @@ export function importProviderSecretsFromOpenClaw() {
     telegramBotToken: scan.secrets.telegramBotToken || '',
     openrouterBaseUrl: scan.providerBaseUrls.openrouterBaseUrl || '',
     nvidiaBaseUrl: scan.providerBaseUrls.nvidiaBaseUrl || '',
+    xiaomimimoBaseUrl: scan.providerBaseUrls.xiaomimimoBaseUrl || '',
+    xiaomimimoAnthropicBaseUrl: scan.providerBaseUrls.xiaomimimoAnthropicBaseUrl || '',
     openaiBaseUrl: scan.providerBaseUrls.openaiBaseUrl || '',
     ollamaBaseUrl: scan.providerBaseUrls.ollamaBaseUrl || '',
     filesScanned: scan.filesScanned
@@ -253,6 +261,7 @@ function getProviderConnection(modelConfig, provider) {
   if (provider === 'ollama') return { baseUrl: modelConfig.ollamaBaseUrl, apiKey: '' };
   if (provider === 'nvidia') return { baseUrl: modelConfig.nvidiaBaseUrl, apiKey: modelConfig.nvidiaApiKey };
   if (provider === 'openrouter') return { baseUrl: modelConfig.openrouterBaseUrl, apiKey: modelConfig.openrouterApiKey };
+  if (provider === 'xiaomimimo') return { baseUrl: modelConfig.xiaomimimoBaseUrl, apiKey: modelConfig.xiaomimimoApiKey };
   const oauth = getEffectiveOpenAICodexOAuthStatus();
   return {
     baseUrl: modelConfig.openaiBaseUrl || modelConfig.genericBaseUrl || 'https://api.openai.com/v1',
@@ -296,6 +305,7 @@ export async function buildModelCatalog(modelConfig) {
       if (provider === 'ollama') discovered = await fetchOllamaModels(connection.baseUrl);
       else if (provider === 'nvidia') discovered = await fetchNvidiaModels(connection.baseUrl, connection.apiKey);
       else if (provider === 'openrouter') discovered = await fetchOpenRouterModels(connection.baseUrl, connection.apiKey);
+      else if (provider === 'xiaomimimo') discovered = await fetchOpenAIModels(connection.baseUrl, connection.apiKey);
       else if (connection.apiKey) discovered = await fetchOpenAIModels(connection.baseUrl, connection.apiKey);
       else if (connection.oauth?.active) discovered = [];
       else discovered = await fetchOpenAIModels(connection.baseUrl, connection.apiKey);

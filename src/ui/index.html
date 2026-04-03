@@ -712,6 +712,7 @@
                 <option value="ollama">ollama</option>
                 <option value="nvidia">nvidia</option>
                 <option value="openrouter">openrouter</option>
+                <option value="xiaomimimo">xiaomimimo</option>
                 <option value="openai">openai</option>
               </select>
             </div>
@@ -733,6 +734,7 @@
                 <option value="ollama">ollama</option>
                 <option value="nvidia">nvidia</option>
                 <option value="openrouter">openrouter</option>
+                <option value="xiaomimimo">xiaomimimo</option>
                 <option value="openai">openai</option>
               </select>
             </div>
@@ -1165,7 +1167,7 @@
       'control-plane': ['Control Plane API', 'Backend operations and full API access']
     };
 
-    let MODEL_PROVIDER_IDS = ['ollama', 'nvidia', 'openrouter', 'openai'];
+    let MODEL_PROVIDER_IDS = ['ollama', 'nvidia', 'openrouter', 'xiaomimimo', 'openai'];
     let SERVICE_PROVIDER_IDS = ['github', 'google-workspace', 'huggingface', 'elevenlabs', 'telegram', 'openai-oauth', 'github-copilot'];
     const SERVICE_SECRET_FIELD = {
       github: 'githubToken',
@@ -1180,12 +1182,14 @@
       ollama: '',
       nvidia: 'nvidiaApiKey',
       openrouter: 'openrouterApiKey',
+      xiaomimimo: 'xiaomimimoApiKey',
       openai: 'openaiApiKey'
     };
     const PROVIDER_BASE_FIELD = {
       ollama: 'ollamaBaseUrl',
       nvidia: 'nvidiaBaseUrl',
       openrouter: 'openrouterBaseUrl',
+      xiaomimimo: 'xiaomimimoBaseUrl',
       openai: 'openaiBaseUrl'
     };
 
@@ -1923,7 +1927,7 @@ ${verificationSummary || preview}`)}</pre>`;
       if (!p) return m;
       if (!m) return p;
       if (m.startsWith(`${p}/`)) return m;
-      if (/^(ollama|openrouter|nvidia|generic|openai)\//.test(m)) return m.replace(/^generic\//, 'openai/');
+      if (/^(ollama|openrouter|nvidia|xiaomimimo|generic|openai)\//.test(m)) return m.replace(/^generic\//, 'openai/');
       return `${p}/${m}`;
     }
 
@@ -2176,6 +2180,8 @@ ${verificationSummary || preview}`)}</pre>`;
             ? 'nvapi-...'
             : provider.provider === 'openrouter'
               ? 'sk-or-...'
+              : provider.provider === 'xiaomimimo'
+                ? 'sk-...'
               : 'sk-...';
         const inputPlaceholder = provider.stored_preview
           ? `current ${provider.stored_preview}`

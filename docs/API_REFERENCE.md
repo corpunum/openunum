@@ -392,7 +392,7 @@ Returns a WebUI-oriented flagship summary:
 - `POST /api/service/connect`
 - `GET /api/auth/job?id=...`
 - `POST /api/auth/job/input`
-- `GET /api/models?provider=ollama|nvidia|openrouter|openai`
+- `GET /api/models?provider=ollama|nvidia|openrouter|xiaomimimo|openai`
 - `GET /api/model-catalog`
 
 Credential visibility rules:
@@ -411,7 +411,7 @@ Credential visibility rules:
 ```json
 {
   "contract_version": "2026-04-01.model-catalog.v1",
-  "provider_order": ["ollama", "nvidia", "openrouter", "openai"],
+  "provider_order": ["ollama", "nvidia", "openrouter", "xiaomimimo", "openai"],
   "selected": {
     "provider": "ollama",
     "model_id": "kimi-k2.5:cloud",
@@ -430,7 +430,7 @@ Credential visibility rules:
 {
   "contract_version": "2026-04-01.auth-catalog.v1",
   "secret_store_path": "/home/user/.openunum/secrets.json",
-  "provider_order": ["ollama", "nvidia", "openrouter", "openai"],
+  "provider_order": ["ollama", "nvidia", "openrouter", "xiaomimimo", "openai"],
   "providers": [
     {
       "provider": "openrouter",
@@ -467,11 +467,14 @@ Credential visibility rules:
     "ollamaBaseUrl": "http://127.0.0.1:11434",
     "openrouterBaseUrl": "https://openrouter.ai/api/v1",
     "nvidiaBaseUrl": "https://integrate.api.nvidia.com/v1",
+    "xiaomimimoBaseUrl": "https://token-plan-ams.xiaomimimo.com/v1",
+    "xiaomimimoAnthropicBaseUrl": "https://token-plan-ams.xiaomimimo.com/anthropic",
     "openaiBaseUrl": "https://api.openai.com/v1"
   },
   "secrets": {
     "openrouterApiKey": "sk-or-...",
     "nvidiaApiKey": "nvapi-...",
+    "xiaomimimoApiKey": "sk-...",
     "openaiApiKey": "sk-...",
     "openaiOauthToken": "...",
     "githubToken": "ghp_...",

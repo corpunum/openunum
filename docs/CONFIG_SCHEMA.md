@@ -40,21 +40,25 @@ Secret store path:
       "ollama": "ollama/minimax-m2.7:cloud",
       "openrouter": "openrouter/openai/gpt-4o-mini",
       "nvidia": "nvidia/qwen/qwen3-coder-480b-a35b-instruct",
+      "xiaomimimo": "xiaomimimo/gpt-4o-mini",
       "openai": "openai/gpt-4o-mini"
     },
     "routing": {
       "fallbackEnabled": true,
-      "fallbackProviders": ["ollama", "nvidia", "openrouter", "openai"],
+      "fallbackProviders": ["ollama", "nvidia", "openrouter", "xiaomimimo", "openai"],
       "forcePrimaryProvider": false
     },
     "behaviorOverrides": {},
     "ollamaBaseUrl": "http://127.0.0.1:11434",
     "openrouterBaseUrl": "https://openrouter.ai/api/v1",
     "nvidiaBaseUrl": "https://integrate.api.nvidia.com/v1",
+    "xiaomimimoBaseUrl": "https://token-plan-ams.xiaomimimo.com/v1",
+    "xiaomimimoAnthropicBaseUrl": "https://token-plan-ams.xiaomimimo.com/anthropic",
     "openaiBaseUrl": "https://api.openai.com/v1",
     "genericBaseUrl": "https://api.openai.com/v1",
     "openrouterApiKey": "",
     "nvidiaApiKey": "",
+    "xiaomimimoApiKey": "",
     "openaiApiKey": "",
     "genericApiKey": ""
   },

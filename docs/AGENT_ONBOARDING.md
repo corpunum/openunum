@@ -6,7 +6,7 @@ Purpose: let a fresh agent become productive in OpenUnum in under 15 minutes, wi
 
 OpenUnum is a local-first autonomous coding runtime with:
 - model chat + tool calling (`src/core/agent.mjs`, `src/tools/runtime.mjs`)
-- provider routing and fallback control (`ollama`, `nvidia`, `openrouter`, `openai`)
+- provider routing and fallback control (`ollama`, `nvidia`, `openrouter`, `xiaomimimo`, `openai`)
 - browser/CDP automation
 - mission loop with proof-aware completion (`src/core/missions.mjs`)
 - generic task planning/execution with restart-safe persistence (`src/core/goal-task-planner.mjs`, `src/core/task-orchestrator.mjs`)
