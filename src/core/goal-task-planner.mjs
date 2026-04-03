@@ -39,6 +39,11 @@ function classifyGoal(goal) {
     wantsSearch: hasAny(text, ['search', 'research', 'find', 'browse', 'compare', 'online', 'latest']),
     wantsRuntime: hasAny(text, ['runtime', 'inventory', 'health', 'status', 'monitor', 'service', 'port', 'host', 'hardware']),
     wantsCode: hasAny(text, ['fix', 'implement', 'refactor', 'edit', 'patch', 'write', 'code', 'bug', 'test', 'build', 'frontend', 'backend', 'ui', 'server']),
+    wantsDiagnose: hasAny(text, ['diagnose', 'debug', 'investigate', 'why', 'broken', 'failing', 'error']),
+    wantsDeploy: hasAny(text, ['deploy', 'release', 'publish', 'ship', 'rollout']),
+    wantsBenchmark: hasAny(text, ['benchmark', 'profile', 'latency', 'speed', 'throughput', 'compare performance']),
+    wantsSync: hasAny(text, ['sync', 'mirror', 'backup', 'upload', 'download', 'pull latest']),
+    wantsCleanup: hasAny(text, ['cleanup', 'clean up', 'prune', 'remove old', 'delete temp']),
     wantsModelScout: hasAny(text, ['huggingface', 'ollama', 'gguf', 'model', 'download', 'import']) &&
       hasAny(text, ['search', 'research', 'find', 'compare', 'download', 'import', 'best', 'open source']),
     wantsFilesystem: hasAny(text, ['repo', 'workspace', 'file', 'directory', 'project'])
@@ -115,6 +120,67 @@ export class GoalTaskPlanner {
         timeoutMs: 8000
       });
       verify.push({ kind: 'step_ok', stepIndex: steps.length - 1, label: 'workspace scan completed' });
+    }
+
+    if (cls.wantsDiagnose) {
+      plan.push('Collect bounded diagnostics before deeper execution');
+      steps.push({
+        kind: 'tool',
+        label: 'collect diagnostics',
+        tool: 'shell_run',
+        args: {
+          cmd: "pwd && git status --short --branch || true && printf '\\n---\\n' && node -v && printf '\\n---\\n' && ps -eo pid,comm,%cpu,%mem --sort=-%cpu | head -n 12"
+        },
+        allowedTools: ['shell_run'],
+        timeoutMs: 10000
+      });
+      verify.push({ kind: 'step_ok', stepIndex: steps.length - 1, label: 'diagnostics collected' });
+    }
+
+    if (cls.wantsBenchmark) {
+      plan.push('Run a bounded local benchmark probe');
+      steps.push({
+        kind: 'tool',
+        label: 'benchmark probe',
+        tool: 'shell_run',
+        args: {
+          cmd: "date +%s%3N && node -e \"console.log('benchmark probe ready')\" && date +%s%3N"
+        },
+        allowedTools: ['shell_run'],
+        timeoutMs: 8000
+      });
+      verify.push({ kind: 'step_ok', stepIndex: steps.length - 1, label: 'benchmark probe completed' });
+    }
+
+    if (cls.wantsDeploy) {
+      plan.push('Verify deployment-facing health before acting');
+      steps.push({
+        kind: 'tool',
+        label: 'deployment preflight',
+        tool: 'http_request',
+        args: {
+          method: 'GET',
+          url: `${baseUrl}/api/health`
+        },
+        allowedTools: ['http_request'],
+        timeoutMs: 5000
+      });
+      verify.push({ kind: 'step_ok', stepIndex: steps.length - 1, label: 'deployment preflight passed' });
+    }
+
+    if (cls.wantsSync || cls.wantsCleanup) {
+      plan.push('Inspect filesystem state before any sync or cleanup action');
+      steps.push({
+        kind: 'tool',
+        label: 'filesystem state',
+        tool: 'shell_run',
+        args: {
+          cmd: "pwd && du -sh . 2>/dev/null || true && printf '\\n---\\n' && find . -maxdepth 2 -type d \\( -name tmp -o -name dist -o -name coverage \\) 2>/dev/null | head -n 40"
+        },
+        allowedTools: ['shell_run'],
+        timeoutMs: 10000
+      });
+      verify.push({ kind: 'step_ok', stepIndex: steps.length - 1, label: 'filesystem state inspected' });
     }
 
     if (cls.wantsModelScout) {

@@ -1,61 +1,44 @@
 # Next Tasks
 
-Context: the planner-backed autonomy framework is now in place. The next tranche should tighten durability and promotion policy around the remaining autonomy surfaces.
+Context: the previous durability/policy tranche is done. Workers persist across restart, self-edit runs persist with promotion gates, planner policies cover more intent classes, and the controller now has a deterministic final-answer fallback when tools succeed but the model stays silent.
 
-## 1. Persist Workers And Self-Edit Runs
-
-Goal:
-- make worker runs and self-edit runs restart-safe the same way missions and generic tasks now persist
-
-Why:
-- generic tasks already survive restart
-- worker and self-edit history still rely too heavily on in-memory state
-- unattended autonomy needs durable operator-visible records
-
-Deliverables:
-- SQLite tables for worker runs and self-edit runs
-- `list/status` APIs that survive restart
-- interruption marking for in-flight runs after restart
-
-## 2. Expand Planner Policies
+## 1. Secrets At Rest With A Real Threat Model
 
 Goal:
-- add more deterministic planner policies so plain-language goals compile into short executable graphs across more intent classes
-
-Priority intent classes:
-- deploy
-- benchmark
-- sync
-- diagnose
-- cleanup
+- replace plaintext `~/.openunum/secrets.json` storage with an explicit OS-keychain or passphrase-backed option
 
 Why:
-- the framework should not fall back to a generic mission-only shape for most goals
-- smaller/local models benefit when the system pre-structures the execution path
+- mode `0600` is necessary but not sufficient
+- machine-derived-key encryption is weak and should be avoided
 
 Deliverables:
-- intent classifier expansion in `src/core/goal-task-planner.mjs`
-- bounded preflight steps per intent class
-- regression coverage for each new planner policy
+- pluggable secret backend
+- migration path from current JSON store
+- operator docs for backup/restore and headless usage
 
-## 3. Add Promotion Policy Gates
+## 2. Consolidate Self-Heal Surfaces
 
 Goal:
-- require stronger validation before planner-generated self-edit tasks can be promoted
+- reduce `selfheal.mjs`, `self-heal.mjs`, and `auto-recover.mjs` into one clear runtime path
 
 Why:
-- self-edit now has validation/canary/rollback, but promotion policy is still too uniform
-- path-specific guardrails are needed for unattended autonomy
+- the overlap makes autonomous self-editing harder
+- operational ownership is unclear
 
 Deliverables:
-- path-class policies:
-  - UI files
-  - server/runtime files
-  - docs-only changes
-- required validations per path class
-- explicit blocked-promotion reasons in run status/output
+- one canonical self-heal module
+- legacy compatibility shims only where needed
+- tests for the chosen surface
 
-## Immediate Follow-Up
+## 3. Production Hardening
 
-- investigate the session pattern where tools execute but the model does not emit a final natural-language answer
-- consider a deterministic summarizer fallback for that exact failure mode so the user gets a usable answer instead of a raw action dump
+Goal:
+- make the host safer and easier to run unattended
+
+Priority items:
+- HTTP rate limiting
+- deployment guide (`systemd`, Docker, backup/restore)
+- repeatable local model benchmark runner with first-token latency and throughput
+
+Why:
+- these are the remaining operator-grade gaps after the autonomy framework pass

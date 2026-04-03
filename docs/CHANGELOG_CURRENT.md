@@ -2,6 +2,40 @@
 
 Date: 2026-04-03
 
+## Durability + Recovery + Benchmark Pass
+
+0. Finished the remaining autonomy framework suggestions:
+   - worker records now persist in SQLite and scheduled workers are rehydrated after restart
+   - self-edit runs now persist in SQLite and in-flight runs are marked interrupted on boot
+   - planner intent coverage expanded to `deploy`, `benchmark`, `sync`, `diagnose`, and `cleanup`
+   - self-edit promotion is now blocked by path-aware policy gates when required validations/canaries are missing
+
+1. Fixed the bootstrap ES module defect:
+   - `bootstrap.mjs` no longer calls `require()` inside an ES module
+
+2. Improved repo hygiene for local model/operator artifacts:
+   - `.gitignore` now excludes `*.gguf`, `*.db`, and `tmp/`
+
+3. Hardened execution-envelope semantics:
+   - large-model tier detection now uses more precise token matching
+   - compact-tier false positives like `397b` matching `7b` remain covered by regression
+   - profile config can now disable implicit kernel-tool injection via `includeKernelTools: false`
+
+4. Replaced the blocking disk-space check in legacy `selfheal.mjs`:
+   - `df` is now executed through async `execFile`, not `execSync`
+
+5. Added deterministic fallback summarization when tools succeed but the model fails to emit a final answer:
+   - controller now attempts an evidence-based summary before falling back to a raw action dump
+   - this directly covers sessions like model-search tasks where the tool results are sufficient but the model never returns a clean final response
+
+6. Added new regression coverage:
+   - `tests/phase27.worker-persistence.e2e.mjs`
+   - `tests/phase28.self-edit-promotion-policy.e2e.mjs`
+
+7. Added a machine-local benchmark/report update:
+   - refreshed `local_models_report.md`
+   - recorded live Ollama results for installed uncensored local models on the current AMD Z1 Extreme host
+
 ## WebUI Upgrade + Session Switching Fix + Docs Refresh
 
 0. Updated flagship `src/ui/index.html` to a Gemini-inspired glass visual direction without dropping existing backend feature wiring.

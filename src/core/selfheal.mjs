@@ -1,9 +1,22 @@
 import { loadConfig, saveConfig, defaultConfig } from '../config.mjs';
 import { logInfo, logError, logWarn } from '../logger.mjs';
-import { execSync } from 'node:child_process';
+import { execFile } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
+import { promisify } from 'node:util';
+
+const execFileAsync = promisify(execFile);
+
+async function readDiskUsage(homeDir) {
+  try {
+    const out = await execFileAsync('df', ['-h', homeDir], { encoding: 'utf8' });
+    return out.stdout;
+  } catch {
+    const out = await execFileAsync('df', ['-h', '/'], { encoding: 'utf8' });
+    return out.stdout;
+  }
+}
 
 export class SelfHealMonitor {
   constructor({ config, agent, browser, memory }) {
@@ -37,7 +50,7 @@ export class SelfHealMonitor {
     // Check 2: Disk space
     try {
       const homeDir = process.env.OPENUNUM_HOME || path.join(os.homedir(), '.openunum');
-      const dfOut = execSync(`df -h "${homeDir}" 2>/dev/null || df -h /`, { encoding: 'utf8' });
+      const dfOut = await readDiskUsage(homeDir);
       const lines = dfOut.trim().split('\n');
       if (lines.length >= 2) {
         const parts = lines[1].split(/\s+/);

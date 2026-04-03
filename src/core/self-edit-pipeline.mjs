@@ -71,6 +71,44 @@ function defaultValidationCommands(baseUrl, changedPaths = []) {
   return [...new Set(commands)];
 }
 
+function buildPromotionPolicy(baseUrl, changedPaths = [], validationCommands = [], canaryChecks = []) {
+  const paths = [...new Set((changedPaths || []).map((item) => trimString(item)).filter(Boolean))];
+  const touchesRuntimeCode = paths.some((item) => /^(src\/|scripts\/|package\.json)/.test(item));
+  const touchesUi = paths.some((item) => item === 'src/ui/index.html' || /\/src\/ui\/index\.html$/.test(item));
+  const touchesDocsOnly = paths.length > 0 && paths.every((item) => /^(docs\/|README|CHANGELOG|NEXT_TASKS\.md)/.test(item));
+  const requiredValidationSubstrings = [];
+  const requiredCanaryTargets = [];
+  if (touchesRuntimeCode) requiredValidationSubstrings.push('node --check');
+  if (touchesUi) requiredValidationSubstrings.push('scripts/ui-smoke-noauth.mjs');
+  if (touchesRuntimeCode || touchesUi) requiredCanaryTargets.push(`${baseUrl}/api/health`);
+  return {
+    touchesRuntimeCode,
+    touchesUi,
+    touchesDocsOnly,
+    requiredValidationSubstrings,
+    requiredCanaryTargets,
+    declaredValidationCommands: [...validationCommands],
+    declaredCanaryUrls: canaryChecks.map((item) => trimString(item?.url)).filter(Boolean)
+  };
+}
+
+function evaluatePromotionPolicy(policy) {
+  if (!policy) return { ok: true, violations: [] };
+  if (policy.touchesDocsOnly) return { ok: true, violations: [] };
+  const violations = [];
+  for (const needle of policy.requiredValidationSubstrings || []) {
+    if (!policy.declaredValidationCommands.some((cmd) => String(cmd || '').includes(needle))) {
+      violations.push(`missing_required_validation:${needle}`);
+    }
+  }
+  for (const url of policy.requiredCanaryTargets || []) {
+    if (!policy.declaredCanaryUrls.some((item) => item === url)) {
+      violations.push(`missing_required_canary:${url}`);
+    }
+  }
+  return { ok: violations.length === 0, violations };
+}
+
 export class SelfEditPipeline {
   constructor({ toolRuntime, memoryStore, workspaceRoot, defaultBaseUrl = 'http://127.0.0.1:18880' }) {
     this.toolRuntime = toolRuntime;
@@ -78,6 +116,7 @@ export class SelfEditPipeline {
     this.workspaceRoot = workspaceRoot;
     this.defaultBaseUrl = trimString(defaultBaseUrl, 'http://127.0.0.1:18880');
     this.runs = new Map();
+    this.memoryStore?.markRunningSelfEditInterrupted?.();
   }
 
   buildPublicRun(run) {
@@ -95,6 +134,8 @@ export class SelfEditPipeline {
       promotedAt: run.promotedAt,
       rolledBackAt: run.rolledBackAt,
       rollbackOnFailure: run.rollbackOnFailure,
+      promotionPolicy: run.promotionPolicy ? { ...run.promotionPolicy } : null,
+      promotionChecks: Array.isArray(run.promotionChecks) ? [...run.promotionChecks] : [],
       validationCommands: [...run.validationCommands],
       canaryChecks: run.canaryChecks.map((item) => ({ ...item })),
       edits: run.edits.map((item) => ({ tool: item.tool, args: item.args })),
@@ -112,7 +153,15 @@ export class SelfEditPipeline {
   }
 
   listRuns(limit = 40) {
-    const rows = [...this.runs.values()]
+    const live = [...this.runs.values()];
+    const persisted = this.memoryStore?.listSelfEditRecords?.(cap(limit, 1, 200, 40) * 3) || [];
+    const seen = new Set();
+    const rows = [...live, ...persisted]
+      .filter((run) => {
+        if (!run?.id || seen.has(run.id)) return false;
+        seen.add(run.id);
+        return true;
+      })
       .sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)))
       .slice(0, cap(limit, 1, 200, 40))
       .map((run) => this.buildPublicRun(run));
@@ -121,8 +170,14 @@ export class SelfEditPipeline {
 
   getRun(id) {
     const run = this.runs.get(trimString(id));
-    if (!run) return { ok: false, error: 'self_edit_run_not_found' };
-    return { ok: true, run: this.buildPublicRun(run) };
+    if (run) return { ok: true, run: this.buildPublicRun(run) };
+    const persisted = this.memoryStore?.getSelfEditRecord?.(id);
+    if (!persisted) return { ok: false, error: 'self_edit_run_not_found' };
+    return { ok: true, run: this.buildPublicRun(persisted) };
+  }
+
+  persistRun(run) {
+    this.memoryStore?.upsertSelfEditRecord?.(run);
   }
 
   validatePayload(payload = {}) {
@@ -251,6 +306,13 @@ export class SelfEditPipeline {
         expectStatus: Number.isFinite(Number(item?.expectStatus)) ? Number(item.expectStatus) : 200
       }))
       .filter((item) => item.url);
+    const promotionPolicy = buildPromotionPolicy(
+      baseUrl,
+      edits.map((item) => trimString(item.args?.path)),
+      validationCommands,
+      canaryChecks
+    );
+    const promotionChecks = [];
 
     const run = {
       id,
@@ -266,6 +328,8 @@ export class SelfEditPipeline {
       promotedAt: null,
       rolledBackAt: null,
       rollbackOnFailure: payload.rollbackOnFailure !== false,
+      promotionPolicy,
+      promotionChecks,
       validationCommands,
       canaryChecks,
       edits,
@@ -276,6 +340,7 @@ export class SelfEditPipeline {
       lastError: null
     };
     this.runs.set(id, run);
+    this.persistRun(run);
 
     try {
       for (const edit of edits) {
@@ -291,6 +356,7 @@ export class SelfEditPipeline {
         };
         run.editResults.push(summary);
         if (summary.path) run.changedPaths.push(edit.args.path);
+        this.persistRun(run);
         if (!summary.ok) {
           run.lastError = summary.error || `edit_failed:${edit.tool}`;
           throw new Error(run.lastError);
@@ -299,12 +365,26 @@ export class SelfEditPipeline {
 
       for (const command of validationCommands) {
         const out = await this.runValidationCommand(run, command);
+        this.persistRun(run);
         if (!out.ok) throw new Error(run.lastError || `validation_failed:${command}`);
       }
 
       for (const check of canaryChecks) {
         const out = await this.runCanary(run, check);
+        this.persistRun(run);
         if (!out.ok) throw new Error(run.lastError || `canary_failed:${check.url}`);
+      }
+
+      const policyEvaluation = evaluatePromotionPolicy(run.promotionPolicy);
+      run.promotionChecks.push({
+        at: nowIso(),
+        ok: policyEvaluation.ok,
+        violations: policyEvaluation.violations
+      });
+      this.persistRun(run);
+      if (!policyEvaluation.ok) {
+        run.lastError = policyEvaluation.violations.join(';');
+        throw new Error(run.lastError);
       }
 
       run.status = 'promoted';
@@ -319,6 +399,7 @@ export class SelfEditPipeline {
     } finally {
       run.finishedAt = nowIso();
       this.recordRunArtifacts(run);
+      this.persistRun(run);
     }
 
     return { ok: run.status === 'promoted', run: this.buildPublicRun(run) };

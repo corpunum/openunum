@@ -44,10 +44,13 @@ function normalizeStatus(status) {
 }
 
 export class WorkerOrchestrator {
-  constructor({ toolRuntime }) {
+  constructor({ toolRuntime, memoryStore = null }) {
     this.toolRuntime = toolRuntime;
+    this.memoryStore = memoryStore;
     this.workers = new Map();
     this.timer = null;
+    this.memoryStore?.markRunningWorkersInterrupted?.();
+    this.hydrateWorkers();
   }
 
   startLoop() {
@@ -62,6 +65,22 @@ export class WorkerOrchestrator {
     if (!this.timer) return;
     clearInterval(this.timer);
     this.timer = null;
+  }
+
+  hydrateWorkers() {
+    const persisted = this.memoryStore?.listWorkerRecords?.(200) || [];
+    for (const worker of persisted) {
+      if (!worker?.id || this.workers.has(worker.id)) continue;
+      if (normalizeStatus(worker.status) !== 'scheduled') continue;
+      this.workers.set(worker.id, {
+        ...worker,
+        status: 'scheduled',
+        allowedTools: Array.isArray(worker.allowedTools) ? [...worker.allowedTools] : [],
+        steps: Array.isArray(worker.steps) ? worker.steps.map(normalizeStep) : [],
+        logs: Array.isArray(worker.logs) ? [...worker.logs] : []
+      });
+    }
+    if ([...this.workers.values()].some((worker) => worker.status === 'scheduled')) this.startLoop();
   }
 
   getCatalogToolNames() {
@@ -92,18 +111,33 @@ export class WorkerOrchestrator {
     };
   }
 
+  persistWorker(worker) {
+    this.memoryStore?.upsertWorkerRecord?.(worker);
+  }
+
   listWorkers(limit = 80) {
-    const rows = [...this.workers.values()]
+    const live = [...this.workers.values()].map((worker) => this.buildPublicWorker(worker));
+    const persisted = this.memoryStore?.listWorkerRecords
+      ? this.memoryStore.listWorkerRecords(cap(limit, 1, 500, 80) * 3).map((worker) => this.buildPublicWorker(worker))
+      : [];
+    const seen = new Set();
+    const rows = [...live, ...persisted]
+      .filter((worker) => {
+        if (!worker?.id || seen.has(worker.id)) return false;
+        seen.add(worker.id);
+        return true;
+      })
       .sort((a, b) => String(b.updatedAt).localeCompare(String(a.updatedAt)))
-      .slice(0, cap(limit, 1, 500, 80))
-      .map((worker) => this.buildPublicWorker(worker));
+      .slice(0, cap(limit, 1, 500, 80));
     return { ok: true, workers: rows };
   }
 
   getWorker(id) {
     const worker = this.workers.get(String(id || '').trim());
-    if (!worker) return { ok: false, error: 'worker_not_found' };
-    return { ok: true, worker: this.buildPublicWorker(worker) };
+    if (worker) return { ok: true, worker: this.buildPublicWorker(worker) };
+    const persisted = this.memoryStore?.getWorkerRecord?.(id);
+    if (!persisted) return { ok: false, error: 'worker_not_found' };
+    return { ok: true, worker: this.buildPublicWorker(persisted) };
   }
 
   startWorker(payload = {}) {
@@ -144,6 +178,7 @@ export class WorkerOrchestrator {
       runCount: 0,
       failCount: 0,
       nextRunAt: new Date(Date.now() + delayMs).toISOString(),
+      sessionId: String(payload.sessionId || `worker:${id}`),
       lastStartedAt: null,
       lastFinishedAt: null,
       createdAt: now,
@@ -153,6 +188,7 @@ export class WorkerOrchestrator {
     };
     this.workers.set(id, worker);
     this.startLoop();
+    this.persistWorker(worker);
     return { ok: true, worker: this.buildPublicWorker(worker) };
   }
 
@@ -168,6 +204,7 @@ export class WorkerOrchestrator {
       note: 'stopped_by_request'
     });
     if (worker.logs.length > 200) worker.logs = worker.logs.slice(-200);
+    this.persistWorker(worker);
     return { ok: true, worker: this.buildPublicWorker(worker) };
   }
 
@@ -228,7 +265,7 @@ export class WorkerOrchestrator {
       try {
         // eslint-disable-next-line no-await-in-loop
         result = await this.toolRuntime.run(step.tool, step.args || {}, {
-          sessionId: `worker:${worker.id}`,
+          sessionId: worker.sessionId || `worker:${worker.id}`,
           allowedTools: worker.allowedTools,
           policyMode: 'execute'
         });
@@ -276,6 +313,7 @@ export class WorkerOrchestrator {
       steps: stepOutcomes
     });
     if (worker.logs.length > 200) worker.logs = worker.logs.slice(-200);
+    this.persistWorker(worker);
 
     return {
       ok: success,

@@ -4,3 +4,6 @@ node_modules
 *.log
 coverage
 .github_token
+*.gguf
+*.db
+tmp/

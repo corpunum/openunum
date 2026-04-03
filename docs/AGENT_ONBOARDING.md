@@ -10,7 +10,7 @@ OpenUnum is a local-first autonomous coding runtime with:
 - browser/CDP automation
 - mission loop with proof-aware completion (`src/core/missions.mjs`)
 - generic task planning/execution with restart-safe persistence (`src/core/goal-task-planner.mjs`, `src/core/task-orchestrator.mjs`)
-- bounded workers + self-edit promotion pipeline + model scout workflows (`src/core/worker-orchestrator.mjs`, `src/core/self-edit-pipeline.mjs`, `src/core/model-scout-workflow.mjs`)
+- bounded workers + restart-safe worker persistence + self-edit promotion pipeline + model scout workflows (`src/core/worker-orchestrator.mjs`, `src/core/self-edit-pipeline.mjs`, `src/core/model-scout-workflow.mjs`)
 - persistent memory/telemetry in SQLite (`src/memory/store.mjs`)
 - operator trace/timeline visibility in WebUI (`src/ui/index.html`)
 
@@ -133,6 +133,12 @@ Before broad filesystem discovery, read `GET /api/tools/catalog` and target thes
   - `shell_run`
   - optional `model_scout`
   before handing off to a mission step.
+- Planner intent policies now include bounded preflights for:
+  - `deploy`
+  - `benchmark`
+  - `sync`
+  - `diagnose`
+  - `cleanup`
 - Generic task runs are persisted:
   - `task_records`
   - `task_step_results`
@@ -166,7 +172,7 @@ Before broad filesystem discovery, read `GET /api/tools/catalog` and target thes
   - when UI no-scrollbar intent is detected and no concrete patch is produced, deterministic recovery edits `src/ui/index.html`
 - Assistant says `Tool actions executed (...) but model returned no final message`:
   - inspect the latest executed actions in the fallback response and the execution trace
-  - this indicates tool execution succeeded but the model failed to emit a usable final answer
+  - OpenUnum now tries a deterministic evidence-based summary before falling back to a raw action dump
   - common causes are restricted tool profiles on small models or a provider/model that stops after tool use without a final natural-language turn
 
 ## 8. Operational Modes

@@ -6,7 +6,7 @@
 
 import fs from 'node:fs';
 import path from 'node:path';
-import { spawn } from 'node:child_process';
+import { execSync, spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -57,7 +57,6 @@ function checkSystemTools() {
   const missing = [];
   for (const tool of tools) {
     try {
-      const { execSync } = require('node:child_process');
       execSync(tool.cmd, { stdio: 'ignore' });
     } catch {
       missing.push(tool.name);
@@ -113,7 +112,6 @@ async function startServer() {
 
 async function runSelfTest() {
   log('Running self-test suite...');
-  const { execSync } = require('node:child_process');
   try {
     execSync('node tests/self-test-runner.mjs', {
       cwd: __dirname,

@@ -94,6 +94,7 @@ Worker model:
 - explicit `allowedTools` allowlist is required
 - all `steps[*].tool` must be included in `allowedTools`
 - each run is status-tracked (`scheduled` | `running` | `completed` | `failed` | `stopped`)
+- worker records survive restart and scheduled workers are rehydrated into the live orchestrator
 - no OAuth dependency
 
 Start payload (partial):
@@ -124,7 +125,12 @@ Behavior:
 - duplicate edit paths are rejected so rollback semantics stay deterministic
 - validation defaults to `node --check` for changed JS/MJS files plus `smoke:ui:noauth` for runtime-facing edits
 - canary defaults to local `GET /api/health` and `GET /api/runtime/overview` for runtime-facing edits
+- promotion policy is path-aware:
+  - runtime code requires `node --check`
+  - UI/runtime surface changes require a health canary
+  - docs-only changes are allowed without runtime canaries
 - rollback uses per-file `file_restore_last`; no OAuth endpoints are invoked by defaults
+- self-edit run records survive restart; in-flight runs are marked failed/interrupted on boot
 
 Run payload (partial):
 ```json
@@ -220,6 +226,7 @@ Planner-backed goal payload:
 
 Planner response:
 - chooses bounded preflight steps such as `browser_search`, `http_request`, or `shell_run`
+- expands preflights for `deploy`, `benchmark`, `sync`, `diagnose`, and `cleanup` style goals
 - shares a task session across preflight steps and the mission controller
 - persists the task run so status/list survive restart
 

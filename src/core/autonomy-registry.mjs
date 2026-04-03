@@ -12,9 +12,10 @@ let goalTaskPlanner = null;
 
 function syncWorkerOrchestrator(ctx) {
   if (!workerOrchestrator) {
-    workerOrchestrator = new WorkerOrchestrator({ toolRuntime: ctx.agent.toolRuntime });
+    workerOrchestrator = new WorkerOrchestrator({ toolRuntime: ctx.agent.toolRuntime, memoryStore: ctx.memory });
   }
   workerOrchestrator.toolRuntime = ctx.agent.toolRuntime;
+  workerOrchestrator.memoryStore = ctx.memory;
   return workerOrchestrator;
 }
 

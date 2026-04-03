@@ -217,6 +217,37 @@ export class MemoryStore {
         created_at TEXT NOT NULL
       );
       CREATE INDEX IF NOT EXISTS idx_task_check_results_task_phase ON task_check_results(task_id, phase, check_index);
+      CREATE TABLE IF NOT EXISTS worker_records (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        goal TEXT NOT NULL,
+        status TEXT NOT NULL,
+        run_count INTEGER NOT NULL,
+        fail_count INTEGER NOT NULL,
+        session_id TEXT NOT NULL,
+        last_error TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        finished_at TEXT,
+        worker_json TEXT NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS idx_worker_records_status_updated ON worker_records(status, updated_at DESC);
+      CREATE INDEX IF NOT EXISTS idx_worker_records_created ON worker_records(created_at DESC);
+      CREATE TABLE IF NOT EXISTS self_edit_records (
+        id TEXT PRIMARY KEY,
+        label TEXT NOT NULL,
+        goal TEXT NOT NULL,
+        status TEXT NOT NULL,
+        session_id TEXT NOT NULL,
+        last_error TEXT,
+        changed_paths TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        finished_at TEXT,
+        run_json TEXT NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS idx_self_edit_records_status_updated ON self_edit_records(status, updated_at DESC);
+      CREATE INDEX IF NOT EXISTS idx_self_edit_records_created ON self_edit_records(created_at DESC);
     `);
   }
 
@@ -686,6 +717,138 @@ export class MemoryStore {
       if (!task.errors.includes('task_interrupted_by_restart')) task.errors.push('task_interrupted_by_restart');
       task.finishedAt = task.finishedAt || now;
       this.persistTaskState(task);
+    }
+  }
+
+  upsertWorkerRecord(worker) {
+    if (!worker || !worker.id) return;
+    const now = new Date().toISOString();
+    const sessionId = String(worker.sessionId || `worker:${worker.id}`);
+    this.db
+      .prepare(
+        `INSERT INTO worker_records (
+          id, name, goal, status, run_count, fail_count, session_id, last_error, created_at, updated_at, finished_at, worker_json
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(id) DO UPDATE SET
+          name = excluded.name,
+          goal = excluded.goal,
+          status = excluded.status,
+          run_count = excluded.run_count,
+          fail_count = excluded.fail_count,
+          session_id = excluded.session_id,
+          last_error = excluded.last_error,
+          created_at = excluded.created_at,
+          updated_at = excluded.updated_at,
+          finished_at = excluded.finished_at,
+          worker_json = excluded.worker_json`
+      )
+      .run(
+        String(worker.id),
+        String(worker.name || ''),
+        String(worker.goal || ''),
+        String(worker.status || 'unknown'),
+        Number(worker.runCount || 0),
+        Number(worker.failCount || 0),
+        sessionId,
+        worker.lastError ? String(worker.lastError) : null,
+        String(worker.createdAt || now),
+        now,
+        worker.lastFinishedAt ? String(worker.lastFinishedAt) : null,
+        JSON.stringify(worker || {})
+      );
+  }
+
+  getWorkerRecord(id) {
+    const workerId = String(id || '').trim();
+    if (!workerId) return null;
+    const row = this.db.prepare('SELECT worker_json FROM worker_records WHERE id = ?').get(workerId);
+    if (!row) return null;
+    return parseJson(row.worker_json, null);
+  }
+
+  listWorkerRecords(limit = 80) {
+    const rows = this.db
+      .prepare('SELECT worker_json FROM worker_records ORDER BY updated_at DESC LIMIT ?')
+      .all(Math.max(1, Math.min(500, Number(limit || 80))));
+    return rows.map((row) => parseJson(row.worker_json, null)).filter(Boolean);
+  }
+
+  markRunningWorkersInterrupted() {
+    const rows = this.db
+      .prepare("SELECT worker_json FROM worker_records WHERE status = 'running'")
+      .all();
+    for (const row of rows) {
+      const worker = parseJson(row.worker_json, null);
+      if (!worker || !worker.id) continue;
+      worker.status = 'failed';
+      worker.lastError = worker.lastError || 'worker_interrupted_by_restart';
+      worker.nextRunAt = null;
+      worker.updatedAt = new Date().toISOString();
+      this.upsertWorkerRecord(worker);
+    }
+  }
+
+  upsertSelfEditRecord(run) {
+    if (!run || !run.id) return;
+    const now = new Date().toISOString();
+    this.db
+      .prepare(
+        `INSERT INTO self_edit_records (
+          id, label, goal, status, session_id, last_error, changed_paths, created_at, updated_at, finished_at, run_json
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(id) DO UPDATE SET
+          label = excluded.label,
+          goal = excluded.goal,
+          status = excluded.status,
+          session_id = excluded.session_id,
+          last_error = excluded.last_error,
+          changed_paths = excluded.changed_paths,
+          created_at = excluded.created_at,
+          updated_at = excluded.updated_at,
+          finished_at = excluded.finished_at,
+          run_json = excluded.run_json`
+      )
+      .run(
+        String(run.id),
+        String(run.label || ''),
+        String(run.goal || ''),
+        String(run.status || 'unknown'),
+        String(run.sessionId || ''),
+        run.lastError ? String(run.lastError) : null,
+        Array.isArray(run.changedPaths) ? run.changedPaths.join(',') : '',
+        String(run.createdAt || now),
+        now,
+        run.finishedAt ? String(run.finishedAt) : null,
+        JSON.stringify(run || {})
+      );
+  }
+
+  getSelfEditRecord(id) {
+    const runId = String(id || '').trim();
+    if (!runId) return null;
+    const row = this.db.prepare('SELECT run_json FROM self_edit_records WHERE id = ?').get(runId);
+    if (!row) return null;
+    return parseJson(row.run_json, null);
+  }
+
+  listSelfEditRecords(limit = 80) {
+    const rows = this.db
+      .prepare('SELECT run_json FROM self_edit_records ORDER BY updated_at DESC LIMIT ?')
+      .all(Math.max(1, Math.min(500, Number(limit || 80))));
+    return rows.map((row) => parseJson(row.run_json, null)).filter(Boolean);
+  }
+
+  markRunningSelfEditInterrupted() {
+    const rows = this.db
+      .prepare("SELECT run_json FROM self_edit_records WHERE status = 'running'")
+      .all();
+    for (const row of rows) {
+      const run = parseJson(row.run_json, null);
+      if (!run || !run.id) continue;
+      run.status = 'failed';
+      run.lastError = run.lastError || 'self_edit_interrupted_by_restart';
+      run.finishedAt = run.finishedAt || new Date().toISOString();
+      this.upsertSelfEditRecord(run);
     }
   }
 

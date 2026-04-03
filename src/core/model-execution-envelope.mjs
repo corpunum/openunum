@@ -9,14 +9,28 @@ function hasSizedToken(modelId, sizeToken) {
   return new RegExp(`(^|[^0-9])${String(sizeToken)}b($|[^0-9])`).test(text);
 }
 
+function hasWordToken(modelId, token) {
+  const text = String(modelId || '').toLowerCase();
+  return new RegExp(`(^|[^a-z0-9])${String(token).toLowerCase()}($|[^a-z0-9])`).test(text);
+}
+
 function inferTier(provider, modelId) {
   const providerId = String(provider || '').toLowerCase();
   const id = String(modelId || '').toLowerCase();
   const paramsB = inferParamsB(id);
 
-  if (/gpt-5|405b|397b|480b|sonnet|opus|pro|large/.test(id)) return 'full';
   if (
-    /nano|mini|small/.test(id) ||
+    /gpt-5/.test(id) ||
+    hasSizedToken(id, 405) ||
+    hasSizedToken(id, 397) ||
+    hasSizedToken(id, 480) ||
+    hasWordToken(id, 'sonnet') ||
+    hasWordToken(id, 'opus')
+  ) return 'full';
+  if (
+    hasWordToken(id, 'nano') ||
+    hasWordToken(id, 'mini') ||
+    hasWordToken(id, 'small') ||
     hasSizedToken(id, 7) ||
     hasSizedToken(id, 8) ||
     hasSizedToken(id, 9) ||
@@ -85,13 +99,15 @@ function normalizeProfileMap(runtime = {}) {
     const configuredAllowedTools = Array.isArray(merged.allowedTools)
       ? merged.allowedTools.map((t) => String(t || '').trim()).filter(Boolean)
       : [];
+    const includeKernelTools = merged.includeKernelTools !== false;
     const withKernelTools = configuredAllowedTools.length
-      ? [...new Set([...configuredAllowedTools, ...REQUIRED_KERNEL_TOOLS])]
+      ? (includeKernelTools ? [...new Set([...configuredAllowedTools, ...REQUIRED_KERNEL_TOOLS])] : configuredAllowedTools)
       : configuredAllowedTools;
     out[tier] = {
       maxHistoryMessages: Number.isFinite(merged.maxHistoryMessages) ? Number(merged.maxHistoryMessages) : defaults[tier].maxHistoryMessages,
       maxToolIterations: Number.isFinite(merged.maxToolIterations) ? Number(merged.maxToolIterations) : defaults[tier].maxToolIterations,
-      allowedTools: withKernelTools
+      allowedTools: withKernelTools,
+      includeKernelTools
     };
   }
   return out;

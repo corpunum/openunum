@@ -138,6 +138,129 @@ function clipText(text, maxChars = 1200) {
   return `${clean.slice(0, maxChars - 3)}...`;
 }
 
+function getLastUserMessage(messages = []) {
+  for (let i = messages.length - 1; i >= 0; i -= 1) {
+    if (messages[i]?.role === 'user') return String(messages[i].content || '');
+  }
+  return '';
+}
+
+function parseSizeToGiB(value) {
+  const text = String(value || '').trim();
+  const match = text.match(/(\d+(?:\.\d+)?)\s*([tgmk]?i?b)/i);
+  if (!match) return null;
+  const amount = Number(match[1]);
+  const unit = match[2].toLowerCase();
+  if (!Number.isFinite(amount)) return null;
+  if (unit.startsWith('tb') || unit.startsWith('tib')) return amount * 1024;
+  if (unit.startsWith('gb') || unit.startsWith('gib')) return amount;
+  if (unit.startsWith('mb') || unit.startsWith('mib')) return amount / 1024;
+  if (unit.startsWith('kb') || unit.startsWith('kib')) return amount / (1024 * 1024);
+  return amount;
+}
+
+function extractHardwareProfile(executedTools = []) {
+  const shell = executedTools
+    .filter((run) => run?.name === 'shell_run' && run?.result?.ok)
+    .map((run) => String(run?.result?.stdout || ''))
+    .join('\n');
+  const cpu = shell.match(/Model name:\s*([^\n]+)/i)?.[1]?.trim() || null;
+  const threads = Number(shell.match(/CPU\(s\):\s*(\d+)/i)?.[1] || '') || null;
+  const ramFromFree = parseSizeToGiB(shell.match(/^Mem:\s+([^\s]+)/im)?.[1] || '');
+  const noNvidia = /no nvidia gpu detected/i.test(shell);
+  return {
+    cpu,
+    threads,
+    ramGiB: Number.isFinite(ramFromFree) ? ramFromFree : null,
+    gpu: noNvidia ? 'none detected' : null
+  };
+}
+
+function extractModelCandidates(executedTools = []) {
+  const rows = [];
+  for (const run of executedTools) {
+    if (run?.name !== 'http_request' || !run?.result?.ok || !Array.isArray(run?.result?.json)) continue;
+    for (const item of run.result.json) {
+      const modelId = String(item?.modelId || item?.id || '').trim();
+      if (!modelId) continue;
+      rows.push({
+        modelId,
+        downloads: Number(item?.downloads || 0),
+        likes: Number(item?.likes || 0),
+        private: Boolean(item?.private),
+        gated: Boolean(item?.gated),
+        pipelineTag: item?.pipeline_tag ? String(item.pipeline_tag) : '',
+        tags: Array.isArray(item?.tags) ? item.tags.map((tag) => String(tag)) : []
+      });
+    }
+  }
+  const seen = new Set();
+  return rows
+    .filter((item) => {
+      if (!item.modelId || seen.has(item.modelId)) return false;
+      seen.add(item.modelId);
+      return true;
+    })
+    .sort((a, b) => {
+      const scoreA = (a.downloads * 4) + (a.likes * 25);
+      const scoreB = (b.downloads * 4) + (b.likes * 25);
+      return scoreB - scoreA;
+    });
+}
+
+function formatCount(value) {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return '0';
+  return new Intl.NumberFormat('en-US').format(Math.round(n));
+}
+
+function synthesizeToolOnlyAnswer({ userMessage = '', executedTools = [], toolRuns = 0 }) {
+  const prompt = String(userMessage || '').toLowerCase();
+  const asksModelRanking =
+    /model|gguf|ollama|uncensor|local/.test(prompt) &&
+    (/top ?5|best|hardware|run/.test(prompt));
+  if (asksModelRanking) {
+    const hardware = extractHardwareProfile(executedTools);
+    const candidates = extractModelCandidates(executedTools)
+      .filter((item) => !item.private && !item.gated)
+      .slice(0, 5);
+    const searchBlocked = executedTools.some((run) => run?.name === 'browser_search' && run?.result?.error === 'model_profile_tool_restricted');
+    if (candidates.length) {
+      const lines = ['Recovered answer from executed tool evidence.'];
+      if (hardware.cpu || hardware.ramGiB || hardware.threads || hardware.gpu) {
+        lines.push(
+          `Hardware: ${hardware.cpu || 'unknown CPU'} | threads=${hardware.threads || '?'} | RAM≈${hardware.ramGiB ? hardware.ramGiB.toFixed(1) : '?'} GiB | GPU=${hardware.gpu || 'unknown'}`
+        );
+      }
+      lines.push('Top local-model candidates from the current search:');
+      for (let i = 0; i < candidates.length; i += 1) {
+        const item = candidates[i];
+        lines.push(`${i + 1}. ${item.modelId} | downloads=${formatCount(item.downloads)} | likes=${formatCount(item.likes)}`);
+      }
+      if (hardware.ramGiB && hardware.ramGiB <= 20) {
+        lines.push('Machine fit: prioritize 4B-9B quantized GGUFs; treat 18B+ as slow stretch options on this hardware.');
+      }
+      if (searchBlocked) {
+        lines.push('Note: browser search was blocked by the execution profile, so this ranking was recovered from the Hugging Face API response plus the hardware probe.');
+      }
+      return lines.join('\n');
+    }
+  }
+
+  if (toolRuns > 0) {
+    const recent = executedTools.slice(-4).map((run, idx) => {
+      const compact = compactToolResult(run.result);
+      return `${idx + 1}. ${run.name} -> ${clipText(JSON.stringify(compact), 360)}`;
+    });
+    return [
+      `Recovered summary from ${toolRuns} tool actions.`,
+      'Recent executed actions:',
+      ...recent
+    ].join('\n');
+  }
+  return '';
+}
+
 function buildSkillPrompt(skills = [], { maxSkills = 4, maxCharsPerSkill = 2000 } = {}) {
   return skills
     .slice(0, maxSkills)
@@ -854,6 +977,7 @@ export class OpenUnumAgent {
     routedTools = [],
     contextPackInputs = {}
   }) {
+    const originalUserMessage = getLastUserMessage(messages);
     const executionEnvelope = resolveExecutionEnvelope({
       provider,
       model,
@@ -1190,15 +1314,22 @@ export class OpenUnumAgent {
     }
 
     if (!finalText && toolRuns > 0) {
-      const recent = executedTools.slice(-4).map((t, idx) =>
-        `${idx + 1}. ${t.name}(${JSON.stringify(t.args)}) => ${JSON.stringify(t.result)}`
-      );
-      finalText = [
-        `Tool actions executed (${toolRuns}) but model returned no final message.`,
-        'Executed actions:',
-        ...recent,
-        'Next step: continue from the current page and extract concrete results before claiming completion.'
-      ].join('\n');
+      finalText = synthesizeToolOnlyAnswer({
+        userMessage: originalUserMessage,
+        executedTools,
+        toolRuns
+      });
+      if (!finalText) {
+        const recent = executedTools.slice(-4).map((t, idx) =>
+          `${idx + 1}. ${t.name}(${JSON.stringify(t.args)}) => ${JSON.stringify(t.result)}`
+        );
+        finalText = [
+          `Tool actions executed (${toolRuns}) but model returned no final message.`,
+          'Executed actions:',
+          ...recent,
+          'Next step: continue from the current page and extract concrete results before claiming completion.'
+        ].join('\n');
+      }
     }
     if (!finalText) finalText = 'No response generated.';
     trace.pivotHints = buildPivotHints({
