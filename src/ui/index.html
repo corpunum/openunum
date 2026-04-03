@@ -355,7 +355,8 @@
       background: #0a1322;
       border-radius: 8px;
       padding: 8px;
-      overflow: hidden;
+      overflow: auto;
+      max-height: 420px;
       }
     .bubble p { margin: 0 0 10px; }
     .bubble p:last-child { margin-bottom: 0; }
@@ -411,6 +412,8 @@
       padding: 8px 10px;
       display: grid;
       gap: 8px;
+      max-height: 280px;
+      overflow: auto;
     }
     .trace-step {
       border: 1px solid rgba(55, 85, 143, .7);
@@ -1558,6 +1561,7 @@
       for (const m of out.messages || []) {
         pushMsg(m.role === 'assistant' ? 'assistant' : 'user', m.content, m.role === 'assistant' ? m.html : '');
       }
+      await resumePendingSessionIfNeeded(sid);
     }
 
     async function resetSession() {
@@ -1581,13 +1585,48 @@
       return candidate;
     }
 
+    function buildPendingStatus(typing, activity, pendingState) {
+      const toolCount = Array.isArray(activity?.toolRuns) ? activity.toolRuns.length : 0;
+      const assistantMsg = newestAssistantSince(activity?.messages || [], activity?.since || pendingState?.startedAt || '');
+      if (assistantMsg?.content) return 'Final response ready. Restoring answer...';
+      if (!pendingState?.pending && toolCount > 0) return 'Finalizing response...';
+      if (toolCount === 0) return 'Routing request...';
+      if (typing.pollCount <= 1) return `Executing tools... (${toolCount})`;
+      if ((typing.lastToolCount || 0) === toolCount) {
+        return `Synthesizing answer from ${toolCount} tool result${toolCount === 1 ? '' : 's'}...`;
+      }
+      return `Executing tools... (${toolCount})`;
+    }
+
+    async function resumePendingSessionIfNeeded(targetSessionId = sessionId) {
+      const sid = String(targetSessionId || '').trim();
+      if (!sid || sid !== sessionId) return false;
+      const activity = await jget(`/api/sessions/${encodeURIComponent(sid)}/activity`);
+      if (!activity?.pending || !activity?.pendingStartedAt) {
+        pendingSessions.delete(sid);
+        updateComposerPendingState();
+        return false;
+      }
+      pendingSessions.add(sid);
+      updateComposerPendingState();
+      const typing = appendTypingBubble();
+      typing.liveEvents = [`[${new Date().toLocaleTimeString()}] recovered pending run after refresh`];
+      typing.lastToolCount = Array.isArray(activity.toolRuns) ? activity.toolRuns.length : 0;
+      renderLiveBubble(typing, buildPendingStatus(typing, activity, activity), activity.toolRuns || []);
+      const requestToken = ++requestTokenSeq;
+      await resolvePendingReply(typing, activity.pendingStartedAt, sid, requestToken);
+      return true;
+    }
+
     async function resolvePendingReply(typing, startedAtIso, requestSessionId, requestToken) {
       const deadline = Date.now() + 10 * 60 * 1000;
-      while (Date.now() < deadline) {
-        await sleep(2000);
-        if (requestToken !== requestTokenSeq) return false;
-        typing.pollCount = (typing.pollCount || 0) + 1;
-        if (liveActivityEnabled) {
+      pendingSessions.add(requestSessionId);
+      updateComposerPendingState();
+      try {
+        while (Date.now() < deadline) {
+          await sleep(2000);
+          if (requestToken !== requestTokenSeq) return false;
+          typing.pollCount = (typing.pollCount || 0) + 1;
           const act = await jget(`/api/sessions/${encodeURIComponent(requestSessionId)}/activity?since=${encodeURIComponent(startedAtIso)}`);
           const tools = Array.isArray(act.toolRuns) ? act.toolRuns : [];
           if ((typing.lastToolCount || 0) !== tools.length) {
@@ -1596,27 +1635,40 @@
           } else if (typing.pollCount % 3 === 0) {
             addLiveEvent(typing, `pending poll #${typing.pollCount}`);
           }
-          renderLiveBubble(typing, 'Agent is still working...', tools);
-        } else {
-          typing.bubble.textContent = 'Agent is still working...';
+          const p = await jget(`/api/chat/pending?sessionId=${encodeURIComponent(requestSessionId)}`);
+          const statusText = buildPendingStatus(typing, act, p);
+          const msgFromActivity = newestAssistantSince(act.messages || [], startedAtIso);
+          if (liveActivityEnabled) {
+            renderLiveBubble(typing, statusText, tools);
+          } else {
+            typing.bubble.textContent = statusText;
+          }
+          if (msgFromActivity?.content) {
+            addLiveEvent(typing, 'assistant final response received');
+            typing.bubble.innerHTML = msgFromActivity.html || `<pre>${escapeHtml(msgFromActivity.content)}</pre>`;
+            await refreshSessionList();
+            return true;
+          }
+          if (p.pending) continue;
+          const out = await jget(`/api/sessions/${encodeURIComponent(requestSessionId)}`);
+          const msg = newestAssistantSince(out.messages || [], startedAtIso);
+          if (msg?.content) {
+            addLiveEvent(typing, 'assistant final response received');
+            typing.bubble.innerHTML = msg.html || `<pre>${escapeHtml(msg.content)}</pre>`;
+            await refreshSessionList();
+            return true;
+          }
+          addLiveEvent(typing, 'pending ended but no assistant message found yet');
+          typing.bubble.textContent = 'Agent finished its tool work and is waiting on a final reply. Refreshing session state may recover it.';
+          return false;
         }
-        const p = await jget(`/api/chat/pending?sessionId=${encodeURIComponent(requestSessionId)}`);
-        if (p.pending) continue;
-        const out = await jget(`/api/sessions/${encodeURIComponent(requestSessionId)}`);
-        const msg = newestAssistantSince(out.messages || [], startedAtIso);
-        if (msg?.content) {
-          addLiveEvent(typing, 'assistant final response received');
-          typing.bubble.innerHTML = msg.html || `<pre>${escapeHtml(msg.content)}</pre>`;
-          await refreshSessionList();
-          return true;
-        }
-        addLiveEvent(typing, 'pending ended but no assistant message found');
-        typing.bubble.textContent = 'Agent finished but no assistant message was found yet. Please retry once.';
+        addLiveEvent(typing, 'pending deadline reached; run continues in background');
+        typing.bubble.textContent = 'Agent is still running in background. You can keep chatting; history is preserved.';
         return false;
+      } finally {
+        pendingSessions.delete(requestSessionId);
+        updateComposerPendingState();
       }
-      addLiveEvent(typing, 'pending deadline reached; run continues in background');
-      typing.bubble.textContent = 'Agent is still running in background. You can keep chatting; history is preserved.';
-      return false;
     }
 
     async function runAutoMissionFromChat(rawMessage, typing) {
