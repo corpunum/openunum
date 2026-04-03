@@ -13,6 +13,8 @@ OpenUnum is a local-first autonomous coding runtime with:
 - bounded workers + restart-safe worker persistence + self-edit promotion pipeline + model scout workflows (`src/core/worker-orchestrator.mjs`, `src/core/self-edit-pipeline.mjs`, `src/core/model-scout-workflow.mjs`)
 - persistent memory/telemetry in SQLite (`src/memory/store.mjs`)
 - operator trace/timeline visibility in WebUI (`src/ui/index.html`)
+- enhanced proof validation and self-monitoring (`src/core/proof-scorer.mjs`, `src/core/self-monitor.mjs`)
+- task tracking and progress monitoring (`src/core/task-tracker.mjs`)
 
 Primary target: Ubuntu/Linux.
 
@@ -83,6 +85,10 @@ pnpm -s hf:pilot
 - API route house: `src/server/routes/*.mjs`.
 - API service/runtime house: `src/server/services/*.mjs`.
 - Persistence house: `src/memory/store.mjs`.
+- Proof validation house: `src/core/proof-scorer.mjs`.
+- Task tracking house: `src/core/task-tracker.mjs`.
+- Self-monitoring house: `src/core/self-monitor.mjs`.
+- Execution contract house: `src/core/execution-contract.mjs`.
 
 Before broad filesystem discovery, read `GET /api/tools/catalog` and target these canonical files first.
 

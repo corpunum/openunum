@@ -3245,6 +3245,7 @@ ${verificationSummary || preview}`)}</pre>`;
         const traceHtml = renderTrace(out?.trace);
         const assistantHtml = `${out?.replyHtml || out?.reply || '(no reply)'}${traceHtml}`;
         typing.bubble.innerHTML = assistantHtml;
+        void typing.bubble.offsetHeight; // force reflow so markdown/code blocks recalculate layout
         if (out?.model?.provider && out?.model?.model && out?.model?.activeProvider && out?.model?.activeModel) {
           topStatus.textContent = `cfg=${formatProviderModel(out.model.provider, out.model.model)} active=${formatProviderModel(out.model.activeProvider, out.model.activeModel)}`;
         }

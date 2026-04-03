@@ -20,12 +20,16 @@ import {
   resetLearnedBehavior
 } from './model-behavior-registry.mjs';
 import { buildControllerSystemMessage } from './context-pack-builder.mjs';
+import { recallRelevantArtifacts } from './memory-recall.mjs';
 import {
   continuationDirective,
   isProofBackedDone,
   recoveryDirective,
   shouldForceContinuation
 } from './execution-contract.mjs';
+import { scoreProofQuality } from './proof-scorer.mjs';
+import { getTaskTracker } from './task-tracker.mjs';
+import { getSelfMonitor } from './self-monitor.mjs';
 import { resolveExecutionEnvelope } from './model-execution-envelope.mjs';
 import {
   classifyProviderFailure,
@@ -548,6 +552,8 @@ export class OpenUnumAgent {
     this.config = config;
     this.memoryStore = memoryStore;
     this.toolRuntime = new ToolRuntime(config, memoryStore);
+    this.taskTracker = getTaskTracker(memoryStore);
+    this.selfMonitor = getSelfMonitor(this);
     this.behaviorRegistryHydrated = false;
     if (this.memoryStore?.listControllerBehaviors) {
       const persisted = this.memoryStore.listControllerBehaviors(200);
@@ -910,6 +916,18 @@ export class OpenUnumAgent {
       },
       ...messages
     ];
+    // Shadow mode: recall relevant memory artifacts
+    try {
+      const recalled = recallRelevantArtifacts({
+        memoryStore: this.memoryStore,
+        sessionId: sid,
+        currentGoal: triggerInfo,
+        limit: 5
+      });
+      trace.memoryRecall = { count: recalled.length, artifacts: recalled };
+    } catch (e) {
+      trace.memoryRecall = { error: e.message };
+    }
     const baseMaxIters = executionProfile.maxIters || this.config.runtime?.maxToolIterations || 4;
     const uiRaisedBaseMaxIters = uiCodeEditTask && !executionEnvelope.verySmallModel ? Math.max(baseMaxIters, 6) : baseMaxIters;
     const envelopeMaxIters = executionEnvelope.maxToolIterations || this.config.runtime?.maxToolIterations || 4;
@@ -1006,11 +1024,34 @@ export class OpenUnumAgent {
           maxIters,
           priorForcedCount: forcedContinueCount
         });
+        // Shadow scoring — log only, no behavior change
+        try {
+          const shadowScore = scoreProofQuality({
+            assistantText: normalizedContent || finalText,
+            toolRuns: executedTools || [],
+            taskGoal: originalUserMessage
+          });
+          trace.shadowProofScore = shadowScore;
+        } catch (_) { /* shadow scoring is non-critical */ }
         if (forceContinue) {
           forcedContinueCount += 1;
           messages.push({
             role: 'system',
             content: continuationDirective('planner_without_proof')
+          });
+          continue;
+        }
+
+        // Check if we should auto-continue based on self-monitoring
+        if (this.selfMonitor.shouldAutoContinue(sessionId, normalizedContent || finalText, executedTools || [])) {
+          const autoContinuePrompt = this.selfMonitor.generateContinuationPrompt(
+            sessionId,
+            normalizedContent || finalText,
+            executedTools || []
+          );
+          messages.push({
+            role: 'system',
+            content: autoContinuePrompt
           });
           continue;
         }
@@ -1199,14 +1240,28 @@ export class OpenUnumAgent {
       ].join('\n');
     }
 
+    // Shadow: proof-scorer validation at isProofBackedDone decision point
+    if (finalText && toolRuns > 0) {
+      try {
+        const proofScore = scoreProofQuality({
+          assistantText: finalText,
+          toolRuns: executedTools || [],
+          taskGoal: originalUserMessage || ''
+        });
+        trace.proofScorer = { ...proofScore, decisionPoint: 'isProofBackedDone' };
+      } catch (e) {
+        trace.proofScorer = { error: e.message, decisionPoint: 'isProofBackedDone' };
+      }
+    }
+
     if (
       finalText &&
       behavior?.tuning?.requireProofForDone &&
-      !isProofBackedDone({ text: finalText, toolRuns, requireProofForDone: true }) &&
+      !isProofBackedDone({ text: finalText, toolRuns, requireProofForDone: true, taskGoal: originalUserMessage || '' }) &&
       /mission_status:\s*done/i.test(String(finalText))
     ) {
       finalText = [
-        'Completion claim was rejected by execution contract: no proof-backed tool evidence in this turn.',
+        'Completion claim was rejected by execution contract: insufficient proof-backed tool evidence in this turn.',
         'MISSION_STATUS: CONTINUE'
       ].join('\n');
     }

@@ -500,3 +500,52 @@ OpenUnum is now oriented around:
    - API reference
 6. Execution-envelope classifier fix:
    - `397b`/large cloud models no longer misclassify as compact due to substring matches such as `7b` inside `397b`
+
+## 2026-04-03 — Agent Self-Improvement & UI Fixes
+
+### New modules
+1. `src/core/proof-scorer.mjs` — 4-weighted proof quality scoring (tool success 0.3, output relevance 0.3, goal alignment 0.2, no errors 0.2)
+2. `src/core/memory-recall.mjs` — Queries stored memory artifacts by relevance to current goal, returns top 5
+
+### Agent changes
+3. `src/core/agent.mjs`:
+   - Added import for `proof-scorer` and `memory-recall`
+   - Shadow logging at `shouldForceContinuation` decision point (line ~1012)
+   - Shadow logging at `isProofBackedDone` decision point (line ~1215)
+   - Shadow logging in context building (line ~910)
+
+### UI fixes
+4. `src/ui/index.html` line 3248:
+   - Added `void typing.bubble.offsetHeight;` after `typing.bubble.innerHTML = assistantHtml;`
+   - Forces browser reflow so markdown/code blocks recalculate layout after streaming completes
+
+### Documentation
+5. `docs/agent-onboarding.md` — Created with:
+   - Session storage architecture (SQLite via node:sqlite, API endpoints)
+   - Anti-stuck rules (from session 61df6ffd analysis: 16 pokes, 4 patterns)
+   - UI architecture notes
+6. `docs/session-stuck-patterns.md` — Full analysis of session 61df6ffd:
+   - 9x premature "done" claims
+   - 5x stopped after proposal without execution
+   - 1x tool failure with no retry
+   - 1x verbose response with no action
+
+## 2026-04-03 — Enhanced Autonomous Execution & Self-Monitoring
+
+### New modules
+1. `src/core/execution-contract.mjs` — Enhanced execution contract with proof scoring integration
+2. `src/core/task-tracker.mjs` — Task tracking system to monitor planned vs. completed work
+3. `src/core/self-monitor.mjs` — Self-monitoring system for automatic continuation without user prompts
+
+### Agent enhancements
+4. `src/core/agent.mjs`:
+   - Integrated task tracker for progress monitoring
+   - Added self-monitor for automatic continuation
+   - Enhanced execution contract validation with proof scoring
+   - Added autonomous execution without user prompting
+
+### Features
+5. Automatic continuation without user prompts
+6. Task progress tracking and completion validation
+7. Enhanced proof validation for completion claims
+8. Self-monitoring loop for continuous execution
