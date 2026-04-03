@@ -39,10 +39,20 @@
       top: 0;
       height: 100vh;
       overflow: hidden;
+      display: grid;
+      grid-template-rows: auto auto 1fr;
+      gap: 8px;
+      min-height: 0;
       border-right: 1px solid rgba(109, 138, 182, .22);
       background: linear-gradient(180deg, rgba(7, 12, 23, .7), rgba(4, 9, 17, .84));
       backdrop-filter: blur(14px);
       padding: 14px 12px;
+    }
+    .menu-scroll {
+      overflow-y: auto;
+      overflow-x: hidden;
+      min-height: 0;
+      padding-right: 4px;
     }
     .brand { font-weight: 800; letter-spacing: .2px; margin-bottom: 4px; font-size: 18px; }
     .status { color: var(--muted); font-size: 11px; margin-bottom: 12px; font-weight: 600; }
@@ -68,9 +78,16 @@
     .sessions-list {
       display: grid;
       gap: 6px;
-      max-height: none;
-      overflow: hidden;
+      max-height: clamp(210px, calc(100vh - 360px), 520px);
+      overflow-y: auto;
+      overflow-x: hidden;
       padding: 8px;
+    }
+    .session-row {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 6px;
+      align-items: stretch;
     }
     .session-item {
       border: 1px solid rgba(85, 112, 156, .38);
@@ -81,6 +98,9 @@
       text-align: left;
       color: var(--text);
       width: 100%;
+    }
+    .session-item-wrap {
+      min-width: 0;
     }
     .session-item:hover {
       border-color: #5b82cf;
@@ -110,6 +130,31 @@
       margin-top: 4px;
       font-size: 10px;
       color: #7e9bcb;
+    }
+    .session-delete {
+      min-width: 34px;
+      width: 34px;
+      border-radius: 10px;
+      padding: 0;
+      text-align: center;
+      font-size: 12px;
+      border: 1px solid rgba(146, 74, 74, .66);
+      background: linear-gradient(180deg, rgba(96, 32, 32, .9), rgba(68, 22, 22, .92));
+      color: #ffd6d6;
+    }
+    .session-delete:hover {
+      border-color: rgba(248, 113, 113, .85);
+      background: linear-gradient(180deg, rgba(127, 29, 29, .92), rgba(87, 17, 17, .94));
+    }
+    .session-actions {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 6px;
+      padding: 8px;
+    }
+    .session-actions button {
+      padding: 8px 9px;
+      font-size: 12px;
     }
     .menu-btn {
       border: 1px solid rgba(85, 112, 155, .38);
@@ -552,11 +597,11 @@
     .composer textarea { min-height: 54px; max-height: 180px; resize: vertical; }
     .composer button { height: 54px; border-radius: 999px; min-width: 100px; }
 
-    .menu::-webkit-scrollbar, .sessions-list::-webkit-scrollbar, .messages::-webkit-scrollbar {
+    .menu-scroll::-webkit-scrollbar, .sessions-list::-webkit-scrollbar, .messages::-webkit-scrollbar {
       width: 6px;
       height: 6px;
     }
-    .menu::-webkit-scrollbar-thumb, .sessions-list::-webkit-scrollbar-thumb, .messages::-webkit-scrollbar-thumb {
+    .menu-scroll::-webkit-scrollbar-thumb, .sessions-list::-webkit-scrollbar-thumb, .messages::-webkit-scrollbar-thumb {
       background: rgba(102, 131, 180, .45);
       border-radius: 999px;
     }
@@ -564,6 +609,8 @@
     @media (max-width: 1080px) {
       .layout { grid-template-columns: 1fr; grid-template-rows: 44vh 56vh; }
       .menu { position: relative; height: auto; border-right: none; border-bottom: 1px solid rgba(71, 99, 140, .38); }
+      .menu-scroll { max-height: 34vh; }
+      .sessions-list { max-height: 190px; }
       .main { height: 56vh; }
       .view { min-height: calc(56vh - 28px); }
       .chat-wrap { height: calc(56vh - 56px); }
@@ -576,42 +623,47 @@
     <aside class="menu">
       <div class="brand">OpenUnum Next</div>
       <div class="status" id="topStatus" data-testid="status-bar">booting...</div>
+      <div class="menu-scroll">
+        <details open>
+          <summary>Chat</summary>
+          <div class="submenu">
+            <button class="menu-btn active" data-view="chat">Chat Terminal</button>
+            <button class="menu-btn" data-view="operator">Execution Trace</button>
+          </div>
+          <div class="submenu">
+            <input id="sessionSearch" placeholder="Search sessions" data-testid="session-search" />
+          </div>
+          <div class="session-actions">
+            <button id="newChatInMenu">New</button>
+            <button id="deleteAllSessions" title="Delete all stored sessions">Delete All</button>
+          </div>
+          <div class="sessions-list" id="sessionList"></div>
+        </details>
 
-      <details open>
-        <summary>Chat</summary>
-        <div class="submenu">
-          <button class="menu-btn active" data-view="chat">Chat Terminal</button>
-          <button class="menu-btn" data-view="operator">Execution Trace</button>
-        </div>
-        <div class="submenu">
-          <input id="sessionSearch" placeholder="Search sessions" data-testid="session-search" />
-        </div>
-        <div class="sessions-list" id="sessionList"></div>
-      </details>
+        <details open>
+          <summary>Missions</summary>
+          <div class="submenu">
+            <button class="menu-btn" data-view="missions">Mission Runner</button>
+          </div>
+        </details>
 
-      <details open>
-        <summary>Missions</summary>
-        <div class="submenu">
-          <button class="menu-btn" data-view="missions">Mission Runner</button>
-        </div>
-      </details>
+        <details>
+          <summary>Runtime</summary>
+          <div class="submenu">
+            <button class="menu-btn" data-view="browser">Browser Ops</button>
+            <button class="menu-btn" data-view="telegram">Telegram Bridge</button>
+            <button class="menu-btn" data-view="control-plane">Control Plane API</button>
+          </div>
+        </details>
 
-      <details>
-        <summary>Runtime</summary>
-        <div class="submenu">
-          <button class="menu-btn" data-view="browser">Browser Ops</button>
-          <button class="menu-btn" data-view="telegram">Telegram Bridge</button>
-          <button class="menu-btn" data-view="control-plane">Control Plane API</button>
+        <details>
+          <summary>Settings</summary>
+          <div class="submenu">
+            <button class="menu-btn" data-view="model-routing">Model Routing</button>
+            <button class="menu-btn" data-view="provider-config">Provider Vault</button>
+          </div>
+        </details>
         </div>
-      </details>
-
-      <details>
-        <summary>Settings</summary>
-        <div class="submenu">
-          <button class="menu-btn" data-view="model-routing">Model Routing</button>
-          <button class="menu-btn" data-view="provider-config">Provider Vault</button>
-        </div>
-      </details>
     </aside>
 
     <main class="main">
@@ -1367,6 +1419,10 @@
         return;
       }
       for (const s of filteredSessions) {
+        const row = document.createElement('div');
+        row.className = 'session-row';
+        const itemWrap = document.createElement('div');
+        itemWrap.className = 'session-item-wrap';
         const btn = document.createElement('button');
         btn.type = 'button';
         btn.className = `session-item${s.sessionId === sessionId ? ' active' : ''}`;
@@ -1376,7 +1432,31 @@
           <div class="session-meta">${escapeHtml(formatRelativeTime(s.lastMessageAt || s.createdAt))} · ${Number(s.messageCount || 0)} msgs</div>
         `;
         btn.onclick = async () => switchToSession(s.sessionId);
-        sessionListEl.appendChild(btn);
+        itemWrap.appendChild(btn);
+
+        const del = document.createElement('button');
+        del.type = 'button';
+        del.className = 'session-delete';
+        del.title = 'Delete session';
+        del.textContent = 'X';
+        del.onclick = async (event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          const confirmed = confirm(`Delete session ${s.sessionId}?`);
+          if (!confirmed) return;
+          await jrequest('DELETE', `/api/sessions/${encodeURIComponent(s.sessionId)}`);
+          if (s.sessionId === sessionId) {
+            await resetSession();
+            await refreshContextStatus();
+            await refreshTacticalLedger();
+          } else {
+            await refreshSessionList();
+          }
+        };
+
+        row.appendChild(itemWrap);
+        row.appendChild(del);
+        sessionListEl.appendChild(row);
       }
     }
 
@@ -2656,6 +2736,18 @@ ${verificationSummary || preview}`)}</pre>`;
     q('newChat').onclick = async () => {
       await resetSession();
       await refreshContextStatus();
+    };
+    q('newChatInMenu').onclick = async () => {
+      await resetSession();
+      await refreshContextStatus();
+    };
+    q('deleteAllSessions').onclick = async () => {
+      const confirmed = confirm('Delete all sessions? This action cannot be undone.');
+      if (!confirmed) return;
+      await jrequest('POST', '/api/sessions/clear', { force: true, keepSessionId: '' });
+      await resetSession();
+      await refreshContextStatus();
+      await refreshTacticalLedger();
     };
     q('exportSessionBtn').onclick = async () => {
       const out = await jget(`/api/sessions/${encodeURIComponent(sessionId)}/export`);
