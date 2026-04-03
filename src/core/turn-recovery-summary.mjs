@@ -154,6 +154,13 @@ function extractDatasetCandidates(executedTools = []) {
   });
 }
 
+function extractEvidenceResourceIds(executedTools = []) {
+  const ids = new Set();
+  for (const item of extractDatasetCandidates(executedTools)) ids.add(item.id);
+  for (const item of extractModelCandidates(executedTools)) ids.add(item.modelId);
+  return [...ids];
+}
+
 function datasetScore(item, requirements) {
   const text = `${item.id} ${item.tags.join(' ')} ${item.description}`.toLowerCase();
   let score = (item.downloads * 0.05) + (item.likes * 8);
@@ -334,6 +341,12 @@ function countEvidenceMentions(text = '', evidenceTerms = []) {
   return evidenceTerms.filter((term) => term && source.includes(String(term).toLowerCase())).length;
 }
 
+function extractResourceLikeMentions(text = '') {
+  const source = String(text || '');
+  const matches = source.match(/\b[A-Za-z0-9._-]+\/[A-Za-z0-9][A-Za-z0-9._/-]*\b/g) || [];
+  return [...new Set(matches)];
+}
+
 function shouldReplaceWeakFinalText({ finalText = '', userMessage = '', executedTools = [], toolRuns = 0 }) {
   const text = String(finalText || '').trim();
   if (!text) return true;
@@ -345,6 +358,12 @@ function shouldReplaceWeakFinalText({ finalText = '', userMessage = '', executed
     const mentions = countEvidenceMentions(text, datasetIds);
     const onlyStatusStub = /^Status:\s+\w+/i.test(text) && /Findings:/i.test(text);
     if (mentions === 0 || onlyStatusStub) return true;
+  }
+  if (requirements.asksResearch || requirements.asksComparison || requirements.asksDataset || requirements.asksModelRanking) {
+    const evidenceIds = extractEvidenceResourceIds(executedTools).map((item) => item.toLowerCase());
+    const mentionedIds = extractResourceLikeMentions(text);
+    const unsupported = mentionedIds.filter((item) => !evidenceIds.includes(item.toLowerCase()));
+    if (unsupported.length > 0 && evidenceIds.length > 0) return true;
   }
   if (requirements.asksRanking && /top candidates|recommendation|comparison/i.test(text) === false && toolRuns > 0) return true;
   return false;
