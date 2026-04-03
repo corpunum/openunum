@@ -90,6 +90,32 @@ pnpm -s hf:pilot
 - Self-monitoring house: `src/core/self-monitor.mjs`.
 - Execution contract house: `src/core/execution-contract.mjs`.
 
+## 3b. Anti-Stuck Mechanisms (Critical)
+
+**Self-Monitoring Initialization:** The agent uses automatic continuation to prevent stalling:
+
+```javascript
+// In src/core/agent.mjs chat() method:
+this.selfMonitor.startMonitoring(sessionId, message);
+```
+
+**If this line is missing:**
+- Agent will execute tools but stall mid-task
+- `shouldAutoContinue()` returns `false` immediately
+- User must manually prompt ("Done?", "Continue") to finish
+
+**Symptoms of broken auto-continue:**
+- Multi-step tasks complete 1-2 steps then stop
+- Agent responds with planning text but no action
+- Logs show no errors, just silence
+
+**Fix:** Ensure `startMonitoring(sessionId, message)` is called at the start of every `chat()` turn.
+
+**Related modules:**
+- `src/core/self-monitor.mjs` — Monitors progress, triggers auto-continue
+- `src/core/proof-scorer.mjs` — Validates completion quality (0.0–1.0 score)
+- `src/core/execution-contract.mjs` — Enforces proof-backed completion claims
+
 Before broad filesystem discovery, read `GET /api/tools/catalog` and target these canonical files first.
 
 ## 4. Credential Truth Sources (Critical)

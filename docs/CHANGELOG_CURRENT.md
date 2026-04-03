@@ -2,6 +2,28 @@
 
 Date: 2026-04-03
 
+## Self-Monitor Initialization Fix (2026-04-03 23:00)
+
+**Bug Fix:** Self-monitoring module was created but never initialized, causing auto-continue to fail.
+
+**Problem:** The `self-monitor.mjs` module existed with `shouldAutoContinue()` logic, but `startMonitoring()` was never called in the agent's `chat()` method. This meant:
+- `monitoringSessions.get(sessionId)` always returned `undefined`
+- `shouldAutoContinue()` always returned `false` immediately
+- Agent would execute tools but stall mid-task, requiring user prompts ("Done?", "Continue")
+
+**Symptom:** Model stalling during multi-step tasks, requiring manual pokes to complete.
+
+**Fix:** Added initialization call in `src/core/agent.mjs`:
+```javascript
+this.selfMonitor.startMonitoring(sessionId, message);
+```
+
+**Files Changed:**
+- `src/core/agent.mjs` — Added `startMonitoring()` call in `chat()` method
+- `src/tools/runtime.mjs` — Fixed duplicate import of `summarizeToolResult`
+
+**Verification:** Multi-step tasks now complete autonomously without user prompting.
+
 ## MimoUnum Comparative Review + Harvest Backlog
 
 0. Added comparative analysis against MimoUnum:

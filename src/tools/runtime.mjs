@@ -10,6 +10,8 @@ import { GoogleWorkspaceClient } from './google-workspace.mjs';
 import { ResearchManager } from '../research/manager.mjs';
 import { ExecutionPolicyEngine } from '../core/execution-policy-engine.mjs';
 import { getHomeDir } from '../config.mjs';
+import { validateToolCall } from '../core/preflight-validator.mjs';
+import { summarizeToolResult } from '../core/tool-result-summarizer.mjs';
 
 const TOOL_CAPABILITY_META = {
   file_read: { class: 'read', mutatesState: false, destructive: false, proofHint: 'returned file content/path' },
@@ -974,7 +976,10 @@ export class ToolRuntime {
 
     this.recordToolResult(name, Boolean(result?.ok));
     this.logRun(context, name, currentArgs, result);
-    return result;
+
+    // Summarize large tool results to save context budget
+    const summarized = summarizeToolResult(name, result);
+    return summarized;
   }
 
   async executeTool(name, args, context = {}) {

@@ -916,6 +916,17 @@ export class OpenUnumAgent {
       },
       ...messages
     ];
+    
+    // Initialize trace early so memory recall can use it
+    const trace = {
+      provider,
+      model,
+      executionProfile: executionProfile.name,
+      behaviorClass: behavior.classId,
+      behaviorConfidence: behavior.confidence,
+      behaviorSource: behavior.source
+    };
+    
     // Shadow mode: recall relevant memory artifacts
     try {
       const recalled = recallRelevantArtifacts({
@@ -957,23 +968,16 @@ export class OpenUnumAgent {
     let finalText = '';
     let toolRuns = 0;
     const executedTools = [];
-    const trace = {
-      provider,
-      model,
-      executionProfile: executionProfile.name,
-      behaviorClass: behavior.classId,
-      behaviorConfidence: behavior.confidence,
-      behaviorSource: behavior.source,
-      localRuntimeTask,
-      uiCodeEditTask,
-      executionEnvelope,
-      routedTools,
-      iterations: [],
-      recoveryUsed: false,
-      permissionDenials: [],
-      toolStateTransitions: [],
-      lowSignalPivotUsed: false
-    };
+    // Trace already initialized earlier for memory recall, now extend it
+    trace.localRuntimeTask = localRuntimeTask;
+    trace.uiCodeEditTask = uiCodeEditTask;
+    trace.executionEnvelope = executionEnvelope;
+    trace.routedTools = routedTools;
+    trace.iterations = [];
+    trace.recoveryUsed = false;
+    trace.permissionDenials = [];
+    trace.toolStateTransitions = [];
+    trace.lowSignalPivotUsed = false;
     let forcedContinueCount = 0;
 
     for (let i = 0; i < maxIters; i += 1) {
@@ -1407,6 +1411,9 @@ export class OpenUnumAgent {
     const routedTools = inferRoutedTools(message);
 
     this.memoryStore.addMessage(sessionId, 'user', message);
+
+    // Start self-monitoring for automatic continuation
+    this.selfMonitor.startMonitoring(sessionId, message);
 
     const modelForBudget = this.getCurrentModel();
     const sessionEnvelope = resolveExecutionEnvelope({

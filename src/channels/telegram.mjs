@@ -62,20 +62,49 @@ export class TelegramChannel {
     for (let i = 0; i < chunks.length; i++) {
       const chunk = chunks[i];
       const prefix = chunks.length > 1 ? `( ${i + 1}/${chunks.length} ) ` : '';
+      const payload = { 
+        chat_id: chatId, 
+        text: prefix + chunk
+      };
+      
+      // Only use Markdown for single-part messages that look safe
+      // Disable for multi-part to avoid cross-chunk parsing issues
+      if (chunks.length === 1) {
+        payload.parse_mode = 'Markdown';
+      }
+      
       const res = await fetch(this.api('/sendMessage'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          chat_id: chatId, 
-          text: prefix + chunk,
-          parse_mode: chunks.length > 1 ? undefined : 'Markdown' // Disable markdown for multi-part to avoid parsing issues
-        })
+        body: JSON.stringify(payload)
       });
+      
       if (!res.ok) {
-        const error = await res.text().catch(() => 'unknown');
-        throw new Error(`Telegram send failed (${i + 1}/${chunks.length}): ${res.status} - ${error}`);
+        const errorText = await res.text().catch(() => 'unknown');
+        
+        // If Markdown parsing fails, retry without parse_mode
+        if (res.status === 400 && errorText.includes('can\'t parse entities')) {
+          const retryPayload = { 
+            chat_id: chatId, 
+            text: prefix + chunk
+          };
+          const retryRes = await fetch(this.api('/sendMessage'), {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(retryPayload)
+          });
+          
+          if (!retryRes.ok) {
+            throw new Error(`Telegram send failed (${i + 1}/${chunks.length}): ${retryRes.status} - ${await retryRes.text().catch(() => 'unknown')}`);
+          }
+          results.push(await retryRes.json());
+        } else {
+          throw new Error(`Telegram send failed (${i + 1}/${chunks.length}): ${res.status} - ${errorText}`);
+        }
+      } else {
+        results.push(await res.json());
       }
-      results.push(await res.json());
+      
       // Small delay between chunks to avoid rate limiting
       if (i < chunks.length - 1) {
         await new Promise(r => setTimeout(r, 100));
