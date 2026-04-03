@@ -2,6 +2,28 @@
 
 Date: 2026-04-03
 
+## Telegram Offset Persistence Bug (2026-04-03 23:15)
+
+**Bug:** Telegram poll loop loses offset state on restart, causing 409 Conflict errors.
+
+**Symptom:**
+- Loop restarts with `offset=0` every time
+- Telegram returns duplicate updates → 409 Conflict
+- Messages queue in Telegram but don't deliver to OpenUnum
+- Logs spam: `"Telegram poll failed: 409"` every 2 seconds
+
+**Root Cause:** `TelegramChannel` constructor always initializes `this.offset = 0`. When `runTelegramLoop()` creates a new instance (server restart, manual restart), offset resets.
+
+**Workaround:** Manually advance offset via Telegram API, restart loop.
+
+**Fix Required:** Persist offset in DB/config across loop restarts.
+
+**Files Involved:**
+- `src/channels/telegram.mjs` — Offset initialization (line 5)
+- `src/server/services/telegram_runtime.mjs` — Loop management (no persistence)
+
+**Status:** Workaround applied. Permanent fix not yet implemented.
+
 ## Self-Monitor Initialization Fix (2026-04-03 23:00)
 
 **Bug Fix:** Self-monitoring module was created but never initialized, causing auto-continue to fail.
@@ -23,6 +45,15 @@ this.selfMonitor.startMonitoring(sessionId, message);
 - `src/tools/runtime.mjs` — Fixed duplicate import of `summarizeToolResult`
 
 **Verification:** Multi-step tasks now complete autonomously without user prompting.
+
+**Limitation (2026-04-03 23:14 analysis):** Self-monitor is **reactive, not preventive**. It detects stalls AFTER they occur (via proof scoring), but doesn't prevent the initial "I feel done" decision. The root cause remains in completion logic that generates summaries and stops after substeps instead of checking remaining work.
+
+**Wiring Confirmed:**
+- `agent.mjs:1416` — `startMonitoring(sessionId, message)` called at chat start
+- `agent.mjs:1050` — `shouldAutoContinue()` checked after each iteration with no tool calls
+- `self-monitor.mjs:42-70` — Proof scoring determines continuation (score < 0.6 → continue)
+
+**Next:** Preventive fix would require changing completion logic to check full task completion before generating "done" summary.
 
 ## MimoUnum Comparative Review + Harvest Backlog
 
