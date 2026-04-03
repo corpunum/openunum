@@ -501,6 +501,30 @@ OpenUnum is now oriented around:
 6. Execution-envelope classifier fix:
    - `397b`/large cloud models no longer misclassify as compact due to substring matches such as `7b` inside `397b`
 
+## 2026-04-03 — Telegram Long Message Chunking
+
+### Bug Fix
+1. Fixed Telegram message delivery failures for long responses:
+   - Telegram API has a 4096 character limit per message
+   - Previously, long agent replies would fail silently (error logged but not shown to user)
+   - Added automatic message chunking in `src/channels/telegram.mjs`
+
+### Implementation
+2. New `chunkMessage()` method splits long text at natural breakpoints:
+   - First tries paragraph breaks (`\n\n`)
+   - Falls back to line breaks (`\n`)
+   - Hard splits for extremely long single paragraphs (with 100-char safety margin)
+
+3. Multi-part messages include sequence markers:
+   - Format: `( 1/3 )`, `( 2/3 )`, `( 3/3 )`
+   - Small 100ms delay between chunks to avoid rate limiting
+   - Markdown parsing disabled for multi-part messages to avoid cross-chunk parsing issues
+
+### Files Changed
+- `src/channels/telegram.mjs` — Added chunking logic and multi-send support
+
+---
+
 ## 2026-04-03 — Agent Self-Improvement & UI Fixes
 
 ### New modules
