@@ -429,6 +429,12 @@ function shouldReplaceWeakFinalText({ finalText = '', userMessage = '', executed
   if (!text) return true;
   if (text.length > 12000) return true;
   if (/Tool actions executed \(\d+\) but model returned no final message\./.test(text)) return true;
+  if (toolRuns > 0) {
+    const prefaceOnly = /^(let me|i(?:'|’)ll|i will|allow me|sure[, ]+let me|checking)\b/i.test(text);
+    const danglingLeadIn = /[:;]\s*$/.test(text);
+    if (prefaceOnly && (danglingLeadIn || text.length < 180)) return true;
+    if (danglingLeadIn && text.length < 220) return true;
+  }
   const requirements = extractRequirements(userMessage);
   const datasetIds = extractDatasetCandidates(executedTools).slice(0, 5).map((item) => item.id);
   if ((requirements.asksDataset || requirements.asksResearch || requirements.asksComparison) && datasetIds.length) {
