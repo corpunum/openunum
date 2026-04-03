@@ -42,6 +42,12 @@ Date: 2026-04-03
    - model-ranking questions now bias recovery output toward hardware-fit, not just popularity
    - added regression `tests/phase29.turn-recovery-summary.e2e.mjs`
 
+9. Added weak-answer replacement and research/list comparison shaping:
+   - synthesized recovery now supports research/dataset comparison answers, not just status/ranking fallbacks
+   - weak non-empty replies are replaced when decisive evidence exists but the returned text is only a stub
+   - controller prompt now instructs the model to choose final answer shape from the ask and evidence
+   - added regression `tests/phase30.research-answer-shaping.e2e.mjs`
+
 ## WebUI Upgrade + Session Switching Fix + Docs Refresh
 
 0. Updated flagship `src/ui/index.html` to a Gemini-inspired glass visual direction without dropping existing backend feature wiring.

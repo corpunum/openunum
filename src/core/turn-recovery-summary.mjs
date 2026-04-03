@@ -57,6 +57,9 @@ function extractRequirements(userMessage = '') {
     asksRanking: /top ?\d+|best|rank|ranking|compare|which is better/.test(prompt),
     asksSteps: /\bhow\b|steps|guide|setup|configure|install|onboard|procedure/.test(prompt),
     asksStatus: /status|health|inspect|diagnose|check|report|what happened|why failed|why is/.test(prompt),
+    asksResearch: /research|check|find|search|compare|usable|recommend|look at/.test(prompt),
+    asksDataset: /dataset|datasets|training data|benchmark data|planner\/tasks data|task data/.test(prompt),
+    asksComparison: /compare|comparison|versus|vs\b/.test(prompt),
     wantsLocal: /local|ollama|run for this hardware|run on this hardware|this hardware/.test(prompt),
     wantsUncensored: /uncensor|uncensored|unsensored|unsensor/.test(prompt),
     wantsGguf: /gguf|ollama|local/.test(prompt),
@@ -106,6 +109,62 @@ function extractModelCandidates(executedTools = []) {
     seen.add(item.modelId);
     return true;
   });
+}
+
+function cleanDescription(text, maxChars = 220) {
+  return clipText(
+    String(text || '')
+      .replace(/\s+/g, ' ')
+      .replace(/See the full description.*$/i, '')
+      .trim(),
+    maxChars
+  );
+}
+
+function extractDatasetCandidates(executedTools = []) {
+  const rows = [];
+  for (const run of executedTools) {
+    if (run?.name !== 'http_request' || !run?.result?.ok || !Array.isArray(run?.result?.json)) continue;
+    if (!/huggingface\.co\/api\/datasets/i.test(String(run?.result?.url || ''))) continue;
+    const query = (() => {
+      try {
+        return new URL(String(run.result.url)).searchParams.get('search') || '';
+      } catch {
+        return '';
+      }
+    })();
+    for (const item of run.result.json) {
+      const id = String(item?.id || '').trim();
+      if (!id) continue;
+      rows.push({
+        id,
+        downloads: Number(item?.downloads || 0),
+        likes: Number(item?.likes || 0),
+        tags: Array.isArray(item?.tags) ? item.tags.map((tag) => String(tag).toLowerCase()) : [],
+        description: cleanDescription(item?.description || ''),
+        query
+      });
+    }
+  }
+  const seen = new Set();
+  return rows.filter((item) => {
+    if (!item.id || seen.has(item.id)) return false;
+    seen.add(item.id);
+    return true;
+  });
+}
+
+function datasetScore(item, requirements) {
+  const text = `${item.id} ${item.tags.join(' ')} ${item.description}`.toLowerCase();
+  let score = (item.downloads * 0.05) + (item.likes * 8);
+  if (requirements.asksDataset) score += 20;
+  if (/tool-calling|function-calling/.test(text)) score += 80;
+  if (/agent|agentic/.test(text)) score += 40;
+  if (/planner|planning|workflow|multi-step|task/.test(text)) score += 36;
+  if (/browser/.test(text)) score += 12;
+  if (/synthetic/.test(text)) score += 8;
+  if (/sft|instruction/.test(text)) score += 8;
+  return { ...item, score };
 }
 
 function candidateScore(item, requirements, hardware) {
@@ -174,6 +233,37 @@ function buildModelRankingAnswer({ userMessage = '', executedTools = [] }) {
   return lines.join('\n');
 }
 
+function buildDatasetResearchAnswer({ userMessage = '', executedTools = [] }) {
+  const requirements = extractRequirements(userMessage);
+  if (!requirements.asksDataset && !requirements.asksResearch) return '';
+  const ranked = extractDatasetCandidates(executedTools)
+    .map((item) => datasetScore(item, requirements))
+    .sort((a, b) => b.score - a.score);
+  if (!ranked.length) return '';
+
+  const lines = ['Usable Hugging Face datasets found for this ask:'];
+  for (const item of ranked.slice(0, 5)) {
+    const strengths = [];
+    if (item.tags.some((tag) => /tool-calling|function-calling/.test(tag))) strengths.push('tool-calling');
+    if (item.tags.some((tag) => /agent|agentic/.test(tag))) strengths.push('agent');
+    if (item.tags.some((tag) => /task/.test(tag)) || /multi-step|workflow|task/i.test(item.description)) strengths.push('tasks/workflows');
+    if (item.tags.some((tag) => /browser/.test(tag))) strengths.push('browser');
+    lines.push(`- ${item.id} | downloads=${formatCount(item.downloads)} | likes=${formatCount(item.likes)} | focus=${strengths.join(', ') || 'general agent data'}`);
+    if (item.description) lines.push(`  ${item.description}`);
+  }
+
+  if (requirements.asksComparison) {
+    const toolCalling = ranked.filter((item) => /tool-calling|function-calling/.test(`${item.id} ${item.tags.join(' ')} ${item.description}`.toLowerCase())).slice(0, 2);
+    const planning = ranked.filter((item) => /planner|planning|workflow|multi-step|task/.test(`${item.id} ${item.tags.join(' ')} ${item.description}`.toLowerCase())).slice(0, 2);
+    lines.push('Comparison:');
+    lines.push(`- best tool-calling fit: ${toolCalling[0]?.id || 'none found'}`);
+    lines.push(`- best planner/tasks fit: ${planning[0]?.id || 'none found'}`);
+  }
+
+  lines.push('Recommendation: use tool-calling datasets for action formatting/execution traces, and pair them with planner/task workflow datasets when you need multi-step mission evaluation. Current evidence is stronger for tool-calling than for planner-specific Hugging Face datasets.');
+  return lines.join('\n');
+}
+
 function overallStatusFromTools(executedTools = []) {
   const failures = executedTools.filter((run) => run?.result?.ok === false).length;
   if (!executedTools.length) return 'unknown';
@@ -214,6 +304,10 @@ function buildStepAnswer({ executedTools = [], toolRuns = 0 }) {
 }
 
 function buildGenericToolSummary({ executedTools = [], toolRuns = 0, requirements = null }) {
+  if (requirements?.asksDataset || requirements?.asksResearch || requirements?.asksComparison) {
+    const research = buildDatasetResearchAnswer({ userMessage: requirements.originalUserMessage || '', executedTools });
+    if (research) return research;
+  }
   if (requirements?.asksSteps) return buildStepAnswer({ executedTools, toolRuns });
   if (requirements?.asksStatus) return buildStatusAnswer({ executedTools, toolRuns });
   return buildStatusAnswer({ executedTools, toolRuns });
@@ -227,7 +321,7 @@ function buildProvenanceFooter({ executedTools = [], synthesized = false }) {
 }
 
 export function synthesizeToolOnlyAnswer({ userMessage = '', executedTools = [], toolRuns = 0 }) {
-  const requirements = extractRequirements(userMessage);
+  const requirements = { ...extractRequirements(userMessage), originalUserMessage: userMessage };
   const body = buildModelRankingAnswer({ userMessage, executedTools }) ||
     buildGenericToolSummary({ executedTools, toolRuns, requirements }) ||
     '';
@@ -235,11 +329,34 @@ export function synthesizeToolOnlyAnswer({ userMessage = '', executedTools = [],
   return `${body}\n${buildProvenanceFooter({ executedTools, synthesized: true })}`.trim();
 }
 
+function countEvidenceMentions(text = '', evidenceTerms = []) {
+  const source = String(text || '').toLowerCase();
+  return evidenceTerms.filter((term) => term && source.includes(String(term).toLowerCase())).length;
+}
+
+function shouldReplaceWeakFinalText({ finalText = '', userMessage = '', executedTools = [], toolRuns = 0 }) {
+  const text = String(finalText || '').trim();
+  if (!text) return true;
+  if (text.length > 12000) return true;
+  if (/Tool actions executed \(\d+\) but model returned no final message\./.test(text)) return true;
+  const requirements = extractRequirements(userMessage);
+  const datasetIds = extractDatasetCandidates(executedTools).slice(0, 5).map((item) => item.id);
+  if ((requirements.asksDataset || requirements.asksResearch || requirements.asksComparison) && datasetIds.length) {
+    const mentions = countEvidenceMentions(text, datasetIds);
+    const onlyStatusStub = /^Status:\s+\w+/i.test(text) && /Findings:/i.test(text);
+    if (mentions === 0 || onlyStatusStub) return true;
+  }
+  if (requirements.asksRanking && /top candidates|recommendation|comparison/i.test(text) === false && toolRuns > 0) return true;
+  return false;
+}
+
 export function normalizeRecoveredFinalText({ finalText = '', userMessage = '', executedTools = [], toolRuns = 0, maxChars = 12000 } = {}) {
   const text = String(finalText || '');
   const recovered = synthesizeToolOnlyAnswer({ userMessage, executedTools, toolRuns });
   if (!text) return recovered;
+  if (shouldReplaceWeakFinalText({ finalText: text, userMessage, executedTools, toolRuns })) {
+    return recovered || clipText(text, maxChars);
+  }
   if (text.length > maxChars) return recovered || clipText(text, maxChars);
-  if (/Tool actions executed \(\d+\) but model returned no final message\./.test(text)) return recovered || clipText(text, maxChars);
   return text;
 }
