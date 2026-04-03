@@ -7,3 +7,11 @@ coverage
 *.gguf
 *.db
 tmp/
+Modelfile
+launch_model.py
+run_model.py
+simple_prompt.txt
+test_gguf.py
+test_llamacpp.py
+test_model.py
+test_ollama.py
