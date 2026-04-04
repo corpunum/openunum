@@ -117,49 +117,92 @@ export class WorkingMemoryAnchor {
   /**
    * Build the injection payload for each turn
    * 
+   * PHASE 2 OPTIMIZATION: Split into static prefix + dynamic JSON state
+   * 
    * @param {Array} recentMessages - Last N turns (raw)
    * @param {number} totalTurns - Total turn count
-   * @returns {string} Injection payload to prepend as system message
+   * @returns {object} { staticPrefix, dynamicState, fullInjection, cacheHints }
    */
   buildInjection(recentMessages, totalTurns) {
     this.turnCount = totalTurns;
-    const parts = [];
-
-    // 1. ANCHOR (always present)
-    if (this.anchor.userOrigin) {
-      parts.push('═══ WORKING MEMORY ANCHOR ═══');
-      parts.push(`[USER ORIGIN]: ${this.anchor.userOrigin}`);
-      
-      if (this.anchor.planAgreed) {
-        parts.push(`[PLAN AGREED]: ${this.anchor.planAgreed}`);
-      }
-
-      // Subplan context (if multi-phase task)
-      const subplan = this.getCurrentSubplan();
-      if (subplan) {
-        parts.push(`[SUBPLAN]: ${subplan.index + 1}/${subplan.total} — ${subplan.subplan.title || 'Phase ' + (subplan.index + 1)}`);
-        if (subplan.subplan.steps) {
-          parts.push(`[SUBPLAN STEPS]: ${subplan.subplan.steps.join(' → ')}`);
-        }
-      }
-
-      if (this.anchor.contract) {
-        const c = this.anchor.contract;
-        if (c.successCriteria) {
-          parts.push(`[SUCCESS CRITERIA]: ${c.successCriteria}`);
-        }
-        if (c.requiredOutputs && c.requiredOutputs.length) {
-          parts.push(`[REQUIRED OUTPUTS]: ${c.requiredOutputs.join(', ')}`);
-        }
-        if (c.forbiddenDrift && c.forbiddenDrift.length) {
-          parts.push(`[FORBIDDEN DRIFT]: Avoid ${c.forbiddenDrift.join(', ')}`);
-        }
-      }
-
-      parts.push('═══ END ANCHOR ═══\n');
+    
+    // STATIC PREFIX (rarely changes, can be cached across turns)
+    const staticParts = [];
+    staticParts.push('═══ WORKING MEMORY ANCHOR ═══');
+    staticParts.push(`[USER ORIGIN]: ${this.anchor.userOrigin || 'Not set'}`);
+    
+    if (this.anchor.planAgreed) {
+      staticParts.push(`[PLAN AGREED]: ${this.anchor.planAgreed}`);
     }
 
-    // 2. COMPACTED MIDDLE (if exists)
+    // Subplan context (changes only when moving between phases)
+    const subplan = this.getCurrentSubplan();
+    if (subplan) {
+      staticParts.push(`[SUBPLAN]: ${subplan.index + 1}/${subplan.total} — ${subplan.subplan.title || 'Phase ' + (subplan.index + 1)}`);
+      if (subplan.subplan.steps) {
+        staticParts.push(`[SUBPLAN STEPS]: ${subplan.subplan.steps.join(' → ')}`);
+      }
+    }
+
+    if (this.anchor.contract) {
+      const c = this.anchor.contract;
+      if (c.successCriteria) {
+        staticParts.push(`[SUCCESS CRITERIA]: ${c.successCriteria}`);
+      }
+      if (c.requiredOutputs && c.requiredOutputs.length) {
+        staticParts.push(`[REQUIRED OUTPUTS]: ${c.requiredOutputs.join(', ')}`);
+      }
+      if (c.forbiddenDrift && c.forbiddenDrift.length) {
+        staticParts.push(`[FORBIDDEN DRIFT]: Avoid ${c.forbiddenDrift.join(', ')}`);
+      }
+    }
+
+    staticParts.push('═══ END ANCHOR ═══\n');
+
+    // DYNAMIC STATE (changes every turn)
+    const dynamicState = {
+      turnCount: this.turnCount,
+      compactedSummary: this.compactedSummary,
+      compactionPointer: this.compactionPointer,
+      recentTurns: [],
+      continuationInstruction: {
+        isMidExecution: true,
+        focusSubplan: subplan ? { index: subplan.index, total: subplan.total } : null,
+        doNotReplan: true,
+        onlyClaimDoneWhenCriteriaMet: true
+      }
+    };
+
+    // Recent turns (raw, last N)
+    if (recentMessages && recentMessages.length > 0) {
+      const recent = recentMessages.slice(-this.maxRecentTurns * 2);
+      dynamicState.recentTurns = recent.map(m => ({
+        role: m.role === 'assistant' ? 'AGENT' : (m.role === 'tool' ? 'TOOL_RESULT' : 'USER'),
+        content: String(m.content || '').slice(0, 800),
+        timestamp: m.created_at || null
+      }));
+    }
+
+    // CACHE HINTS (which sections can be cached)
+    const cacheHints = {
+      staticPrefix: {
+        cacheable: true,
+        invalidatesOn: ['subplan_change', 'anchor_update'],
+        ttl: 'session'
+      },
+      dynamicState: {
+        cacheable: false,
+        changesEvery: 'turn'
+      },
+      recentTurns: {
+        cacheable: false,
+        changesEvery: 'turn'
+      }
+    };
+
+    // Build full injection (for backward compatibility)
+    const parts = [...staticParts];
+    
     if (this.compactedSummary) {
       parts.push('═══ COMPACTED HISTORY ═══');
       parts.push(this.compactedSummary);
@@ -169,23 +212,18 @@ export class WorkingMemoryAnchor {
       parts.push('═══ END COMPACTED ═══\n');
     }
 
-    // 3. RECENT TURNS (raw, last N)
-    if (recentMessages && recentMessages.length > 0) {
+    if (dynamicState.recentTurns.length > 0) {
       parts.push('═══ RECENT TURNS ═══');
-      const recent = recentMessages.slice(-this.maxRecentTurns * 2);  // *2 for user+assistant pairs
-      for (const m of recent) {
-        const role = m.role === 'assistant' ? 'AGENT' : (m.role === 'tool' ? 'TOOL RESULT' : 'USER');
-        const content = String(m.content || '').slice(0, 800);  // Truncate each message
-        parts.push(`[${role}]: ${content}`);
+      for (const m of dynamicState.recentTurns) {
+        parts.push(`[${m.role}]: ${m.content}`);
       }
       parts.push('═══ END RECENT ═══\n');
     }
 
-    // 4. INJECTION PROMPT (the "ghost message" directive)
+    // Continuation instruction
     parts.push('[CONTINUATION INSTRUCTION]:');
     parts.push('- You are mid-execution of the task in [USER ORIGIN].');
     
-    const subplan = this.getCurrentSubplan();
     if (subplan) {
       parts.push(`- Focus on [SUBPLAN] ${subplan.index + 1}/${subplan.total}. Complete these steps before moving on.`);
     } else {
@@ -197,7 +235,12 @@ export class WorkingMemoryAnchor {
     parts.push('- Only claim DONE when [SUCCESS CRITERIA] is fully satisfied.');
     parts.push('- If you are unsure about the original task or plan, check the ANCHOR above.\n');
 
-    return parts.join('\n');
+    return {
+      staticPrefix: staticParts.join('\n'),
+      dynamicState,
+      fullInjection: parts.join('\n'),
+      cacheHints
+    };
   }
 
   /**

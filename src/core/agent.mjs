@@ -1008,9 +1008,12 @@ export class OpenUnumAgent {
           workingMemory.compactMiddle(messages);
         }
         
-        // Build injection payload
+        // Build injection payload (PHASE 2: returns { staticPrefix, dynamicState, fullInjection, cacheHints })
         const recentMessages = messages.filter(m => m.role !== 'system' || !m.content.includes('WORKING MEMORY ANCHOR'));
-        const injectionPayload = workingMemory.buildInjection(recentMessages, Math.floor(messages.length / 2));
+        const injectionResult = workingMemory.buildInjection(recentMessages, Math.floor(messages.length / 2));
+        
+        // Use fullInjection for backward compatibility (can optimize to staticPrefix + dynamicState later)
+        const injectionPayload = injectionResult.fullInjection || injectionResult;
         
         // Inject as system message (replaces any previous working memory injection)
         const existingWmIndex = messages.findIndex(m => m.role === 'system' && m.content.includes('WORKING MEMORY ANCHOR'));
