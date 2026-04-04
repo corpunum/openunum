@@ -62,8 +62,34 @@ export class TelegramChannel {
     return chunks;
   }
 
+  /**
+   * Clean message for chat delivery — strip debug/technical artifacts
+   */
+  cleanForChat(text) {
+    let cleaned = String(text || '');
+    
+    // Remove provenance footers
+    cleaned = cleaned.replace(/\nProvenance:.*$/gm, '');
+    
+    // Remove any remaining JSON debug output patterns
+    cleaned = cleaned.replace(/- (\w+): \{"ok":true[^}]+\}/g, (match, tool) => {
+      return `- ${tool}: ✅ completed`;
+    });
+    
+    // Remove tool_call artifacts that leaked through
+    cleaned = cleaned.replace(/<\s*tool_call[^>]*>[\s\S]*?<\s*\/\s*tool_call\s*>/gi, '');
+    cleaned = cleaned.replace(/<\s*function_call[^>]*>[\s\S]*?<\s*\/\s*function_call\s*>/gi, '');
+    
+    // Clean up excessive whitespace
+    cleaned = cleaned.replace(/\n{3,}/g, '\n\n');
+    cleaned = cleaned.trim();
+    
+    return cleaned;
+  }
+
   async send(chatId, text) {
-    const chunks = this.chunkMessage(text);
+    const cleaned = this.cleanForChat(text);
+    const chunks = this.chunkMessage(cleaned);
     const results = [];
 
     for (let i = 0; i < chunks.length; i++) {

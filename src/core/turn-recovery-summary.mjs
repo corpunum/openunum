@@ -306,13 +306,72 @@ function overallStatusFromTools(executedTools = []) {
   return 'partial';
 }
 
+function formatToolResultHuman(run) {
+  const r = run?.result || {};
+  const name = run?.name || 'unknown';
+  
+  if (!r.ok) {
+    const err = clipText(r.error || r.stderr || 'failed', 120);
+    return `${name}: ❌ ${err}`;
+  }
+  
+  // Success cases with human-readable summaries
+  if (name === 'shell_run' || name === 'shell_command') {
+    const code = Number(r.code) ?? 0;
+    const stdout = r.stdout ? clipText(r.stdout.trim().split('\n')[0], 80) : '';
+    return `${name}: ✅ exit ${code}${stdout ? ` — ${stdout}` : ''}`;
+  }
+  
+  if (name === 'file_read') {
+    const path = r.path || r.filePath || 'file';
+    const size = r.bytesRead ? `(${formatBytes(r.bytesRead)})` : '';
+    return `${name}: ✅ read ${path} ${size}`;
+  }
+  
+  if (name === 'file_write') {
+    const path = r.path || r.filePath || 'file';
+    return `${name}: ✅ wrote ${path}`;
+  }
+  
+  if (name === 'git_commit') {
+    const hash = r.hash || r.shortHash ? ` ${r.shortHash || r.hash.slice(0, 7)}` : '';
+    return `${name}: ✅ committed${hash}`;
+  }
+  
+  if (name === 'git_push') {
+    return `${name}: ✅ pushed`;
+  }
+  
+  if (name === 'http_request') {
+    const status = Number(r.status) ?? '?';
+    const url = r.url ? clipText(new URL(r.url).hostname, 40) : '';
+    return `${name}: ✅ HTTP ${status} ${url}`;
+  }
+  
+  if (name === 'browser_navigate') {
+    const url = r.url ? clipText(new URL(r.url).hostname, 40) : '';
+    return `${name}: ✅ navigated ${url}`;
+  }
+  
+  if (name === 'memory_remember') {
+    return `${name}: ✅ stored`;
+  }
+  
+  // Generic success fallback
+  return `${name}: ✅ completed`;
+}
+
+function formatBytes(bytes) {
+  if (!Number.isFinite(bytes)) return '';
+  if (bytes < 1024) return `${bytes}B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)}KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)}MB`;
+}
+
 function buildStatusAnswer({ executedTools = [], toolRuns = 0 }) {
   if (!(toolRuns > 0)) return '';
   const status = overallStatusFromTools(executedTools);
-  const recent = executedTools.slice(-4).map((run) => {
-    const compact = compactToolResult(run.result);
-    return `- ${run.name}: ${clipText(JSON.stringify(compact), 220)}`;
-  });
+  const recent = executedTools.slice(-4).map((run) => formatToolResultHuman(run));
   return [
     `Status: ${status}`,
     'Findings:',
