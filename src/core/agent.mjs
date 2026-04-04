@@ -30,6 +30,11 @@ import {
 import { scoreProofQuality } from './proof-scorer.mjs';
 import { getTaskTracker } from './task-tracker.mjs';
 import { getSelfMonitor } from './self-monitor.mjs';
+import { CompletionChecklist } from './completion-checklist.mjs';
+import { suggestAlternatives } from './alternative-paths.mjs';
+import { decomposeTask } from './task-decomposer.mjs';
+import { ContextPressureRelief } from './context-pressure.mjs';
+import { scoreConfidence } from './confidence-scorer.mjs';
 import { resolveExecutionEnvelope } from './model-execution-envelope.mjs';
 import {
   classifyProviderFailure,
@@ -555,6 +560,8 @@ export class OpenUnumAgent {
     this.taskTracker = getTaskTracker(memoryStore);
     this.selfMonitor = getSelfMonitor(this);
     this.behaviorRegistryHydrated = false;
+    this.completionChecklist = new CompletionChecklist();
+    this.contextPressure = new ContextPressureRelief();
     if (this.memoryStore?.listControllerBehaviors) {
       const persisted = this.memoryStore.listControllerBehaviors(200);
       hydrateBehaviorRegistry(persisted);

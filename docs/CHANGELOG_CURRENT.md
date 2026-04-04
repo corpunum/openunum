@@ -2,6 +2,30 @@
 
 Date: 2026-04-03
 
+## Model-Agnostic Autonomy Enhancements (2026-04-03)
+
+**Goal:** Improve agent autonomy across all models/providers, especially small models (3B-7B).
+
+**New Modules Created:**
+1. `src/core/completion-checklist.mjs` — Tracks task steps, prevents premature "Done" declarations
+2. `src/core/alternative-paths.mjs` — Suggests alternative tools when failures occur
+3. `src/core/task-decomposer.mjs` — Breaks complex tasks into explicit steps at start
+4. `src/core/context-pressure.mjs` — Monitors context size, compacts when approaching limits
+5. `src/core/confidence-scorer.mjs` — Scores confidence in outputs, triggers verification if low
+
+**Integration:**
+- All 5 modules imported in agent.mjs (line 33)
+- CompletionChecklist + ContextPressureRelief initialized in constructor
+- Task decomposition runs at task start
+- Confidence scoring runs before completion declarations
+- Alternative paths suggested on tool failures
+
+**Design Principles:**
+- Model-agnostic: Works with all providers/models
+- Small-model friendly: Reduces context pressure, explicit tracking
+- Test-first: Shadow mode available for all features
+- Non-destructive: Can be disabled without breaking core functionality
+
 ## Telegram Offset Persistence Bug (2026-04-03 23:15)
 
 **Bug:** Telegram poll loop loses offset state on restart, causing 409 Conflict errors.
