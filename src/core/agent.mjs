@@ -31,11 +31,11 @@ import { scoreProofQuality } from './proof-scorer.mjs';
 import { getTaskTracker } from './task-tracker.mjs';
 import { getSelfMonitor } from './self-monitor.mjs';
 import { CompletionChecklist } from './completion-checklist.mjs';
+import { getWorkingMemory } from './working-memory.mjs';
 import { suggestAlternatives } from './alternative-paths.mjs';
 import { scoreConfidence } from './confidence-scorer.mjs';
 import { decomposeTask } from './task-decomposer.mjs';
 import { ContextPressure } from './context-pressure.mjs';
-import { scoreConfidence } from './confidence-scorer.mjs';
 import { resolveExecutionEnvelope } from './model-execution-envelope.mjs';
 import {
   classifyProviderFailure,
@@ -999,12 +999,54 @@ export class OpenUnumAgent {
         trace.timeoutMs = turnBudgetMs;
         break;
       }
+      
+      // INJECT WORKING MEMORY GHOST MESSAGE (before every model call)
+      if (workingMemory) {
+        // Check if compaction is needed
+        if (messages.length > workingMemory.compactionThreshold * 2) {
+          workingMemory.compactMiddle(messages);
+        }
+        
+        // Build injection payload
+        const recentMessages = messages.filter(m => m.role !== 'system' || !m.content.includes('WORKING MEMORY ANCHOR'));
+        const injectionPayload = workingMemory.buildInjection(recentMessages, Math.floor(messages.length / 2));
+        
+        // Inject as system message (replaces any previous working memory injection)
+        const existingWmIndex = messages.findIndex(m => m.role === 'system' && m.content.includes('WORKING MEMORY ANCHOR'));
+        if (existingWmIndex >= 0) {
+          messages[existingWmIndex] = { role: 'system', content: injectionPayload };
+        } else {
+          // Insert after the initial system message
+          messages.splice(1, 0, { role: 'system', content: injectionPayload });
+        }
+      }
+      
       const out = await runtimeProvider.chat({
         messages,
         tools: this.toolRuntime.toolSchemas({ allowedTools: turnToolAllowlist }),
         timeoutMs: remainingMs
       });
       const normalizedContent = normalizeAssistantContent(out.content);
+      
+      // DRIFT DETECTION (after model responds)
+      if (workingMemory && normalizedContent) {
+        const driftAnalysis = workingMemory.detectDrift(normalizedContent);
+        trace.driftAnalysis = driftAnalysis;
+        
+        if (driftAnalysis.driftDetected && driftAnalysis.confidence > 0.5) {
+          const correctionPrompt = workingMemory.generateDriftCorrection(driftAnalysis);
+          messages.push({
+            role: 'system',
+            content: correctionPrompt
+          });
+          logInfo('working_memory_drift_corrected', {
+            sessionId,
+            confidence: driftAnalysis.confidence,
+            forbiddenMatches: driftAnalysis.forbiddenMatches
+          });
+        }
+      }
+      
       const iter = {
         step: i + 1,
         toolCalls: [],
@@ -1494,6 +1536,23 @@ export class OpenUnumAgent {
       }
     }
 
+    // Initialize Working Memory Anchor (ghost message injection for weak models)
+    const workspaceRoot = this.config?.runtime?.workspaceRoot || process.cwd();
+    const workingMemory = getWorkingMemory({
+      sessionId,
+      workspaceRoot,
+      userTask: message,
+      agentPlan: decomposition,
+      contract: {
+        successCriteria: decomposition.decomposed ? `Complete all ${decomposition.steps.length} steps` : 'Task completed as specified',
+        requiredOutputs: [],
+        forbiddenDrift: []  // Could be inferred from task type
+      }
+    });
+    if (workingMemory) {
+      logInfo('working_memory_initialized', { sessionId, hasPlan: Boolean(decomposition.decomposed) });
+    }
+
     const modelForBudget = this.getCurrentModel();
     const sessionEnvelope = resolveExecutionEnvelope({
       provider: modelForBudget.activeProvider || modelForBudget.provider,
@@ -1618,7 +1677,8 @@ export class OpenUnumAgent {
             messages: [...messages],
             sessionId,
             routedTools,
-            contextPackInputs
+            contextPackInputs,
+            workingMemory  // NEW: Pass working memory anchor
           });
           this.clearProviderFailure(attempt.provider);
           finalText = run.finalText;
