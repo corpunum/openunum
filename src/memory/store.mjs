@@ -164,10 +164,11 @@ export class MemoryStore {
         updated_at TEXT NOT NULL
       );
       CREATE TABLE IF NOT EXISTS channel_state (
-        channel_name TEXT PRIMARY KEY,
+        channel_name TEXT NOT NULL,
         state_key TEXT NOT NULL,
         state_value TEXT NOT NULL,
-        updated_at TEXT NOT NULL
+        updated_at TEXT NOT NULL,
+        PRIMARY KEY (channel_name, state_key)
       );
       CREATE TABLE IF NOT EXISTS task_records (
         id TEXT PRIMARY KEY,

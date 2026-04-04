@@ -862,6 +862,19 @@ export class ToolRuntime {
       return out;
     }
 
+    // Preflight validation — check tool-specific argument constraints
+    const validation = validateToolCall(name, currentArgs);
+    if (!validation.valid) {
+      const out = {
+        ok: false,
+        error: 'preflight_validation_failed',
+        stderr: validation.hint || `Tool ${name} failed preflight validation.`,
+        hookEvents
+      };
+      this.logRun(context, name, currentArgs, out);
+      return out;
+    }
+
     const preHooks = await this.runHookStage('pre-tool', {
       stage: 'pre-tool',
       toolName: name,
