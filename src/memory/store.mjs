@@ -255,6 +255,19 @@ export class MemoryStore {
       );
       CREATE INDEX IF NOT EXISTS idx_self_edit_records_status_updated ON self_edit_records(status, updated_at DESC);
       CREATE INDEX IF NOT EXISTS idx_self_edit_records_created ON self_edit_records(created_at DESC);
+      -- DEPRECATED: task_records and mission_records deprecated v2.1.0, use execution_state
+      CREATE TABLE IF NOT EXISTS execution_state (
+        id TEXT PRIMARY KEY, type TEXT NOT NULL CHECK(type IN ('task','mission')), goal TEXT NOT NULL, status TEXT NOT NULL, session_id TEXT NOT NULL,
+        step INTEGER DEFAULT 0, max_steps INTEGER DEFAULT 0, step_done_count INTEGER DEFAULT 0, step_failed_count INTEGER DEFAULT 0,
+        retries INTEGER DEFAULT 0, max_retries INTEGER DEFAULT 0, error TEXT, continue_on_failure INTEGER DEFAULT 0,
+        verify_count INTEGER DEFAULT 0, verify_failed_count INTEGER DEFAULT 0, monitor_count INTEGER DEFAULT 0,
+        hard_step_cap INTEGER DEFAULT 0, interval_ms INTEGER DEFAULT 0, continue_until_done INTEGER DEFAULT 1,
+        created_at TEXT NOT NULL, started_at TEXT NOT NULL, finished_at TEXT, updated_at TEXT NOT NULL, state_json TEXT NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS idx_execution_state_type_status ON execution_state(type, status);
+      CREATE INDEX IF NOT EXISTS idx_execution_state_session_updated ON execution_state(session_id, updated_at DESC);
+      CREATE INDEX IF NOT EXISTS idx_execution_state_created ON execution_state(created_at DESC);
+      CREATE INDEX IF NOT EXISTS idx_execution_state_status_updated ON execution_state(status, updated_at DESC);
     `);
   }
 
@@ -372,6 +385,8 @@ export class MemoryStore {
 
   upsertMissionRecord(mission) {
     if (!mission || !mission.id) return;
+    // Write to execution_state for v2.1.0+ (backward compat: also writes to mission_records)
+    this.upsertExecutionState({ ...mission, type: 'mission' });
     const now = new Date().toISOString();
     this.db
       .prepare(
@@ -581,6 +596,8 @@ export class MemoryStore {
 
   upsertTaskRecord(task) {
     if (!task || !task.id) return;
+    // Write to execution_state for v2.1.0+ (backward compat: also writes to task_records)
+    this.upsertExecutionState({ ...task, type: 'task' });
     const now = new Date().toISOString();
     const stepResults = Array.isArray(task.stepResults) ? task.stepResults : [];
     const verification = Array.isArray(task.verification) ? task.verification : [];
@@ -1540,5 +1557,77 @@ export class MemoryStore {
            updated_at = excluded.updated_at`
       )
       .run(channelName, stateKey, valueJson, new Date().toISOString());
+  }
+
+  /**
+   * Execution State - Unified state storage for tasks and missions (v2.1.0+)
+   * Replaces separate task_records and mission_records tables.
+   */
+  upsertExecutionState(state) {
+    if (!state || !state.id) return;
+    const now = new Date().toISOString();
+    const type = String(state.type || 'task').toLowerCase();
+    if (!['task', 'mission'].includes(type)) throw new Error(`Invalid execution_state type: ${type}`);
+    this.db.prepare(
+      `INSERT INTO execution_state (
+        id, type, goal, status, session_id, step, max_steps, step_done_count, step_failed_count,
+        retries, max_retries, error, continue_on_failure, verify_count, verify_failed_count, monitor_count,
+        hard_step_cap, interval_ms, continue_until_done, created_at, started_at, finished_at, updated_at, state_json
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(id) DO UPDATE SET
+        type=excluded.type, goal=excluded.goal, status=excluded.status, session_id=excluded.session_id,
+        step=excluded.step, max_steps=excluded.max_steps, step_done_count=excluded.step_done_count,
+        step_failed_count=excluded.step_failed_count, retries=excluded.retries, max_retries=excluded.max_retries,
+        error=excluded.error, continue_on_failure=excluded.continue_on_failure, verify_count=excluded.verify_count,
+        verify_failed_count=excluded.verify_failed_count, monitor_count=excluded.monitor_count,
+        hard_step_cap=excluded.hard_step_cap, interval_ms=excluded.interval_ms,
+        continue_until_done=excluded.continue_until_done, finished_at=excluded.finished_at,
+        updated_at=excluded.updated_at, state_json=excluded.state_json`
+    ).run(
+      String(state.id), type, String(state.goal||''), String(state.status||'unknown'), String(state.sessionId||''),
+      Number(state.step||0), Number(state.maxSteps||0), Number(state.stepDoneCount||0), Number(state.stepFailedCount||0),
+      Number(state.retries||0), Number(state.maxRetries||0), state.error?String(state.error):null,
+      type==='task'?(state.continueOnFailure===true?1:0):0, type==='task'?Number(state.verifyCount||0):0,
+      type==='task'?Number(state.verifyFailedCount||0):0, type==='task'?Number(state.monitorCount||0):0,
+      type==='mission'?Number(state.hardStepCap||0):0, type==='mission'?Number(state.intervalMs||0):0,
+      type==='mission'?(state.continueUntilDone===false?0:1):1,
+      String(state.createdAt||now), String(state.startedAt||now), state.finishedAt?String(state.finishedAt):null,
+      now, JSON.stringify(state||{})
+    );
+  }
+
+  getExecutionState(id) {
+    const row = this.db.prepare('SELECT * FROM execution_state WHERE id = ?').get(String(id||'').trim());
+    if (!row) return null;
+    return this._parseExecutionStateRow(row);
+  }
+
+  listExecutionStates({type, status, sessionId, limit=80}={}) {
+    let q='SELECT * FROM execution_state WHERE 1=1', p=[];
+    if (type && ['task','mission'].includes(type.toLowerCase())) { q+=' AND type=?'; p.push(type.toLowerCase()); }
+    if (status) { q+=' AND status=?'; p.push(String(status)); }
+    if (sessionId) { q+=' AND session_id=?'; p.push(String(sessionId)); }
+    q+=' ORDER BY updated_at DESC LIMIT ?'; p.push(Math.max(1,Math.min(500,Number(limit||80))));
+    return this.db.prepare(q).all(...p).map(r=>this._parseExecutionStateRow(r));
+  }
+
+  _parseExecutionStateRow(row) {
+    const s={
+      id:row.id, type:row.type, goal:row.goal, status:row.status, sessionId:row.session_id,
+      step:Number(row.step||0), maxSteps:Number(row.max_steps||0),
+      stepDoneCount:Number(row.step_done_count||0), stepFailedCount:Number(row.step_failed_count||0),
+      retries:Number(row.retries||0), maxRetries:Number(row.max_retries||0), error:row.error||null,
+      createdAt:row.created_at, startedAt:row.started_at, finishedAt:row.finished_at||null, updatedAt:row.updated_at,
+      state:parseJson(row.state_json,null)
+    };
+    if (row.type==='task') { s.continueOnFailure=Boolean(row.continue_on_failure); s.verifyCount=Number(row.verify_count||0); s.verifyFailedCount=Number(row.verify_failed_count||0); s.monitorCount=Number(row.monitor_count||0); }
+    else if (row.type==='mission') { s.hardStepCap=Number(row.hard_step_cap||0); s.intervalMs=Number(row.interval_ms||0); s.continueUntilDone=Boolean(row.continue_until_done); }
+    return s;
+  }
+
+  markExecutionStateFinished(id, status, error=null) {
+    const r=this.db.prepare('UPDATE execution_state SET status=?,error=?,finished_at=?,updated_at=? WHERE id=?')
+      .run(String(status||'finished'), error?String(error):null, new Date().toISOString(), new Date().toISOString(), String(id||'').trim());
+    return r.changes>0?this.getExecutionState(id):null;
   }
 }

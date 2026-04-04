@@ -890,7 +890,8 @@ export class OpenUnumAgent {
     messages,
     sessionId,
     routedTools = [],
-    contextPackInputs = {}
+    contextPackInputs = {},
+    workingMemory = null
   }) {
     const originalUserMessage = getLastUserMessage(messages);
     const executionEnvelope = resolveExecutionEnvelope({
@@ -1755,7 +1756,8 @@ export class OpenUnumAgent {
           messages: [...messages],
           sessionId,
           routedTools,
-          contextPackInputs
+          contextPackInputs,
+          workingMemory
         });
         if (retryRun.finalText) {
           finalText = retryRun.finalText;
