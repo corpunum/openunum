@@ -980,6 +980,8 @@ export class OpenUnumAgent {
     let finalText = '';
     let toolRuns = 0;
     const executedTools = [];
+    // PHASE 3: Intervention trace array
+    trace.intervention_trace = [];
     // Trace already initialized earlier for memory recall, now extend it
     trace.localRuntimeTask = localRuntimeTask;
     trace.uiCodeEditTask = uiCodeEditTask;
@@ -1043,6 +1045,13 @@ export class OpenUnumAgent {
             role: 'system',
             content: correctionPrompt
           });
+          // PHASE 3: Log intervention
+          trace.intervention_trace.push({
+            type: 'drift_correction',
+            at: new Date().toISOString(),
+            confidence: driftAnalysis.confidence,
+            forbiddenMatches: driftAnalysis.forbiddenMatches
+          });
           logInfo('working_memory_drift_corrected', {
             sessionId,
             confidence: driftAnalysis.confidence,
@@ -1101,6 +1110,13 @@ export class OpenUnumAgent {
             role: 'system',
             content: continuationDirective('planner_without_proof')
           });
+          // PHASE 3: Log intervention
+          trace.intervention_trace.push({
+            type: 'continuation',
+            subtype: 'planner_without_proof',
+            at: new Date().toISOString(),
+            reason: 'Model stopped without proof-backed completion'
+          });
           continue;
         }
 
@@ -1116,6 +1132,13 @@ export class OpenUnumAgent {
               `Remaining steps: ${remaining.map(r => r.description).join('; ')}`,
               'Continue with the next pending step. Do not claim completion until all steps are verified.'
             ].join('\n')
+          });
+          // PHASE 3: Log intervention
+          trace.intervention_trace.push({
+            type: 'checklist_enforcement',
+            at: new Date().toISOString(),
+            progress: checklistProgress,
+            remainingCount: remaining.length
           });
           continue;
         }
@@ -1141,6 +1164,13 @@ export class OpenUnumAgent {
                 'Continue with remaining steps. Do not generate a completion summary yet.',
                 'Only claim done when you have proof-backed evidence that the full goal is satisfied.'
               ].join('\n')
+            });
+            // PHASE 3: Log intervention
+            trace.intervention_trace.push({
+              type: 'preventive_continuation',
+              at: new Date().toISOString(),
+              reason: 'Task incomplete but model attempted to stop',
+              toolRuns: executedTools.length
             });
             continue;
           }

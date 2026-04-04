@@ -128,7 +128,16 @@ export async function handleChatToolsRoute({ req, res, url, ctx }) {
     const entry = ctx.getOrStartChat(sessionId, message);
     try {
       const out = await ctx.withTimeout(entry.promise, 20 * 1000, 'chat_timeout');
-      ctx.sendJson(res, 200, { ...out, replyHtml: ctx.renderReplyHtml(out.reply) });
+      // PHASE 3: Include intervention trace in response
+      const response = { ...out, replyHtml: ctx.renderReplyHtml(out.reply) };
+      if (out.trace?.intervention_trace) {
+        response._meta = response._meta || {};
+        response._meta.interventions = {
+          count: out.trace.intervention_trace.length,
+          items: out.trace.intervention_trace
+        };
+      }
+      ctx.sendJson(res, 200, response);
       return true;
     } catch (error) {
       if (String(error.message || error) === 'chat_timeout') {

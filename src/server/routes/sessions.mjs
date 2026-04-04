@@ -116,6 +116,53 @@ export async function handleSessionsRoute({ req, res, url, ctx }) {
       });
       return true;
     }
+    // PHASE 3: Intervention Trace endpoint
+    if (url.pathname.endsWith('/trace')) {
+      const parts = url.pathname.split('/');
+      const sessionId = decodeURIComponent(parts[3] || '');
+      const summary = ctx.memory.getSessionSummary(sessionId);
+      if (!summary) {
+        ctx.sendJson(res, 404, { error: 'session_not_found' });
+        return true;
+      }
+      // Get trace from pending chats (active session trace)
+      const pending = ctx.pendingChats.get(sessionId);
+      const trace = pending?.trace || null;
+      
+      // Get intervention history from messages (look for system messages with intervention markers)
+      const messages = ctx.memory.getAllMessagesForSession(sessionId);
+      const interventions = messages
+        .filter(m => m.role === 'system' && (
+          m.content.includes('DRIFT DETECTION') ||
+          m.content.includes('CONTINUATION INSTRUCTION') ||
+          m.content.includes('WORKING MEMORY ANCHOR') ||
+          m.content.includes('Preventive continuation') ||
+          m.content.includes('completion checklist')
+        ))
+        .map((m, idx) => ({
+          id: `intervention-${idx}`,
+          type: m.content.includes('DRIFT') ? 'drift_correction' :
+                m.content.includes('CONTINUATION') ? 'continuation' :
+                m.content.includes('ANCHOR') ? 'anchor_injection' :
+                m.content.includes('Preventive') ? 'preventive_continuation' :
+                m.content.includes('checklist') ? 'checklist_enforcement' : 'unknown',
+          messageId: m.id,
+          createdAt: m.created_at,
+          preview: String(m.content).slice(0, 200)
+        }));
+      
+      ctx.sendJson(res, 200, {
+        sessionId,
+        trace: {
+          active: trace,
+          interventions: {
+            count: interventions.length,
+            items: interventions.slice(-50)  // Last 50 interventions
+          }
+        }
+      });
+      return true;
+    }
     const sessionId = decodeURIComponent(url.pathname.split('/').pop() || '');
     const skipHtml = url.searchParams.get('html') === 'false';
     const msgs = ctx.memory.getMessages(sessionId || '', 500)

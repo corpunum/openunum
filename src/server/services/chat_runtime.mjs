@@ -24,12 +24,16 @@ export function createChatRuntimeService({ agent, saveConfig }) {
     const promise = agent.chat({ message, sessionId: sid })
       .then((out) => {
         saveConfig();
+        // PHASE 3: Store trace in pending chat for retrieval
+        existing.trace = out.trace || null;
+        existing.interventions = out.trace?.interventions || [];
+        existing.completedAt = new Date().toISOString();
         return out;
       })
       .finally(() => {
         pendingChats.delete(sid);
       });
-    const entry = { sessionId: sid, message, startedAt, promise };
+    const entry = { sessionId: sid, message, startedAt, promise, trace: null, interventions: [] };
     pendingChats.set(sid, entry);
     return entry;
   }
