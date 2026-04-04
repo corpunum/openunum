@@ -32,6 +32,7 @@ import { getTaskTracker } from './task-tracker.mjs';
 import { getSelfMonitor } from './self-monitor.mjs';
 import { CompletionChecklist } from './completion-checklist.mjs';
 import { suggestAlternatives } from './alternative-paths.mjs';
+import { scoreConfidence } from './confidence-scorer.mjs';
 import { decomposeTask } from './task-decomposer.mjs';
 import { ContextPressure } from './context-pressure.mjs';
 import { scoreConfidence } from './confidence-scorer.mjs';
@@ -41,6 +42,8 @@ import {
   resolveFallbackAction,
   shouldUseProvider
 } from './provider-fallback-policy.mjs';
+import { detectSteps } from './completion-checklist.mjs';
+import { logInfo, logError } from '../logger.mjs';
 
 function inferParamsB(modelId) {
   const m = String(modelId || '').toLowerCase().match(/(\d+(?:\.\d+)?)b/);
@@ -558,6 +561,7 @@ export class OpenUnumAgent {
     this.memoryStore = memoryStore;
     this.toolRuntime = new ToolRuntime(config, memoryStore);
     this.taskTracker = getTaskTracker(memoryStore);
+    this.taskDecomposer = { decomposeTask };
     this.selfMonitor = getSelfMonitor(this);
     this.behaviorRegistryHydrated = false;
     this.completionChecklist = new CompletionChecklist();
@@ -1054,7 +1058,23 @@ export class OpenUnumAgent {
           continue;
         }
 
-        // PREVENTIVE CHECK: Is the original task actually complete?
+        // CHECK 1: Completion Checklist - Are all decomposed steps complete?
+        // This is the PRIMARY check - if we have explicit steps, they MUST all be done
+        const checklistProgress = this.completionChecklist.getProgress();
+        if (checklistProgress.total > 0 && checklistProgress.percent < 100) {
+          const remaining = this.completionChecklist.getRemaining();
+          messages.push({
+            role: 'system',
+            content: [
+              `Task incomplete: ${checklistProgress.complete}/${checklistProgress.total} steps done (${checklistProgress.percent}%).`,
+              `Remaining steps: ${remaining.map(r => r.description).join('; ')}`,
+              'Continue with the next pending step. Do not claim completion until all steps are verified.'
+            ].join('\n')
+          });
+          continue;
+        }
+
+        // CHECK 2: PREVENTIVE - Is the original task actually complete?
         // This runs BEFORE deciding to stop, preventing premature "I feel done" stalls
         try {
           const isActuallyDone = isProofBackedDone({
@@ -1158,6 +1178,17 @@ export class OpenUnumAgent {
           args,
           result
         });
+
+        // Mark step as complete if tool succeeded
+        if (result?.ok && this.completionChecklist.initialized) {
+          const remaining = this.completionChecklist.getRemaining();
+          if (remaining.length > 0) {
+            // Match tool action to step description (simple heuristic)
+            const stepId = `step-${remaining[0].id.split('-')[1]}`;
+            this.completionChecklist.markComplete(stepId, { tool: tc.name, args });
+            logInfo('step_completed', { stepId, tool: tc.name, progress: this.completionChecklist.getProgress() });
+          }
+        }
         iter.toolCalls.push({
           name: tc.name,
           args,
@@ -1448,6 +1479,20 @@ export class OpenUnumAgent {
 
     // Start self-monitoring for automatic continuation
     this.selfMonitor.startMonitoring(sessionId, message);
+    
+    // Decompose task into explicit steps using taskDecomposer (more sophisticated than detectSteps)
+    const decomposition = this.taskDecomposer.decomposeTask(message);
+    if (decomposition.decomposed && decomposition.steps.length > 0) {
+      this.completionChecklist.initFromSteps(decomposition.steps);
+      logInfo('task_decomposed', { steps: decomposition.steps, original: decomposition.original });
+    } else {
+      // Fallback to simple detectSteps if decomposition found no patterns
+      const detectedSteps = detectSteps(message);
+      if (detectedSteps) {
+        this.completionChecklist.initFromSteps(detectedSteps);
+        logInfo('task_steps_detected', { steps: detectedSteps });
+      }
+    }
 
     const modelForBudget = this.getCurrentModel();
     const sessionEnvelope = resolveExecutionEnvelope({
@@ -1489,6 +1534,20 @@ export class OpenUnumAgent {
 
     let history = rawHistory.map((m) => ({ role: m.role, content: m.content }));
     let compactionMeta = null;
+    
+    // ContextPressure check before building messages
+    const pressureCheck = this.contextPressure.getReport(history);
+    if (pressureCheck.status !== 'ok') {
+      logInfo('context_pressure', pressureCheck);
+      if (pressureCheck.status === 'critical' || pressureCheck.status === 'warning') {
+        const compacted = this.contextPressure.compactMessages(history, {
+          aggressive: pressureCheck.status === 'critical'
+        });
+        history = compacted;
+        logInfo('context_compacted', { status: pressureCheck.status, messagesCount: history.length });
+      }
+    }
+    
     if (this.config.runtime?.contextCompactionEnabled !== false && triggerInfo.overTrigger) {
       const targetTokens = Math.floor(triggerInfo.contextLimit * Number(this.config.runtime?.contextCompactTargetPct || 0.4));
       const compacted = compactSessionMessages({
@@ -1620,6 +1679,43 @@ export class OpenUnumAgent {
         }
       };
     }
+    
+    // Auto-continue if task incomplete (check before storing reply)
+    const executedTools = trace?.iterations?.flatMap((iter) => iter?.toolRuns || []) || [];
+    const shouldContinue = this.selfMonitor.shouldAutoContinue(sessionId, finalText, executedTools);
+    if (shouldContinue && failures.length === 0) {
+      const continuationPrompt = this.selfMonitor.generateContinuationPrompt(sessionId, finalText, executedTools);
+      messages.push({ role: 'system', content: continuationPrompt });
+      
+      // Retry with continuation
+      try {
+        const retryRun = await this.runOneProviderTurn({
+          provider: this.config.model.provider,
+          model: this.config.model.model,
+          messages: [...messages],
+          sessionId,
+          routedTools,
+          contextPackInputs
+        });
+        if (retryRun.finalText) {
+          finalText = retryRun.finalText;
+          trace = retryRun.trace;
+          logInfo('auto_continued', { success: true });
+        }
+      } catch (e) {
+        logInfo('auto_continued', { success: false, error: String(e.message || e) });
+      }
+    }
+    
+    // Add progress indicator for multi-step tasks
+    const progress = this.completionChecklist.getProgress();
+    if (progress.total > 0 && progress.percent < 100) {
+      const progressNote = `\n\n📋 Progress: ${progress.complete}/${progress.total} (${progress.percent}%)`;
+      finalText = finalText + progressNote;
+    } else if (progress.total > 0 && progress.percent === 100) {
+      finalText = finalText + '\n\n✅ Task complete!';
+    }
+    
     this.memoryStore.addMessage(sessionId, 'assistant', finalText);
     for (const fact of extractAutomaticFacts({
       message,
