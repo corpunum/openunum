@@ -21,12 +21,17 @@ import { SelfHealSystem } from './self-heal.mjs';
 import { AutoImprovementEngine } from './auto-improve.mjs';
 import { SkillLearner } from './skill-learner.mjs';
 
+export function getAutonomyMaster({ config, agent, memoryStore, browser, pendingChats }) {
+  return new AutonomyMaster({ config, agent, memoryStore, browser, pendingChats });
+}
+
 export class AutonomyMaster {
-  constructor({ config, agent, memoryStore, browser }) {
+  constructor({ config, agent, memoryStore, browser, pendingChats }) {
     this.config = config;
     this.agent = agent;
     this.memoryStore = memoryStore;
     this.browser = browser;
+    this.pendingChats = pendingChats || new Map();
     this.homeDir = getHomeDir();
     
     // Subsystems
@@ -38,6 +43,8 @@ export class AutonomyMaster {
     this.active = false;
     this.monitorInterval = null;
     this.monitorIntervalMs = 30000; // 30 seconds for active monitoring
+    this.baseMonitorIntervalMs = 30000;
+    this.activeSessionMonitorIntervalMs = 300000; // 5 minutes during active sessions
     
     // Metrics
     this.metrics = {
@@ -64,6 +71,51 @@ export class AutonomyMaster {
     
     // Load persisted state
     this.loadState();
+  }
+  
+  /**
+   * PHASE 4: Detect if there are active user sessions
+   * Returns true if any chats are currently being processed
+   */
+  hasActiveSessions() {
+    if (!this.pendingChats || !(this.pendingChats instanceof Map)) {
+      return false;
+    }
+    // Check if any pending chats are actively being processed (not completed)
+    for (const [sessionId, entry] of this.pendingChats.entries()) {
+      // If entry has no completedAt, it's still active
+      if (!entry.completedAt) {
+        return true;
+      }
+    }
+    return false;
+  }
+  
+  /**
+   * PHASE 4: Adjust monitoring interval based on active sessions
+   */
+  adjustMonitoringInterval() {
+    const hasActive = this.hasActiveSessions();
+    const targetInterval = hasActive ? this.activeSessionMonitorIntervalMs : this.baseMonitorIntervalMs;
+    
+    if (this.monitorIntervalMs !== targetInterval) {
+      this.monitorIntervalMs = targetInterval;
+      logInfo('autonomy_monitoring_interval_adjusted', {
+        hasActiveSessions: hasActive,
+        newIntervalMs: targetInterval,
+        reason: hasActive ? 'active_sessions_detected' : 'no_active_sessions'
+      });
+      
+      // Restart interval with new timing
+      if (this.monitorInterval) {
+        clearInterval(this.monitorInterval);
+        this.monitorInterval = setInterval(() => {
+          this.runCycle();
+        }, this.monitorIntervalMs);
+      }
+    }
+    
+    return hasActive;
   }
   
   /**
@@ -434,10 +486,3 @@ export class AutonomyMaster {
 
 // Singleton instance
 let instance = null;
-
-export function getAutonomyMaster({ config, agent, memoryStore, browser }) {
-  if (!instance) {
-    instance = new AutonomyMaster({ config, agent, memoryStore, browser });
-  }
-  return instance;
-}
