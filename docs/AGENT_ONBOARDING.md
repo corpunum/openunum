@@ -1,7 +1,7 @@
 # Agent Onboarding Guide
 
 **For:** New OpenUnum agents joining the system  
-**Version:** 2.1.0  
+**Version:** 2.2.0  
 **Last Updated:** 2026-04-05
 
 ---
@@ -168,6 +168,108 @@ Before claiming "done", run through the proof scorer criteria:
 **Threshold:** 0.6 for "done"
 
 If score < 0.6, you're not done yet. Keep working.
+
+---
+
+## Command System
+
+OpenUnum has a channel-agnostic slash command system. Commands work identically across WebUI, Telegram, CLI, and any future channel.
+
+### Syntax
+
+Commands start with `/` followed by the command name and optional arguments:
+```
+/command [args] [--flags]
+```
+
+### Available Commands
+
+| Command | Arguments | Description |
+|---------|-----------|-------------|
+| `/help` | `[command]` | Show available commands or details for a specific command |
+| `/status` | — | Show current model, token usage, and context status |
+| `/new` | — | Start a fresh session (clear context) |
+| `/compact` | `[--dry-run]` | Trigger context compaction |
+| `/memory` | — | Show recent memory artifacts and compaction status |
+| `/cost` | — | Show token/cost estimate for current session |
+| `/ledger` | — | Show strategy/tool reliability ledger |
+| `/session` | `list\|clear\|delete <id>` | Manage sessions |
+| `/rule` | `add\|list\|remove\|active [text]` | Manage persistent behavioral rules |
+| `/knowledge` | `add\|list\|search\|remove [text]` | Manage searchable knowledge base |
+| `/skill` | `list` | List and manage skills |
+
+### Rules System
+
+Rules are persistent behavioral constraints injected into every session:
+
+```
+/rule add Always verify file existence before claiming success
+/rule add Never expose API tokens in output
+/rule list
+/rule remove abc123
+```
+
+**Limit:** 10 active rules. Rules persist across sessions and are injected into the system context.
+
+### Knowledge Base
+
+Searchable knowledge entries for reference:
+
+```
+/knowledge add Python virtualenv setup requires: python3 -m venv env && source env/bin/activate
+/knowledge search virtualenv
+/knowledge list
+/knowledge remove abc123
+```
+
+**Storage:** `data/knowledge/*.json` — JSON entries with title, content, timestamps.
+
+### API Endpoints
+
+- `POST /api/command` — Execute a command: `{ message: "/help", sessionId: "abc" }`
+- `GET /api/commands` — List all available commands
+
+### CLI Usage
+
+```bash
+openunum command /status
+openunum command /help rule
+openunum command /rule add 'Always verify before claiming'
+```
+
+### Architecture
+
+- **Parser:** `src/core/command-parser.mjs` — Channel-agnostic `/cmd [args]` parsing
+- **Registry:** `src/commands/registry.mjs` — Central command registry with routing
+- **Loader:** `src/commands/loader.mjs` — Auto-registers all builtin commands
+- **Builtins:** `src/commands/builtin/*.mjs` — Individual command modules
+- **API Routes:** `src/server/routes/commands.mjs` — REST endpoints for command execution
+
+### Adding New Commands
+
+1. Create `src/commands/builtin/mycommand.mjs`:
+```javascript
+export const myCommand = {
+  name: 'mycommand',
+  description: 'Does something useful',
+  args: [{ name: 'target', required: false, description: 'What to target' }],
+  source: 'builtin/mycommand.mjs',
+
+  async execute(args, flags, context) {
+    const { sessionId, agent, memoryStore, config } = context;
+    return 'Result of my command';
+  }
+};
+export default myCommand;
+```
+
+2. Add to `src/commands/loader.mjs`:
+```javascript
+import myCommand from './builtin/mycommand.mjs';
+// ... add to builtins array
+```
+
+3. The command is immediately available on all channels.
 
 ---
 

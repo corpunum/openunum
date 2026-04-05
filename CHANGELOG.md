@@ -4,6 +4,44 @@ All notable changes to OpenUnum are documented in this file.
 
 ---
 
+## [2.2.0] - 2026-04-05
+
+### Added
+- **Channel-Agnostic Command System** — Slash commands work identically across WebUI, Telegram, CLI, and any future channel
+- **Command Parser** — Enhanced parser with flag support (`--dry-run`, `--key=value`) (`src/core/command-parser.mjs`)
+- **Command Registry** — Central routing system for all commands (`src/commands/registry.mjs`)
+- **Command Loader** — Auto-registers all builtin commands at startup (`src/commands/loader.mjs`)
+- **11 Builtin Commands:**
+  - `/help [command]` — Show available commands or details
+  - `/status` — Current model, tokens, context usage
+  - `/new` — Start fresh session
+  - `/compact [--dry-run]` — Trigger context compaction
+  - `/memory` — Show memory artifacts and compaction status
+  - `/cost` — Token/cost estimate
+  - `/ledger` — Strategy/tool reliability ledger
+  - `/session list|clear|delete <id>` — Session management
+  - `/rule add|list|remove|active [text]` — Persistent behavioral rules (max 10 active)
+  - `/knowledge add|list|search|remove [text]` — Searchable knowledge base
+  - `/skill list` — Skill management
+- **Rules System** — Persistent constraints injected into every session (`data/rules/*.json`)
+- **Knowledge Base** — Searchable knowledge entries with BM25-style matching (`data/knowledge/*.json`)
+- **API Endpoints** — `POST /api/command`, `GET /api/commands`
+- **CLI Integration** — `openunum command /status` for direct command execution
+- **Unit Tests** — 19 tests covering parser, registry, and all builtin commands (`tests/unit/commands.test.mjs`)
+- **Documentation** — Command system section added to Agent Onboarding guide
+
+### Changed
+- **Agent chat()** — Now routes through command registry before falling back to inline handler
+- **Server startup** — Loads builtin commands at initialization
+
+### Architecture
+- Commands are standalone modules in `src/commands/builtin/`
+- Registry uses singleton pattern for global access
+- Parser is channel-agnostic (no UI/channel dependencies)
+- Backward compatible — existing inline slash commands still work as fallback
+
+---
+
 ## [2.1.0] - 2026-04-05
 
 ### Added
@@ -67,6 +105,7 @@ All notable changes to OpenUnum are documented in this file.
 
 | Version | Date | Key Changes |
 |---------|------|-------------|
+| 2.2.0 | 2026-04-05 | Channel-agnostic command system, rules, knowledge base, CLI integration |
 | 2.1.0 | 2026-04-05 | Hybrid retrieval, context compiler, enriched compaction, proof scorer v2 |
 | 2.0.0 | 2026-03-31 | Modular architecture, session management, self-healing |
 | 0.1.0 | 2026-03-30 | Initial release |

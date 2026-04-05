@@ -77,6 +77,8 @@ import { handleConfigRoute } from './server/routes/config.mjs';
 import { handleAutonomyRoute } from './server/routes/autonomy.mjs';
 import { handleChatToolsRoute } from './server/routes/chat_tools.mjs';
 import { handleSkillsResearchRoute } from './server/routes/skills_research.mjs';
+import { handleCommandRoute, handleCommandsListRoute } from './server/routes/commands.mjs';
+import { loadBuiltinCommands } from './commands/loader.mjs';
 import { createAuthJobsService } from './server/services/auth_jobs.mjs';
 import { createBrowserRuntimeService } from './server/services/browser_runtime.mjs';
 import { createTelegramRuntimeService } from './server/services/telegram_runtime.mjs';
@@ -87,6 +89,7 @@ const config = loadConfig();
 normalizeModelSettings();
 const memory = new MemoryStore();
 const agent = new OpenUnumAgent({ config, memoryStore: memory });
+loadBuiltinCommands();
 const missions = new MissionRunner({ agent, memoryStore: memory, config });
 let browser = new CDPBrowser(config.browser?.cdpUrl);
 
@@ -1224,6 +1227,25 @@ const server = http.createServer(async (req, res) => {
       }
     })) return;
 
+    // Command system routes (before sessions to handle /api/command)
+    if (req.method === 'POST' && url.pathname === '/api/command') {
+      const body = await parseBody(req);
+      if (!body?.message) return sendJson(res, 400, { error: 'message field is required' });
+      const registry = (await import('./commands/registry.mjs')).getRegistry();
+      const result = await registry.route(body.message, {
+        sessionId: body.sessionId || 'api',
+        agent,
+        memoryStore: memory,
+        config
+      });
+      return sendJson(res, result?.handled ? 200 : 404, result || { handled: false });
+    }
+
+    if (req.method === 'GET' && url.pathname === '/api/commands') {
+      const registry = (await import('./commands/registry.mjs')).getRegistry();
+      return sendJson(res, 200, { commands: registry.list() });
+    }
+
     if (await handleSessionsRoute({
       req,
       res,
@@ -1312,5 +1334,11 @@ server.listen(config.server.port, config.server.host, () => {
   }
   if (config.runtime?.researchDailyEnabled) {
     startResearchDailyLoop();
+  }
+  // Start Telegram bot polling loop if enabled and token is present
+  if (config.channels?.telegram?.enabled && config.channels?.telegram?.botToken) {
+    runTelegramLoop().catch((err) => {
+      logError('telegram_startup_failed', { error: String(err.message || err) });
+    });
   }
 });

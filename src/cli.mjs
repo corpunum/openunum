@@ -4,12 +4,16 @@ import { MemoryStore } from './memory/store.mjs';
 import { OpenUnumAgent } from './core/agent.mjs';
 import { CDPBrowser } from './browser/cdp.mjs';
 import { TelegramChannel } from './channels/telegram.mjs';
+import { loadBuiltinCommands } from './commands/loader.mjs';
+import { getRegistry } from './commands/registry.mjs';
 
 const args = process.argv.slice(2);
 const cmd = args[0] || 'help';
 const config = loadConfig();
 const memory = new MemoryStore();
 const agent = new OpenUnumAgent({ config, memoryStore: memory });
+loadBuiltinCommands();
+const registry = getRegistry();
 
 function getArg(name, fallback = '') {
   const i = args.indexOf(name);
@@ -111,7 +115,31 @@ async function main() {
     return;
   }
 
-  console.log(`openunum commands:\n  health\n  serve\n  chat --message <text> [--session <id>]\n  context status --session <id>\n  context compact --session <id> [--dry-run]\n  context artifacts --session <id> [--limit <n>]\n  model switch --provider <p> --model <m>\n  ollama use --model <id>\n  browser status\n  telegram poll-once\n  telegram run`);
+  if (cmd === 'command') {
+    const commandText = args.slice(1).join(' ');
+    if (!commandText) {
+      console.error('Usage: openunum command <slash-command>\nExample: openunum command /help');
+      process.exit(1);
+    }
+    const message = commandText.startsWith('/') ? commandText : `/${commandText}`;
+    const result = await registry.route(message, {
+      sessionId: 'cli',
+      agent,
+      memoryStore: memory,
+      config
+    });
+    if (result?.reply) {
+      console.log(result.reply);
+    } else if (result?.error) {
+      console.error(result.error);
+      process.exit(1);
+    } else {
+      console.log(JSON.stringify(result, null, 2));
+    }
+    return;
+  }
+
+  console.log(`openunum commands:\n  health\n  serve\n  chat --message <text> [--session <id>]\n  context status --session <id>\n  context compact --session <id> [--dry-run]\n  context artifacts --session <id> [--limit <n>]\n  model switch --provider <p> --model <m>\n  ollama use --model <id>\n  browser status\n  telegram poll-once\n  telegram run\n  command <slash-command>`);
 }
 
 main().catch((error) => {

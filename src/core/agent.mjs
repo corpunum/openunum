@@ -1484,7 +1484,31 @@ export class OpenUnumAgent {
   async chat({ message, sessionId = crypto.randomUUID() }) {
     const slash = parseSlashCommand(message);
     if (slash) {
-      const slashReply = this.handleSlashCommand(sessionId, slash);
+      // Try command registry first
+      let slashReply = null;
+      try {
+        const { getRegistry } = await import('../commands/registry.mjs');
+        const registry = getRegistry();
+        const result = await registry.route(message, {
+          sessionId,
+          agent: this,
+          memoryStore: this.memoryStore,
+          config: this.config
+        });
+        if (result?.handled) {
+          slashReply = result.reply;
+        } else if (result?.error) {
+          slashReply = result.error;
+        }
+      } catch {
+        // Registry not available, fall back to inline handler
+      }
+
+      // Fallback to inline handler if registry didn't handle it
+      if (!slashReply) {
+        slashReply = this.handleSlashCommand(sessionId, slash);
+      }
+
       if (slashReply) {
         this.memoryStore.addMessage(sessionId, 'user', message);
         this.memoryStore.addMessage(sessionId, 'assistant', slashReply);
