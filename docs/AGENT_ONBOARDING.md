@@ -1,250 +1,237 @@
-# Agent Onboarding
+# Agent Onboarding Guide
 
-Purpose: let a fresh agent become productive in OpenUnum in under 15 minutes, with correct assumptions about routing, credentials, and mission reliability.
+**For:** New OpenUnum agents joining the system  
+**Version:** 2.1.0  
+**Last Updated:** 2026-04-05
 
-## 1. What OpenUnum Is
+---
 
-OpenUnum is a local-first autonomous coding runtime with:
-- model chat + tool calling (`src/core/agent.mjs`, `src/tools/runtime.mjs`)
-- provider routing and fallback control (`ollama`, `nvidia`, `openrouter`, `xiaomimimo`, `openai`)
-- browser/CDP automation
-- mission loop with proof-aware completion (`src/core/missions.mjs`)
-- generic task planning/execution with restart-safe persistence (`src/core/goal-task-planner.mjs`, `src/core/task-orchestrator.mjs`)
-- bounded workers + restart-safe worker persistence + self-edit promotion pipeline + model scout workflows (`src/core/worker-orchestrator.mjs`, `src/core/self-edit-pipeline.mjs`, `src/core/model-scout-workflow.mjs`)
-- persistent memory/telemetry in SQLite (`src/memory/store.mjs`)
-- operator trace/timeline visibility in WebUI (`src/ui/index.html`)
-- enhanced proof validation and self-monitoring (`src/core/proof-scorer.mjs`, `src/core/self-monitor.mjs`)
-- task tracking and progress monitoring (`src/core/task-tracker.mjs`)
+## Welcome
 
-Primary target: Ubuntu/Linux.
+You're joining an autonomous assistant system with production-grade context engineering, hybrid memory retrieval, and robust execution tracking.
 
-## 2. Fast Boot (First 15 Minutes)
+This guide will help you understand:
+1. How to read the current state
+2. How to inject yourself into the context
+3. How to continue work without re-planning
+4. How to avoid common pitfalls
 
-1. Install and start:
-```bash
-cd /home/corp-unum/openunum
-pnpm install
-node src/server.mjs
-```
-2. Confirm service liveness:
-```bash
-curl -sS http://127.0.0.1:18880/api/health | jq .
-```
-3. Confirm selected model/provider:
-```bash
-curl -sS http://127.0.0.1:18880/api/model/current | jq .
-```
-4. Confirm provider auth/base-url readiness:
-```bash
-curl -sS http://127.0.0.1:18880/api/providers/config | jq .
-curl -sS http://127.0.0.1:18880/api/auth/catalog | jq .
-```
-5. Run the current controller/behavior gate:
-```bash
-pnpm -s phase14:e2e
-```
-6. Run safe UI/API smoke (does not trigger OAuth browser/terminal approval flows):
-```bash
-pnpm -s smoke:ui:noauth
-```
-7. Confirm planner-backed autonomy surfaces:
-```bash
-curl -sS -X POST http://127.0.0.1:18880/api/autonomy/tasks/plan \
-  -H 'Content-Type: application/json' \
-  -d '{"goal":"inspect runtime state and report proof"}' | jq .
-curl -sS http://127.0.0.1:18880/api/runtime/inventory | jq .
-```
-8. Refresh dataset intelligence artifacts used by recovery synthesis:
-```bash
-pnpm -s hf:explore
-pnpm -s hf:pilot
+---
+
+## Step 1: Read the Working Memory Anchor
+
+**Location:** `data/working-memory/*.json` (latest file)
+
+The anchor contains:
+- **userOrigin** — Original task (exact words)
+- **planAgreed** — Initial plan or decomposed steps
+- **contract** — Success criteria, forbidden drift, required outputs
+- **subplans** — Multi-phase breakdown (if applicable)
+- **currentSubplanIndex** — Which phase we're on
+
+**Example:**
+```json
+{
+  "userOrigin": "Build a hybrid retrieval system with BM25 + embeddings",
+  "planAgreed": "1. Create embeddings.mjs → 2. Create recall.mjs → 3. Integrate with agent",
+  "contract": {
+    "successCriteria": "Hybrid retrieval working with dual scores",
+    "forbiddenDrift": ["Don't switch to vector DB", "Don't use external APIs"],
+    "requiredOutputs": ["embeddings.mjs", "recall.mjs", "test results"]
+  },
+  "subplans": [
+    { "title": "Phase 1: Embeddings", "steps": ["Create file", "Test with Ollama"] },
+    { "title": "Phase 2: BM25", "steps": ["Implement scoring", "Test retrieval"] }
+  ],
+  "currentSubplanIndex": 1
+}
 ```
 
-## 3. Runtime Invariants
+**Action:** Read this FIRST before doing anything else. This tells you:
+- What the user actually asked for
+- What plan was agreed
+- What phase we're currently on
+- What's forbidden (don't drift!)
 
-- Server entry: `src/server.mjs` on `127.0.0.1:18880` by default.
-- Config file: `~/.openunum/openunum.json` (sanitized, non-secret).
-- Secret store: `~/.openunum/secrets.json` (real provider keys/tokens, mode `0600`).
-- DB: `~/.openunum/openunum.db`.
-- Logs: `~/.openunum/logs/*`.
-- Hook scripts: `~/.openunum/hooks/*.mjs`.
+---
 
-### House Map (What/Where To Edit)
+## Step 2: Check Execution State
 
-- UI house: `src/ui/index.html` (primary UI structure + inlined CSS/JS).
-- Agent/controller house: `src/core/agent.mjs`.
-- Goal compiler house: `src/core/goal-task-planner.mjs`.
-- Generic autonomy runtime house: `src/core/task-orchestrator.mjs`.
-- Worker/self-edit/model-scout houses:
-  - `src/core/worker-orchestrator.mjs`
-  - `src/core/self-edit-pipeline.mjs`
-  - `src/core/model-scout-workflow.mjs`
-- Shared autonomy wiring house: `src/core/autonomy-registry.mjs`.
-- Tool capability house: `src/tools/runtime.mjs`.
-- API composition house: `src/server.mjs`.
-- API route house: `src/server/routes/*.mjs`.
-- API service/runtime house: `src/server/services/*.mjs`.
-- Persistence house: `src/memory/store.mjs`.
-- Proof validation house: `src/core/proof-scorer.mjs`.
-- Task tracking house: `src/core/task-tracker.mjs`.
-- Self-monitoring house: `src/core/self-monitor.mjs`.
-- Execution contract house: `src/core/execution-contract.mjs`.
+**Location:** Check recent session messages or `data/sessions/*.json`
 
-## 3b. Anti-Stuck Mechanisms (Critical)
+Look for:
+- **currentStep / totalSteps** — Progress indicator
+- **completedSteps** — What's done
+- **failedSteps** — What broke (and why)
+- **toolHistory** — Recent tool usage
 
-**Self-Monitoring Initialization:** The agent uses automatic continuation to prevent stalling:
+**Action:** Identify:
+1. What was the last successful action?
+2. What's the immediate next step?
+3. Are there any failures that need recovery?
 
+---
+
+## Step 3: Review Recent Turns
+
+**Location:** Last 4 message pairs in session
+
+Read verbatim — no compaction here. This shows:
+- What the model just tried
+- What the user just said
+- Any pending questions or concerns
+
+**Action:** Look for:
+- Unanswered user questions (open loops)
+- Incomplete tool executions
+- Pending decisions
+
+---
+
+## Step 4: Check Enriched Artifacts
+
+**Location:** Compaction output in session or `data/memory/`
+
+Extracted artifacts tell you:
+- **verifiedFacts** — What's actually confirmed done
+- **openLoops** — What's still unanswered
+- **pendingSubgoals** — What phases/steps remain
+- **failuresWithReasons** — What broke and why
+- **producedArtifacts** — Files/code/tests created
+
+**Action:** Cross-reference:
+- Do verified facts match the claimed plan progress?
+- Are there open loops you should answer?
+- Are there pending subgoals you should continue?
+- Are there failures you need to recover from?
+
+---
+
+## Step 5: Inject Yourself into Context
+
+**DO NOT re-plan from scratch.** Instead:
+
+1. **Acknowledge the anchor** — Reference the original task
+2. **State current phase** — "Continuing Phase 2: BM25"
+3. **Pick up from last successful step** — Don't redo what's done
+4. **Declare next action** — Be specific about what you'll do now
+
+**Example injection:**
+```
+Continuing from Phase 2 (BM25 implementation).
+
+Previous agent completed:
+✅ Phase 1: Embeddings (embeddings.mjs created, tested with Ollama)
+✅ BM25 scoring function written
+
+Next action: Complete the HybridRetriever class with retrieve() method.
+
+This will enable the full pipeline: BM25 → Embeddings → Rerank → Top-5.
+```
+
+---
+
+## Step 6: Execute with Trace
+
+Every tool call is tracked. When you use tools:
+
+1. **Generate proper arguments** — Don't call tools without required args
+2. **Wait for results** — Don't claim success before verifying
+3. **Log evidence** — Include file paths, git hashes, test output
+4. **Update execution state** — Mark steps complete/incomplete
+
+**Example:**
 ```javascript
-// In src/core/agent.mjs chat() method:
-this.selfMonitor.startMonitoring(sessionId, message);
+// Good: Verified with evidence
+await file.write({ path: '/path/to/file.mjs', content: '...' });
+// → File created: /path/to/file.mjs (verified via fs.existsSync)
+
+// Bad: Unverified claim
+// "I created the file" (no evidence)
 ```
 
-**If this line is missing:**
-- Agent will execute tools but stall mid-task
-- `shouldAutoContinue()` returns `false` immediately
-- User must manually prompt ("Done?", "Continue") to finish
+---
 
-**Symptoms of broken auto-continue:**
-- Multi-step tasks complete 1-2 steps then stop
-- Agent responds with planning text but no action
-- Logs show no errors, just silence
+## Step 7: Score Your Proof
 
-**Fix:** Ensure `startMonitoring(sessionId, message)` is called at the start of every `chat()` turn.
+Before claiming "done", run through the proof scorer criteria:
 
-**Related modules:**
-- `src/core/self-monitor.mjs` — Monitors progress, triggers auto-continue
-- `src/core/proof-scorer.mjs` — Validates completion quality (0.0–1.0 score)
-- `src/core/execution-contract.mjs` — Enforces proof-backed completion claims
+| Factor | Weight | Check |
+|--------|--------|-------|
+| Tool success | 0.25 | Did all tools return ok=true? |
+| Output substance | 0.20 | Is there substantial output (>100 chars)? |
+| Goal alignment | 0.20 | Do outputs mention goal keywords? |
+| No errors | 0.15 | Are there zero error signals? |
+| Verification depth | 0.10 | Did you verify results (not just execute)? |
+| Claim specificity | 0.10 | Are claims concrete (paths, hashes, counts)? |
 
-Before broad filesystem discovery, read `GET /api/tools/catalog` and target these canonical files first.
+**Threshold:** 0.6 for "done"
 
-## 4. Credential Truth Sources (Critical)
+If score < 0.6, you're not done yet. Keep working.
 
-- Do not use `GET /api/config` key fields to infer provider readiness.
-- `GET /api/config` is intentionally scrubbed.
-- Use:
-  - `GET /api/providers/config` for `has*ApiKey` booleans.
-  - `GET /api/auth/catalog` for redacted stored/auth/source state.
-  - `POST /api/auth/prefill-local` to import local provider creds from known sources.
+---
 
-## 5. Mission Controller Rules
+## Common Pitfalls
 
-- Proof-backed completion is enforced: completion claims without evidence are rejected/retried.
-- Mission completion contracts are explicit and autonomous:
-  - each mission uses a contract id (`local-runtime-proof-v1`, `coding-proof-v1`, or `generic-proof-v1`)
-  - `MISSION_STATUS: DONE` is accepted only when contract checkpoint/proof conditions pass
-- Mission turn watchdog prevents indefinite step hangs during long/blocked provider calls.
-- Local-runtime missions use route-specific recovery hints and provider-aware pivoting.
-- Model execution envelopes are enforced by runtime tier (`compact`/`balanced`/`full`) and can reduce tool exposure/iteration budget for smaller models.
-- Execution policy engine is autonomous-first:
-  - `runtime.autonomyPolicy.mode` controls `plan` vs `execute`
-  - self-protection policy blocks self-destructive shell actions by default
-  - no human confirmation loop is required for normal policy decisions
-- Provider fallback is deterministic and typed:
-  - failures are classified (`timeout`, `network`, `auth`, `not_found`, `quota`, `rate_limited`, `unknown`)
-  - fallback actions are class-driven with provider cooldown windows
-  - inspect `/api/runtime/overview` `providerAvailability` when routing appears constrained
-- Controller behavior classes and learned tuning are tracked/persisted:
-  - `src/core/model-behavior-registry.mjs`
-  - `GET /api/controller/behaviors`
-- Manual behavior controls are available for operator correction:
-  - `GET /api/controller/behavior-classes`
-  - `POST /api/controller/behavior/override`
-  - `POST /api/controller/behavior/override/remove`
-  - `POST /api/controller/behavior/reset`
-  - `POST /api/controller/behavior/reset-all`
-- Mission route-learning is persisted and reused:
-  - route signatures are learned from tool outcomes
-  - repeated failing routes are deprioritized
-  - historically successful routes are hinted early in runtime guidance
+### ❌ Re-planning Instead of Continuing
+**Wrong:** "Let me start fresh. Here's my plan..."  
+**Right:** "Continuing from Phase 2. Previous work: [summary]. Next: [action]"
 
-## 6. Generic Task Framework Rules
+### ❌ Ignoring the Anchor
+**Wrong:** Proceeding without reading working memory  
+**Right:** Reading anchor first, then acting
 
-- `POST /api/autonomy/tasks/plan` compiles a plain-language goal into a bounded task graph.
-- `POST /api/autonomy/tasks/run` accepts either:
-  - explicit `steps`
-  - or just a `goal`, in which case the planner synthesizes the task graph
-- Planner-backed tasks can preflight with:
-  - `browser_search`
-  - `http_request`
-  - `shell_run`
-  - optional `model_scout`
-  before handing off to a mission step.
-- Planner intent policies now include bounded preflights for:
-  - `deploy`
-  - `benchmark`
-  - `sync`
-  - `diagnose`
-  - `cleanup`
-- Generic task runs are persisted:
-  - `task_records`
-  - `task_step_results`
-  - `task_check_results`
-- `/auto <goal>` in chat now uses this generic task framework, not a hardcoded one-step mission payload.
-- Mission steps can share the same task session id, so preflight evidence and autonomous execution land in one memory/thread.
+### ❌ Vague Claims
+**Wrong:** "The tests should pass now"  
+**Right:** "Tests pass: 13/13 E2E suites (verified via `npm test`)"
 
-## 7. Common Failure Patterns + First Checks
+### ❌ No Verification
+**Wrong:** "I created the file" (no evidence)  
+**Right:** "File created: `/path/to/file.mjs` (verified: 3,792 bytes)"
 
-- Mission appears stuck:
-  - check `/api/missions/status?id=...` and `/api/missions/timeline?id=...`
-  - confirm `finishedAt`, `error`, and `recoveryHint` progression
-- Task appears stuck or disappears after restart:
-  - check `/api/autonomy/tasks?limit=20`
-  - inspect `/api/autonomy/tasks/status?id=...`
-  - persisted tasks should survive restart as `completed`, `failed`, or `interrupted`
-- Provider seems unavailable:
-  - verify `/api/providers/config` and `/api/auth/catalog`
-  - confirm current runtime model via `/api/model/current`
-- Local model tests are slow or hanging:
-  - inspect live model processes (`ollama ps`, `ps aux | rg ollama`)
-  - avoid interactive-only paths when bounded API checks exist
-- Small model appears to stall or over-call tools:
-  - inspect `/api/runtime/overview` -> `executionEnvelope`
-  - tune `runtime.modelExecutionProfiles` and `runtime.enforceModelExecutionProfiles`
-- Mission keeps claiming done without proof:
-  - inspect `/api/missions/status` and `/api/missions/timeline` contract metadata
-  - OpenUnum can trigger one autonomous rollback via `file_restore_last` when repeated contract failures occur
-- Assistant returns raw tool-call XML/markup instead of a real final answer:
-  - controller now normalizes non-native tool-call markup (for example `<minimax:tool_call>`) as non-final content
-  - when UI no-scrollbar intent is detected and no concrete patch is produced, deterministic recovery edits `src/ui/index.html`
-- Assistant says `Tool actions executed (...) but model returned no final message`:
-  - inspect the latest executed actions in the fallback response and the execution trace
-  - OpenUnum now tries a deterministic evidence-based summary before falling back to a raw action dump
-  - common causes are restricted tool profiles on small models or a provider/model that stops after tool use without a final natural-language turn
+### ❌ Drifting from Contract
+**Wrong:** Switching to a vector DB when contract says "Don't use external APIs"  
+**Right:** Staying within forbidden drift boundaries
 
-## 8. Operational Modes
+---
 
-- `standard`: balanced.
-- `relentless`: higher persistence, stronger mission defaults.
+## Model-Specific Tips
 
-Switch:
-```bash
-curl -sS -X POST http://127.0.0.1:18880/api/autonomy/mode \
-  -H 'Content-Type: application/json' \
-  -d '{"mode":"relentless"}'
-```
+### Weak Models (9B)
+- **Drift after:** ~4 turns
+- **Needs:** Strong anchor injection every turn
+- **Tip:** Keep instructions explicit and repeated
 
-## 9. Read Next (Required Order)
+### Mid Models (70B)
+- **Drift after:** ~12 turns
+- **Needs:** Moderate anchor, good recent context
+- **Tip:** Balance between anchor and fresh turns
 
-1. [CODEBASE_MAP.md](/home/corp-unum/openunum/docs/CODEBASE_MAP.md)
-2. [API_REFERENCE.md](/home/corp-unum/openunum/docs/API_REFERENCE.md)
-3. [AUTONOMY_AND_MEMORY.md](/home/corp-unum/openunum/docs/AUTONOMY_AND_MEMORY.md)
-4. [MODEL_AWARE_CONTROLLER.md](/home/corp-unum/openunum/docs/MODEL_AWARE_CONTROLLER.md)
-5. [COMPETITIVE_ANALYSIS_CLAW_CODE.md](/home/corp-unum/openunum/docs/COMPETITIVE_ANALYSIS_CLAW_CODE.md)
-6. [COMPETITIVE_ANALYSIS_OPENAI_CODEX.md](/home/corp-unum/openunum/docs/COMPETITIVE_ANALYSIS_OPENAI_CODEX.md)
-7. [COMPETITIVE_ANALYSIS_GEMINI_CLI.md](/home/corp-unum/openunum/docs/COMPETITIVE_ANALYSIS_GEMINI_CLI.md)
-8. [COMPETITIVE_ANALYSIS_MIMOUNUM.md](/home/corp-unum/openunum/docs/COMPETITIVE_ANALYSIS_MIMOUNUM.md)
-9. [OPENUNUM_MULTI_MODEL_CONTROLLER_ACTION_PLAN.md](/home/corp-unum/openunum/docs/OPENUNUM_MULTI_MODEL_CONTROLLER_ACTION_PLAN.md)
+### Strong Models (400B)
+- **Drift after:** ~25 turns
+- **Needs:** Light anchor, can handle more raw context
+- **Tip:** Let them reason with more history
 
-## 10. Misdiagnosis to Avoid
+---
 
-- "The model said done, so the task is done."
-  - Validate tool outputs and mission proof markers.
-- "`/auto` is just a mission shortcut."
-  - Not anymore. It is planner-backed generic task execution.
-- "No keys in /api/config means no credentials."
-  - Wrong surface; check provider/auth endpoints above.
-- "Fallback happened unexpectedly."
-  - Inspect `model.routing.forcePrimaryProvider`, `fallbackEnabled`, and `fallbackProviders`.
-- "OAuth popups during basic smoke checks are normal."
-  - They are not required for routine checks. Use `pnpm smoke:ui:noauth` and avoid `/api/service/connect` unless explicitly validating OAuth flows.
+## Checklist Before You Start
+
+- [ ] Read working memory anchor
+- [ ] Check execution state (current step, completed, failed)
+- [ ] Review last 4 turns (raw)
+- [ ] Scan enriched artifacts (open loops, pending subgoals, failures)
+- [ ] Identify immediate next action
+- [ ] Declare continuation (not re-planning)
+- [ ] Execute with trace
+- [ ] Verify results before claiming success
+- [ ] Score proof (target: ≥0.6)
+
+---
+
+## References
+
+- `src/core/working-memory.mjs` — Anchor system
+- `src/core/context-compiler.mjs` — Context assembly
+- `src/core/proof-scorer.mjs` — Validation scoring
+- `docs/ARCHITECTURE.md` — System overview
+- `docs/CONTEXT_ENGINEERING.md` — Context management details

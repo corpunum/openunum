@@ -276,6 +276,13 @@ function buildPivotHints({ executedTools = [], permissionDenials = [], timedOut 
   if (permissionDenials.some((item) => String(item.tool || '').includes('browser'))) {
     hints.push('Browser path was blocked. Pivot to terminal or script execution immediately.');
   }
+  
+  // Suggest alternative tools for failed executions
+  const failedTools = executedTools.filter(t => t.error || t.reason);
+  for (const ft of failedTools) {
+    const alt = suggestAlternatives(ft.tool, ft.error || ft.reason);
+    if (alt.length) hints.push(`Alternatives for ${ft.tool}: ${alt.join(', ')}`);
+  }
   if (permissionDenials.some((item) => ['shell_disabled', 'shell_blocked', 'owner_mode_restricted'].includes(item.reason))) {
     hints.push('Shell path is restricted. Use non-shell tools or change owner mode before retrying.');
   }
@@ -1394,6 +1401,10 @@ export class OpenUnumAgent {
           taskGoal: originalUserMessage || ''
         });
         trace.proofScorer = { ...proofScore, decisionPoint: 'isProofBackedDone' };
+        
+        // Score confidence for completion claims
+        const confidenceScore = scoreConfidence('completion', { proofScore, executedTools, finalText });
+        trace.confidenceScorer = confidenceScore;
       } catch (e) {
         trace.proofScorer = { error: e.message, decisionPoint: 'isProofBackedDone' };
       }
