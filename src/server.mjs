@@ -1039,6 +1039,68 @@ const server = http.createServer(async (req, res) => {
       return sendJson(res, 200, buildAutonomyInsights({ sessionId, goal }));
     }
 
+    // PHASE 3: Predictive Failure Insights
+    if (req.method === 'GET' && url.pathname === '/api/autonomy/predictive-failures') {
+      const predictions = agent.predictiveFailure?.getCurrentPredictions() || [];
+      const stats = agent.predictiveFailure?.getAccuracyStats() || { totalPredictions: 0, totalFailures: 0, accuracy: 0 };
+      return sendJson(res, 200, {
+        ok: true,
+        predictions,
+        stats,
+        timestamp: new Date().toISOString()
+      });
+    }
+
+    // PHASE 3: Task Orchestrator - List Tasks
+    if (req.method === 'GET' && url.pathname === '/api/autonomy/tasks') {
+      const limit = Number(url.searchParams.get('limit') || 20);
+      const result = agent.taskOrchestrator?.listTasks(limit) || { ok: false, error: 'task_orchestrator_not_initialized' };
+      return sendJson(res, result.ok ? 200 : 500, result);
+    }
+
+    // PHASE 3: Task Orchestrator - Get Task Status
+    if (req.method === 'GET' && url.pathname === '/api/autonomy/tasks/status') {
+      const taskId = String(url.searchParams.get('id') || '').trim();
+      if (!taskId) return sendJson(res, 400, { ok: false, error: 'id is required' });
+      const result = agent.taskOrchestrator?.getTask(taskId) || { ok: false, error: 'task_orchestrator_not_initialized' };
+      return sendJson(res, result.ok ? 200 : 404, result);
+    }
+
+    // PHASE 3: Task Orchestrator - Run Task
+    if (req.method === 'POST' && url.pathname === '/api/autonomy/tasks/run') {
+      const body = await parseBody(req);
+      const result = await agent.taskOrchestrator?.runTask(body || {}) || { ok: false, error: 'task_orchestrator_not_initialized' };
+      return sendJson(res, result.ok ? 200 : 400, result);
+    }
+
+    // PHASE 3: Worker Orchestrator - List Workers
+    if (req.method === 'GET' && url.pathname === '/api/autonomy/workers') {
+      const limit = Number(url.searchParams.get('limit') || 20);
+      const result = agent.workerOrchestrator?.listWorkers(limit) || { ok: false, error: 'worker_orchestrator_not_initialized' };
+      return sendJson(res, result.ok ? 200 : 500, result);
+    }
+
+    // PHASE 3: Worker Orchestrator - Start Worker
+    if (req.method === 'POST' && url.pathname === '/api/autonomy/workers/start') {
+      const body = await parseBody(req);
+      const result = agent.workerOrchestrator?.startWorker(body || {}) || { ok: false, error: 'worker_orchestrator_not_initialized' };
+      return sendJson(res, result.ok ? 200 : 400, result);
+    }
+
+    // PHASE 3: Worker Orchestrator - Stop Worker
+    if (req.method === 'POST' && url.pathname === '/api/autonomy/workers/stop') {
+      const body = await parseBody(req);
+      const result = agent.workerOrchestrator?.stopWorker(body?.id) || { ok: false, error: 'worker_orchestrator_not_initialized' };
+      return sendJson(res, result.ok ? 200 : 404, result);
+    }
+
+    // PHASE 3: Worker Orchestrator - Tick Worker
+    if (req.method === 'POST' && url.pathname === '/api/autonomy/workers/tick') {
+      const body = await parseBody(req);
+      const result = await agent.workerOrchestrator?.tickWorker(body?.id) || { ok: false, error: 'worker_orchestrator_not_initialized' };
+      return sendJson(res, result.ok ? 200 : 404, result);
+    }
+
     if (req.method === 'GET' && url.pathname === '/api/controller/behaviors') {
       const limitRaw = Number(url.searchParams.get('limit') || 80);
       const limit = Number.isFinite(limitRaw) ? Math.max(1, Math.min(limitRaw, 400)) : 80;

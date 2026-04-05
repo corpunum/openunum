@@ -46,6 +46,9 @@ import { detectSteps } from './completion-checklist.mjs';
 import { SideQuestManager } from './side-quest.mjs';
 import { ToolValidator, validateToolCall } from './tool-validator.mjs';
 import { PolicyLoader, buildSystemMessage } from './policy-loader.mjs';
+import { PredictiveFailureDetector } from './predictive-failure.mjs';
+import { TaskOrchestrator } from './task-orchestrator.mjs';
+import { WorkerOrchestrator } from './worker-orchestrator.mjs';
 import { logInfo, logError } from '../logger.mjs';
 
 function inferParamsB(modelId) {
@@ -581,6 +584,30 @@ export class OpenUnumAgent {
     this.sideQuestManager = new SideQuestManager({
       sessionManager: memoryStore,
       agent: this,
+      workspaceRoot: config?.runtime?.workspaceRoot || process.cwd()
+    });
+    
+    // PHASE 3: Initialize Predictive Failure Detector
+    this.predictiveFailure = new PredictiveFailureDetector({
+      memoryStore,
+      config
+    });
+    
+    // PHASE 3: Initialize Worker Orchestrator (for background workers)
+    this.workerOrchestrator = new WorkerOrchestrator({
+      toolRuntime: this.toolRuntime,
+      memoryStore
+    });
+    
+    // PHASE 3: Initialize Task Orchestrator (for multi-step autonomous tasks)
+    this.taskOrchestrator = new TaskOrchestrator({
+      toolRuntime: this.toolRuntime,
+      memoryStore,
+      missions: null, // Will be wired if missions module is available
+      workerOrchestrator: this.workerOrchestrator,
+      selfEditPipeline: null, // Optional: wire if self-edit exists
+      modelScoutWorkflow: null, // Optional: wire if model-scout exists
+      planner: null, // Optional: wire if planner exists
       workspaceRoot: config?.runtime?.workspaceRoot || process.cwd()
     });
     
@@ -1289,7 +1316,38 @@ export class OpenUnumAgent {
           }
         }
         
-        if (!result?.ok && ['shell_blocked', 'owner_mode_restricted', 'tool_circuit_open', 'shell_disabled', 'unsafe_xdotool_command'].includes(result?.error)) {
+        // PHASE 3: Record tool execution for predictive failure analysis
+    if (this.predictiveFailure && result) {
+      if (!result.ok) {
+        this.predictiveFailure.recordError({
+          type: `${tc.name}_failure`,
+          message: result.error || 'tool_failed',
+          context: { tool: tc.name, args, sessionId }
+        });
+      }
+      // Record response time for performance tracking
+      const toolDurationMs = Date.now() - turnStartedAt;
+      this.predictiveFailure.recordResponseTime(toolDurationMs);
+    }
+    
+    // PHASE 3: Check predictive failures before next expensive operation
+    if (this.predictiveFailure && (i + 1) < maxIters) {
+      const predictions = this.predictiveFailure.getCurrentPredictions();
+      const criticalPredictions = predictions.filter(p => p.severity === 'critical');
+      if (criticalPredictions.length > 0) {
+        trace.predictiveWarnings = criticalPredictions;
+        const warningMsg = criticalPredictions.map(p => 
+          `⚠️ Predictive Warning: ${p.type} (confidence: ${p.confidence.toFixed(2)}) - ${p.recommendation}`
+        ).join('\n');
+        messages.push({
+          role: 'system',
+          content: `**Predictive Failure Detection**\n\n${warningMsg}\n\nConsider narrowing scope or switching to lighter operations.`
+        });
+        logInfo('predictive_failure_warning', { predictions: criticalPredictions });
+      }
+    }
+    
+    if (!result?.ok && ['shell_blocked', 'owner_mode_restricted', 'tool_circuit_open', 'shell_disabled', 'unsafe_xdotool_command'].includes(result?.error)) {
           trace.permissionDenials.push({
             tool: tc.name,
             reason: result.error,
@@ -1651,6 +1709,14 @@ export class OpenUnumAgent {
 
     // Start self-monitoring for automatic continuation
     this.selfMonitor.startMonitoring(sessionId, message);
+    
+    // PHASE 3: Pre-flight predictive failure check
+    const preflightPredictions = this.predictiveFailure?.getCurrentPredictions() || [];
+    const criticalPreflight = preflightPredictions.filter(p => p.severity === 'critical');
+    if (criticalPreflight.length > 0) {
+      logInfo('predictive_preflight_critical', { predictions: criticalPreflight });
+      // Add warning to system message but don't block execution
+    }
     
     // Decompose task into explicit steps using taskDecomposer (more sophisticated than detectSteps)
     const decomposition = this.taskDecomposer.decomposeTask(message);
