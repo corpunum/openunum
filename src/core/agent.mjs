@@ -1264,6 +1264,31 @@ export class OpenUnumAgent {
           step: i + 1,
           reason: result?.error || ''
         });
+        
+        // PHASE 2: Spawn repair side-quest after 2+ consecutive failures on same tool
+        if (!result?.ok && executedTools.filter((t) => t.name === tc.name && !t.result.ok).length >= 1) {
+          try {
+            const priorFailures = executedTools.filter((t) => t.name === tc.name && !t.result.ok);
+            const { questId } = await this.sideQuestManager.forkQuest(
+              sessionId,
+              'repair',
+              `Tool ${tc.name} failed ${priorFailures.length + 1} times. Last error: ${result.error}. Diagnose root cause and propose a fix or workaround.`,
+              { timeoutMs: 2 * 60 * 1000, toolsAllow: ['file_read', 'exec', 'shell'] }
+            );
+            const questResult = await this.sideQuestManager.executeQuest(questId);
+            if (questResult.status === 'completed' && questResult.summary) {
+              await this.sideQuestManager.mergeQuest(questId);
+              messages.push({
+                role: 'system',
+                content: `**Repair Side-Quest Result:** ${questResult.summary}\n\nApply the recommended fix or pivot to an alternative approach.`
+              });
+              logInfo('side_quest_repair_spawned', { questId, tool: tc.name, failures: priorFailures.length + 1 });
+            }
+          } catch (questError) {
+            logError('side_quest_repair_failed', { error: String(questError.message || questError) });
+          }
+        }
+        
         if (!result?.ok && ['shell_blocked', 'owner_mode_restricted', 'tool_circuit_open', 'shell_disabled', 'unsafe_xdotool_command'].includes(result?.error)) {
           trace.permissionDenials.push({
             tool: tc.name,
@@ -1421,6 +1446,26 @@ export class OpenUnumAgent {
         // Score confidence for completion claims
         const confidenceScore = scoreConfidence('completion', { proofScore, executedTools, finalText });
         trace.confidenceScorer = confidenceScore;
+        
+        // PHASE 2: Spawn verification side-quest if proof score is low
+        if (proofScore.totalScore < 0.5 && toolRuns >= 2) {
+          try {
+            const { questId } = await this.sideQuestManager.forkQuest(
+              sessionId,
+              'proof_check',
+              `Verify completion claims. Proof score was ${proofScore.totalScore.toFixed(2)} (threshold 0.6). Review tool results and final answer. Confirm if task is actually complete or what's missing.`,
+              { timeoutMs: 3 * 60 * 1000, modelOverride: 'ollama/qwen3.5:397b-cloud' }
+            );
+            const questResult = await this.sideQuestManager.executeQuest(questId);
+            if (questResult.status === 'completed' && questResult.summary) {
+              await this.sideQuestManager.mergeQuest(questId);
+              finalText = finalText + '\n\n**Verification Result:** ' + questResult.summary;
+              logInfo('side_quest_verification_spawned', { questId, proofScore: proofScore.totalScore });
+            }
+          } catch (questError) {
+            logError('side_quest_verification_failed', { error: String(questError.message || questError) });
+          }
+        }
       } catch (e) {
         trace.proofScorer = { error: e.message, decisionPoint: 'isProofBackedDone' };
       }
