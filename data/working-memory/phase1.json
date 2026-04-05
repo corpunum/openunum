@@ -1,0 +1,12 @@
+{
+  "userOrigin": "ping",
+  "planAgreed": "",
+  "contract": {
+    "successCriteria": "Task completed as specified",
+    "forbiddenDrift": [],
+    "requiredOutputs": []
+  },
+  "subplans": [],
+  "currentSubplanIndex": 0,
+  "createdAt": "2026-04-05T05:05:12.680Z"
+}

@@ -89,11 +89,8 @@ const memory = new MemoryStore();
 const agent = new OpenUnumAgent({ config, memoryStore: memory });
 const missions = new MissionRunner({ agent, memoryStore: memory, config });
 let browser = new CDPBrowser(config.browser?.cdpUrl);
-const autonomyMaster = getAutonomyMaster({ config, agent, memoryStore: memory, browser, pendingChats });
-const selfHealMonitor = new SelfHealMonitor({ config, agent, browser, memory });
-const API_ERROR_CONTRACT_VERSION = '2026-04-02.api-errors.v1';
-const TOOL_CATALOG_CONTRACT_VERSION = '2026-04-02.tool-catalog.v1';
 
+// Chat runtime must be initialized before autonomyMaster (pendingChats dependency)
 const chatRuntime = createChatRuntimeService({
   agent,
   saveConfig: () => saveConfig(config)
@@ -102,6 +99,11 @@ const pendingChats = chatRuntime.pendingChats;
 const withTimeout = chatRuntime.withTimeout;
 const getOrStartChat = chatRuntime.getOrStartChat;
 const prunePendingChats = chatRuntime.prunePendingChats;
+
+const autonomyMaster = getAutonomyMaster({ config, agent, memoryStore: memory, browser, pendingChats });
+const selfHealMonitor = new SelfHealMonitor({ config, agent, browser, memory });
+const API_ERROR_CONTRACT_VERSION = '2026-04-02.api-errors.v1';
+const TOOL_CATALOG_CONTRACT_VERSION = '2026-04-02.tool-catalog.v1';
 
 const telegramRuntime = createTelegramRuntimeService({ config, agent, logError });
 const runTelegramLoop = telegramRuntime.runTelegramLoop;

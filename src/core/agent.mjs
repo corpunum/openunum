@@ -278,8 +278,8 @@ function buildPivotHints({ executedTools = [], permissionDenials = [], timedOut 
   }
   
   // Suggest alternative tools for failed executions
-  const failedTools = executedTools.filter(t => t.error || t.reason);
-  for (const ft of failedTools) {
+  const errorTools = executedTools.filter(t => t.error || t.reason);
+  for (const ft of errorTools) {
     const alt = suggestAlternatives(ft.tool, ft.error || ft.reason);
     if (alt.length) hints.push(`Alternatives for ${ft.tool}: ${alt.join(', ')}`);
   }
