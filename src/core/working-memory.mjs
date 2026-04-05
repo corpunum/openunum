@@ -445,6 +445,156 @@ export class WorkingMemoryAnchor {
       dataFile: path.join(this.dataDir, `${this.sessionId}.json`)
     };
   }
+
+  /**
+   * PHASE 1.1 MERGE: Task Tracker functionality absorbed into Working Memory
+   * 
+   * Track step completion state within the anchor
+   */
+  initTaskSteps(steps) {
+    if (!Array.isArray(steps) || steps.length === 0) return;
+    
+    this.anchor.taskSteps = steps.map((step, index) => ({
+      index,
+      description: step.description || step.text || `Step ${index + 1}`,
+      status: 'pending', // pending | in_progress | completed | failed
+      completedAt: null,
+      result: null,
+      startedAt: null
+    }));
+    
+    this._persistAnchor();
+    logInfo('working_memory_task_steps_init', {
+      sessionId: this.sessionId,
+      stepCount: steps.length
+    });
+  }
+
+  /**
+   * Mark a step as in progress
+   */
+  startStep(stepIndex) {
+    const step = this.anchor.taskSteps?.[stepIndex];
+    if (!step) {
+      logError('working_memory_step_not_found', { stepIndex, sessionId: this.sessionId });
+      return null;
+    }
+    
+    // Mark previous step as completed if it was in_progress
+    const prevStep = this.anchor.taskSteps?.[stepIndex - 1];
+    if (prevStep?.status === 'in_progress') {
+      prevStep.status = 'completed';
+      prevStep.completedAt = new Date().toISOString();
+    }
+    
+    step.status = 'in_progress';
+    step.startedAt = new Date().toISOString();
+    this._persistAnchor();
+    
+    logInfo('working_memory_step_started', {
+      sessionId: this.sessionId,
+      stepIndex,
+      description: step.description
+    });
+    
+    return step;
+  }
+
+  /**
+   * Mark a step as completed with result
+   */
+  completeStep(stepIndex, result = {}) {
+    const step = this.anchor.taskSteps?.[stepIndex];
+    if (!step) {
+      logError('working_memory_step_not_found', { stepIndex, sessionId: this.sessionId });
+      return null;
+    }
+    
+    step.status = 'completed';
+    step.completedAt = new Date().toISOString();
+    step.result = result;
+    this._persistAnchor();
+    
+    logInfo('working_memory_step_completed', {
+      sessionId: this.sessionId,
+      stepIndex,
+      description: step.description
+    });
+    
+    return step;
+  }
+
+  /**
+   * Mark a step as failed
+   */
+  failStep(stepIndex, reason) {
+    const step = this.anchor.taskSteps?.[stepIndex];
+    if (!step) return null;
+    
+    step.status = 'failed';
+    step.completedAt = new Date().toISOString();
+    step.result = { error: reason };
+    this._persistAnchor();
+    
+    logError('working_memory_step_failed', {
+      sessionId: this.sessionId,
+      stepIndex,
+      reason
+    });
+    
+    return step;
+  }
+
+  /**
+   * Get task progress summary
+   */
+  getTaskProgress() {
+    const steps = this.anchor.taskSteps || [];
+    const total = steps.length;
+    const completed = steps.filter(s => s.status === 'completed').length;
+    const failed = steps.filter(s => s.status === 'failed').length;
+    const inProgress = steps.filter(s => s.status === 'in_progress').length;
+    const pending = steps.filter(s => s.status === 'pending').length;
+    
+    return {
+      total,
+      completed,
+      failed,
+      inProgress,
+      pending,
+      percentComplete: total > 0 ? Math.round((completed / total) * 100) : 0,
+      currentStep: steps.find(s => s.status === 'in_progress')?.index || null
+    };
+  }
+
+  /**
+   * Check if all steps are complete (no pending or in_progress)
+   */
+  areAllStepsComplete() {
+    const steps = this.anchor.taskSteps || [];
+    if (steps.length === 0) return false;
+    return steps.every(s => s.status === 'completed');
+  }
+
+  /**
+   * Get remaining steps
+   */
+  getRemainingSteps() {
+    const steps = this.anchor.taskSteps || [];
+    return steps
+      .filter(s => s.status === 'pending' || s.status === 'in_progress')
+      .map(s => ({ index: s.index, description: s.description, status: s.status }));
+  }
+
+  /**
+   * Get completed steps with results
+   */
+  getCompletedSteps() {
+    const steps = this.anchor.taskSteps || [];
+    return steps
+      .filter(s => s.status === 'completed')
+      .map(s => ({ index: s.index, description: s.description, result: s.result }));
+  }
 }
 
 /**

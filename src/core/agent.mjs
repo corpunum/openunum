@@ -43,6 +43,9 @@ import {
   shouldUseProvider
 } from './provider-fallback-policy.mjs';
 import { detectSteps } from './completion-checklist.mjs';
+import { SideQuestManager } from './side-quest.mjs';
+import { ToolValidator, validateToolCall } from './tool-validator.mjs';
+import { PolicyLoader, buildSystemMessage } from './policy-loader.mjs';
 import { logInfo, logError } from '../logger.mjs';
 
 function inferParamsB(modelId) {

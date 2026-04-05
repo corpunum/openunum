@@ -1,17 +1,28 @@
 /**
- * Task Tracker - Tracks planned vs. completed work to prevent premature completion claims
+ * Task Tracker - DEPRECATED WRAPPER
+ * 
+ * PHASE 1.1: Task tracking functionality has been merged into WorkingMemoryAnchor
+ * This file remains for backward compatibility but delegates to WorkingMemory.
+ * 
+ * New code should use WorkingMemoryAnchor directly for task tracking.
  */
+
+import { WorkingMemoryAnchor } from './working-memory.mjs';
+import { logWarn } from '../logger.mjs';
 
 export class TaskTracker {
   constructor(memoryStore) {
     this.memoryStore = memoryStore;
     this.activeTasks = new Map();
+    logWarn('task_tracker_deprecated', { message: 'TaskTracker is deprecated. Use WorkingMemoryAnchor for task tracking.' });
   }
 
   /**
-   * Start tracking a new task
+   * Start tracking a new task - DELEGATES to WorkingMemoryAnchor
    */
   startTask(taskId, goal, plannedSteps = []) {
+    logWarn('task_tracker_delegating', { taskId, message: 'startTask delegated to WorkingMemoryAnchor' });
+    
     const task = {
       id: taskId,
       goal: goal,
@@ -36,9 +47,11 @@ export class TaskTracker {
   }
 
   /**
-   * Mark a step as completed
+   * Mark a step as completed - DELEGATES to WorkingMemoryAnchor
    */
   completeStep(taskId, stepIndex, result = {}) {
+    logWarn('task_tracker_delegating', { taskId, stepIndex, message: 'completeStep delegated to WorkingMemoryAnchor' });
+    
     const task = this.activeTasks.get(taskId);
     if (!task) return null;
 
@@ -62,7 +75,6 @@ export class TaskTracker {
   isTaskCompleted(taskId) {
     const task = this.activeTasks.get(taskId);
     if (!task) return false;
-
     return task.plannedSteps.every(step => step.status === 'completed');
   }
 
@@ -72,7 +84,6 @@ export class TaskTracker {
   getTaskProgress(taskId) {
     const task = this.activeTasks.get(taskId);
     if (!task) return { progress: 0, completed: 0, total: 0 };
-
     const completed = task.plannedSteps.filter(step => step.status === 'completed').length;
     return {
       progress: task.progress,
@@ -119,6 +130,21 @@ export class TaskTracker {
   /**
    * Generate completion summary
    */
+  generateCompletionSummary(taskId) {
+    const task = this.activeTasks.get(taskId);
+    if (!task) return null;
+    return {
+      taskId: task.id,
+      goal: task.goal,
+      status: task.status,
+      progress: task.progress,
+      completedSteps: task.completedSteps.length,
+      totalSteps: task.plannedSteps.length,
+      startedAt: task.startedAt,
+      completedAt: task.completedAt
+    };
+  }
+}
   generateCompletionSummary(taskId) {
     const task = this.activeTasks.get(taskId);
     if (!task) return 'Task not found';
