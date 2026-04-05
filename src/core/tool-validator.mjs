@@ -86,7 +86,7 @@ const DANGEROUS_PATTERNS = [
   /chmod\s+777/i,
   /dd\s+/i,
   /mkfs/i,
-  /:\(\)\{/:>&:;\}/,  // Fork bomb
+  /fork.*bomb/i,
   /curl.*\|.*bash/i,
   /wget.*\|.*sh/i
 ];

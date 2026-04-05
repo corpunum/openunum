@@ -576,6 +576,19 @@ export class OpenUnumAgent {
     this.behaviorRegistryHydrated = false;
     this.completionChecklist = new CompletionChecklist();
     this.contextPressure = new ContextPressure();
+    
+    // Initialize Side Quest Manager (for branchable repair/proof/heal sessions)
+    this.sideQuestManager = new SideQuestManager({
+      sessionManager: memoryStore,
+      agent: this,
+      workspaceRoot: config?.runtime?.workspaceRoot || process.cwd()
+    });
+    
+    // Initialize Policy Loader (hierarchical AGENTS.md loading)
+    this.policyLoader = new PolicyLoader({
+      workspaceRoot: config?.runtime?.workspaceRoot || process.cwd()
+    });
+    
     if (this.memoryStore?.listControllerBehaviors) {
       const persisted = this.memoryStore.listControllerBehaviors(200);
       hydrateBehaviorRegistry(persisted);
@@ -1717,18 +1730,18 @@ export class OpenUnumAgent {
       executionEnvelope: sessionEnvelope
     };
 
+    // Load hierarchical policies (session > project > global AGENTS.md)
+    const policyResult = await this.policyLoader.loadPolicies(sessionId);
+    const policySystemMessage = buildSystemMessage(policyResult.policies, {
+      taskGoal: null,  // Could be added if needed
+      currentSubplan: null,
+      constraints: []
+    });
+
     const messages = [
       {
         role: 'system',
-        content:
-          `You are OpenUnum, an Ubuntu operator agent. Current configured provider/model is ${this.config.model.provider}/${this.config.model.model}. ` +
-          'If user asks which model/provider you are using, answer with exactly that runtime value and do not invent other providers.\n' +
-          'Never claim an action was completed unless a tool result in this turn confirms it.\n' +
-          `Execution contract for every model: work in small proof-backed substeps and pivot after repeated route failure.${compactController ? ' Compact local mode is active: keep replies short and avoid broad exploration.\n' : '\n'}` +
-          `Owner control mode: ${this.config.runtime?.ownerControlMode || 'safe'}. ` +
-          'In safe mode, avoid destructive operations without explicit owner approval. ' +
-          'In unlocked modes, maximize completion while still requiring tool evidence.\n' +
-          'Use tools aggressively to complete tasks end-to-end.\n'
+        content: policySystemMessage
       },
       ...history
     ];

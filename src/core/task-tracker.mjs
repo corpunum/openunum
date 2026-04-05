@@ -144,7 +144,7 @@ export class TaskTracker {
       completedAt: task.completedAt
     };
   }
-}
+
   generateCompletionSummary(taskId) {
     const task = this.activeTasks.get(taskId);
     if (!task) return 'Task not found';
