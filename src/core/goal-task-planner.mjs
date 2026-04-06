@@ -14,7 +14,14 @@ function words(text) {
 
 function hasAny(text, terms = []) {
   const source = ` ${trim(text).toLowerCase()} `;
-  return terms.some((term) => source.includes(` ${String(term).toLowerCase()} `) || source.includes(String(term).toLowerCase()));
+  return terms.some((term) => {
+    const termLower = String(term).toLowerCase();
+    // Exact word match with word boundaries
+    return source.includes(` ${termLower} `) ||
+           source.startsWith(`${termLower} `) ||
+           source.endsWith(` ${termLower}`) ||
+           (source.length === termLower.length + 2 && source === ` ${termLower} `);
+  });
 }
 
 function cap(value, min, max, fallback) {
@@ -35,8 +42,14 @@ function makeTaskSessionId(prefix = 'task') {
 
 function classifyGoal(goal) {
   const text = trim(goal).toLowerCase();
+  const isDefinitelyModelRelated =
+    hasAny(text, ['huggingface', 'ollama', 'gguf', 'ggml', 'safetensors']) ||
+    (hasAny(text, ['model', 'models', 'llm', 'llms']) &&
+     hasAny(text, ['search', 'research', 'find', 'compare', 'download', 'import', 'best', 'open source', 'available', 'recommend', 'benchmark', 'evaluate', 'test']));
+
   return {
-    wantsSearch: hasAny(text, ['search', 'research', 'find', 'browse', 'compare', 'online', 'latest']),
+    wantsSearch: hasAny(text, ['search', 'research', 'find', 'browse', 'compare', 'online', 'latest']) &&
+                 !isDefinitelyModelRelated,
     wantsRuntime: hasAny(text, ['runtime', 'inventory', 'health', 'status', 'monitor', 'service', 'port', 'host', 'hardware']),
     wantsCode: hasAny(text, ['fix', 'implement', 'refactor', 'edit', 'patch', 'write', 'code', 'bug', 'test', 'build', 'frontend', 'backend', 'ui', 'server']),
     wantsDiagnose: hasAny(text, ['diagnose', 'debug', 'investigate', 'why', 'broken', 'failing', 'error']),
@@ -44,11 +57,12 @@ function classifyGoal(goal) {
     wantsBenchmark: hasAny(text, ['benchmark', 'profile', 'latency', 'speed', 'throughput', 'compare performance']),
     wantsSync: hasAny(text, ['sync', 'mirror', 'backup', 'upload', 'download', 'pull latest']),
     wantsCleanup: hasAny(text, ['cleanup', 'clean up', 'prune', 'remove old', 'delete temp']),
-    wantsModelScout: hasAny(text, ['huggingface', 'ollama', 'gguf', 'model', 'download', 'import']) &&
-      hasAny(text, ['search', 'research', 'find', 'compare', 'download', 'import', 'best', 'open source']),
+    wantsModelScout: isDefinitelyModelRelated,
     wantsFilesystem: hasAny(text, ['repo', 'workspace', 'file', 'directory', 'project'])
   };
 }
+
+export { classifyGoal };
 
 export class GoalTaskPlanner {
   constructor({ runtime = {}, baseUrl = 'http://127.0.0.1:18880', workspaceRoot = process.cwd() } = {}) {
