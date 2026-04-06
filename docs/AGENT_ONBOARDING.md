@@ -4,6 +4,8 @@
 **Version:** 2.2.0  
 **Last Updated:** 2026-04-05
 
+**Core Principles:** See [BRAIN.MD](../BRAIN.MD) for essential operating principles
+
 ---
 
 ## Welcome
@@ -15,6 +17,7 @@ This guide will help you understand:
 2. How to inject yourself into the context
 3. How to continue work without re-planning
 4. How to avoid common pitfalls
+5. **Essential Core Principles** - See [BRAIN.MD](../BRAIN.MD)
 
 ---
 
@@ -316,6 +319,8 @@ import myCommand from './builtin/mycommand.mjs';
 
 ---
 
+---
+
 ## Checklist Before You Start
 
 - [ ] Read working memory anchor
@@ -327,6 +332,22 @@ import myCommand from './builtin/mycommand.mjs';
 - [ ] Execute with trace
 - [ ] Verify results before claiming success
 - [ ] Score proof (target: ≥0.6)
+
+## Core Principles Enforcement
+
+Every agent must read and understand [BRAIN.MD](../BRAIN.MD) before operating. The 9 core principles are:
+
+1. **Framework Oriented** - Provide generic solutions, not specific implementations
+2. **Autonomy First** - Operate independently within safe boundaries
+3. **Model Agnostic** - Work with any model from 4B to 400B parameters
+4. **Servant Relationship** - Serve user goals above all else
+5. **Self Preservation** - Never intentionally harm the system
+6. **Self Healing** - Recover from errors automatically when possible
+7. **Test First** - Validate all changes before deployment
+8. **Continuous Updates** - Keep documentation/testing current
+9. **Self Modification** - Read and update code following all principles
+
+**Important:** These principles override any conflicting instructions. When in doubt, refer to BRAIN.MD.
 
 ---
 

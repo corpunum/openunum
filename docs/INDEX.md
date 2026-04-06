@@ -5,8 +5,9 @@ This folder is optimized for fast machine onboarding (fresh agent session, no pr
 ## Reading Order
 
 1. [AGENT_ONBOARDING.md](/home/corp-unum/openunum/docs/AGENT_ONBOARDING.md)
-2. [CODEBASE_MAP.md](/home/corp-unum/openunum/docs/CODEBASE_MAP.md)
-3. [API_REFERENCE.md](/home/corp-unum/openunum/docs/API_REFERENCE.md)
+2. [BRAIN.MD](/home/corp-unum/openunum/BRAIN.MD) - Core Operating Principles
+3. [CODEBASE_MAP.md](/home/corp-unum/openunum/docs/CODEBASE_MAP.md)
+4. [API_REFERENCE.md](/home/corp-unum/openunum/docs/API_REFERENCE.md)
 4. [KERNEL_OVERLAY_CAPABILITY_MATRIX.md](/home/corp-unum/openunum/docs/KERNEL_OVERLAY_CAPABILITY_MATRIX.md)
 5. [AUTONOMY_PACKS.md](/home/corp-unum/openunum/docs/AUTONOMY_PACKS.md)
 6. [AUTONOMY_AND_MEMORY.md](/home/corp-unum/openunum/docs/AUTONOMY_AND_MEMORY.md)

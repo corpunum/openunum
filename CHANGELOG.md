@@ -29,16 +29,19 @@ All notable changes to OpenUnum are documented in this file.
 - **CLI Integration** — `openunum command /status` for direct command execution
 - **Unit Tests** — 19 tests covering parser, registry, and all builtin commands (`tests/unit/commands.test.mjs`)
 - **Documentation** — Command system section added to Agent Onboarding guide
+- **Core Principles Document** — `BRAIN.MD` containing 9 essential operating principles
 
 ### Changed
 - **Agent chat()** — Now routes through command registry before falling back to inline handler
 - **Server startup** — Loads builtin commands at initialization
+- **Research Query Detection** — Narrowed regex patterns to prevent false positives with "usable" keyword
 
 ### Architecture
 - Commands are standalone modules in `src/commands/builtin/`
 - Registry uses singleton pattern for global access
 - Parser is channel-agnostic (no UI/channel dependencies)
 - Backward compatible — existing inline slash commands still work as fallback
+- Core principles enforcement integrated into agent onboarding
 
 ---
 

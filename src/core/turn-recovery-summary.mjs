@@ -52,14 +52,14 @@ function inferParamsB(text) {
   return match ? Number(match[1]) : null;
 }
 
-function extractRequirements(userMessage = '') {
+export function extractRequirements(userMessage = '') {
   const prompt = String(userMessage || '').toLowerCase();
   return {
     asksModelRanking: /model|gguf|ollama|uncensor|unsensor|local/.test(prompt) && /top ?\d+|best|hardware|run/.test(prompt),
     asksRanking: /top ?\d+|best|rank|ranking|compare|which is better/.test(prompt),
     asksSteps: /\bhow\b|steps|guide|setup|configure|install|onboard|procedure/.test(prompt),
     asksStatus: /status|health|inspect|diagnose|check|report|what happened|why failed|why is/.test(prompt),
-    asksResearch: /research|check|find|search|compare|usable|recommend|look at/.test(prompt),
+    asksResearch: /research|find|search|compare|hugging ?face|datasets?|training data|benchmark|usable datasets|recommend datasets/.test(prompt),
     asksDataset: /dataset|datasets|training data|benchmark data|planner\/tasks data|task data/.test(prompt),
     asksComparison: /compare|comparison|versus|vs\b/.test(prompt),
     wantsLocal: /local|ollama|run for this hardware|run on this hardware|this hardware/.test(prompt),
