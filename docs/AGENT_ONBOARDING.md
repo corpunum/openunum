@@ -1,8 +1,8 @@
 # Agent Onboarding Guide
 
 **For:** New OpenUnum agents joining the system  
-**Version:** 2.2.0  
-**Last Updated:** 2026-04-05
+**Version:** 2.3.0  
+**Last Updated:** 2026-04-07
 
 **Core Principles:** See [BRAIN.MD](../BRAIN.MD) for essential operating principles
 
@@ -18,6 +18,33 @@ This guide will help you understand:
 3. How to continue work without re-planning
 4. How to avoid common pitfalls
 5. **Essential Core Principles** - See [BRAIN.MD](../BRAIN.MD)
+
+---
+
+## Quick Reference: Essential Docs
+
+**First-time onboarding reading order:**
+1. [INDEX.md](INDEX.md) — Docs navigation
+2. [BRAIN.MD](../BRAIN.MD) — Core operating principles (9 principles)
+3. [AGENT_ONBOARDING.md](AGENT_ONBOARDING.md) — This guide
+4. [COUNCIL_ARCHITECTURE.md](COUNCIL_ARCHITECTURE.md) — 7-member council validation framework
+5. [PHASE4_PLAN.md](PHASE4_PLAN.md) — Current remediation roadmap
+6. [CODEBASE_MAP.md](CODEBASE_MAP.md) — File/folder structure
+7. [API_REFERENCE.md](API_REFERENCE.md) — All API endpoints
+8. [TESTING.md](TESTING.md) — Test suites and how to run them
+
+**Phase 1-3 Deliverables Overview:**
+- ✅ Working memory anchor system with drift detection
+- ✅ Context compaction with enriched artifact extraction
+- ✅ 6 execution lane types (tool, mission, worker, self_edit, model_scout, delay)
+- ✅ Model behavior registry (9 behavior classes, 50-sample cap)
+- ✅ 349 route lessons recorded with success rates
+- ✅ Tier-based execution envelopes (compact/balanced/full)
+- ✅ Pre-flight validation and policy engine
+- ✅ Proof-based completion scoring
+- ✅ SQLite persistence for sessions, tasks, strategies
+- ✅ WebUI with live trace state and pending rehydration
+- ✅ Council validation framework (6 domain experts)
 
 ---
 

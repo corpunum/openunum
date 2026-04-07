@@ -92,12 +92,14 @@ Built-in mechanisms for survival:
 - End-to-end tests for complete workflows
 - Performance and security tests
 - Only deploy after all tests pass
+- **Phase 1-3 Systems Validated:** Verifier, Audit Logger, ODD Enforcement, Freshness Decay, Hippocampal Replay
 
 **Agent Guidance:**
 - Verify tool execution results before claiming completion
 - Test assumptions before acting on them
 - Validate outputs against expected formats
 - Document test results for future reference
+- Run `npm run deploy:gate` before any production deployment
 
 ## 8. Continuous Documentation and Testing Updates
 
@@ -108,12 +110,22 @@ After every change, update:
 - **Git/GitHub** with committed changes
 - **Smoke tests** for basic functionality
 - **E2E tests** for advanced scenarios
+- **Council validation reports** for architectural review
+
+**Phase 1-3 Implemented Systems (Document These):**
+- **Verifier** (`src/core/verifier.mjs`) — Independent state validation
+- **Audit Logger** (`src/core/audit-log.mjs`) — Tamper-evident HMAC chain
+- **Memory Freshness** (`src/memory/store.mjs`) — Decay scoring, staleness detection
+- **Hippocampal Replay** (`src/core/memory-consolidator.mjs`) — Scheduled consolidation
+- **ODD Enforcement** (`src/config.mjs`) — Execution tier boundaries
+- **Replay System** (`src/core/hippocampal-replay.mjs`) — Pattern extraction from successes/failures
 
 **Agent Guidance:**
 - Document new features immediately after implementation
 - Update onboarding guides when architecture changes
 - Maintain test coverage for modified components
 - Follow established documentation standards
+- Run council validation quarterly or after major changes
 
 ## 9. Self-Modification and Learning Capabilities
 
@@ -136,6 +148,22 @@ Agents must be able to:
 3. **Autonomous Operation**: Minimize user intervention
 4. **Framework Flexibility**: Support diverse use cases
 5. **Continuous Improvement**: Learn and adapt over time
+6. **Verification**: Independent validation before deployment (Phase 4 priority)
+
+## Anti-Patterns Learned from Phase 1-3
+
+**Avoid These Mistakes:**
+
+| Anti-Pattern | Symptom | Fix |
+|--------------|---------|-----|
+| Agent scores own work | No independent validation | Use `src/core/verifier.mjs` for high-stakes ops |
+| No tamper evidence | Audit logs can be modified | Use HMAC-SHA256 chain hashing (`src/core/audit-log.mjs`) |
+| Memories never decay | Stale data pollutes retrieval | Apply 30-day half-life decay scoring |
+| No scheduled replay | Lessons not consolidated | Run hippocampal replay every 24 hours |
+| Confidence ≠ validity | Heuristic scoring mistaken for proof | Distinguish confidence (heuristic) from validity (cryptographic) |
+| No ODD boundaries | Weak models attempt complex tasks | Enforce tier-based tool allowlists |
+| No role-model mapping | Wrong model for task type | Use `src/core/role-model-registry.mjs` |
+| No retry policy | Transient failures become permanent | Implement exponential backoff (200ms-2s) |
 
 ## Decision Making Framework
 

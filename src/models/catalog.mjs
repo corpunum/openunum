@@ -1,6 +1,8 @@
 import fs from 'node:fs';
 import { getEffectiveOpenAICodexOAuthStatus, scanLocalAuthSources } from '../secrets/store.mjs';
+import { MemoryStore } from '../memory/store.mjs';
 
+const memory = new MemoryStore();
 export const MODEL_CATALOG_CONTRACT_VERSION = '2026-04-01.model-catalog.v1';
 export const PROVIDER_ORDER = ['ollama', 'nvidia', 'openrouter', 'xiaomimimo', 'openai'];
 
@@ -281,7 +283,18 @@ function mergeProviderModels(provider, discovered = []) {
       capability_score: Math.max(existing.capability_score, model.capability_score)
     } : model);
   }
-  return sortCatalogModels([...merged.values()]);
+
+  // Filter based on curation facts
+  const allModels = [...merged.values()];
+  const filtered = allModels.filter(m => {
+    const statusFact = memory.retrieveFacts(`model.${m.provider}.${m.model_id}.status`, 1)[0];
+    if (statusFact && (statusFact.value === 'offline' || statusFact.value === 'quarantined')) {
+      return false;
+    }
+    return true;
+  });
+
+  return sortCatalogModels(filtered);
 }
 
 function buildSelectedPointer(modelConfig, provider, modelId) {

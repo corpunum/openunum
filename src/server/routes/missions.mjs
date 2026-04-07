@@ -1,6 +1,16 @@
 export async function handleMissionsRoute({ req, res, url, ctx }) {
   if (req.method === 'GET' && url.pathname === '/api/missions') {
-    ctx.sendJson(res, 200, { missions: ctx.missions.list() });
+    const list = ctx.missions.list();
+    const schedules = ctx.missions.listSchedules();
+    // Wrap schedules in a similar format or just provide them alongside
+    ctx.sendJson(res, 200, { 
+      missions: list,
+      schedules: schedules.map(s => ({
+        ...s,
+        isSchedule: true,
+        sessionId: `schedule-${s.id}`
+      }))
+    });
     return true;
   }
 

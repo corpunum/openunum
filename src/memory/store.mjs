@@ -1,6 +1,7 @@
 import path from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { getHomeDir, ensureHome } from '../config.mjs';
+import { calculateFreshness, isStale, getHalfLifeForCategory, applyFreshnessDecay, getFreshnessMetadata } from './freshness-decay.mjs';
 
 function tokenize(text) {
   return String(text || '')
@@ -1344,8 +1345,20 @@ export class MemoryStore {
         createdAt: r.created_at
       }));
 
+    // Apply freshness decay to scores (R5)
     return [...facts, ...strategies, ...routes]
-      .map((x) => ({ ...x, score: scoreByOverlap(queryTokens, x.text) }))
+      .map((x) => {
+        const baseScore = scoreByOverlap(queryTokens, x.text);
+        const createdAtMs = new Date(x.createdAt).getTime();
+        const freshnessWeightedScore = applyFreshnessDecay(baseScore, createdAtMs, x.type);
+        const freshness = calculateFreshness(createdAtMs, getHalfLifeForCategory(x.type));
+        return { 
+          ...x, 
+          score: freshnessWeightedScore,
+          baseScore,
+          freshness 
+        };
+      })
       .filter((x) => x.score > 0)
       .sort((a, b) => b.score - a.score)
       .slice(0, limit);
@@ -1645,5 +1658,176 @@ export class MemoryStore {
     const r=this.db.prepare('UPDATE execution_state SET status=?,error=?,finished_at=?,updated_at=? WHERE id=?')
       .run(String(status||'finished'), error?String(error):null, new Date().toISOString(), new Date().toISOString(), String(id||'').trim());
     return r.changes>0?this.getExecutionState(id):null;
+  }
+
+  /**
+   * Get stale memories sorted by staleness (R5 - Freshness Decay)
+   * @param {{threshold?: number, limit?: number, category?: string}} options
+   * @returns {Array<{id: number, artifact_type: string, content: string, createdAt: string, freshness: number, category: string}>}
+   */
+  getStaleMemories({ threshold = 0.125, limit = 50, category = null } = {}) {
+    const catFilter = category ? ' AND artifact_type = ?' : '';
+    const params = category ? [category, limit] : [limit];
+    
+    const rows = this.db
+      .prepare(
+        `SELECT id, artifact_type, content, source_ref, created_at 
+         FROM memory_artifacts 
+         WHERE 1=1 ${catFilter}
+         ORDER BY created_at ASC 
+         LIMIT ?`
+      )
+      .all(...params);
+    
+    const stale = [];
+    for (const row of rows) {
+      const createdAtMs = new Date(row.created_at).getTime();
+      const halfLifeMs = getHalfLifeForCategory(row.artifact_type);
+      const freshness = calculateFreshness(createdAtMs, halfLifeMs);
+      
+      if (freshness < threshold) {
+        stale.push({
+          id: row.id,
+          type: row.artifact_type,
+          content: row.content,
+          sourceRef: row.source_ref,
+          createdAt: row.created_at,
+          freshness,
+          halfLifeHours: Math.round(halfLifeMs / (60 * 60 * 1000)),
+          category: row.artifact_type
+        });
+      }
+    }
+    
+    // Sort by freshness (stalest first)
+    stale.sort((a, b) => a.freshness - b.freshness);
+    return stale.slice(0, limit);
+  }
+
+  /**
+   * Refresh a memory by updating its timestamp (R5 - Freshness Decay)
+   * @param {number} id - Memory artifact ID
+   * @returns {{ok: boolean, id: number, refreshedAt: string} | null}
+   */
+  refreshMemory(id) {
+    const trimmed = Number(id || 0);
+    if (!trimmed) return null;
+    
+    const now = new Date().toISOString();
+    const result = this.db
+      .prepare('UPDATE memory_artifacts SET created_at = ? WHERE id = ?')
+      .run(now, trimmed);
+    
+    if (result.changes > 0) {
+      return {
+        ok: true,
+        id: trimmed,
+        refreshedAt: now
+      };
+    }
+    return null;
+  }
+
+  /**
+   * Get route lessons for hippocampal replay (R2 - Memory Consolidation)
+   * @param {{since?: string, tool?: string, limit?: number}} options
+   * @returns {Array<{id: number, sessionId: string, goalHint: string, routeSignature: string, surface: string, outcome: string, errorExcerpt: string, note: string, createdAt: string}>}
+   */
+  getRouteLessons({ since = null, tool = null, limit = 200 } = {}) {
+    let query = 'SELECT * FROM route_lessons WHERE 1=1';
+    const params = [];
+    
+    if (since) {
+      query += ' AND created_at >= ?';
+      params.push(String(since));
+    }
+    
+    if (tool) {
+      query += ' AND surface = ?';
+      params.push(String(tool));
+    }
+    
+    query += ' ORDER BY created_at DESC LIMIT ?';
+    params.push(Math.max(1, Math.min(1000, Number(limit || 200))));
+    
+    const rows = this.db.prepare(query).all(...params);
+    return rows.map(r => ({
+      id: r.id,
+      sessionId: r.session_id,
+      goalHint: r.goal_hint,
+      routeSignature: r.route_signature,
+      surface: r.surface,
+      outcome: r.outcome,
+      errorExcerpt: r.error_excerpt,
+      note: r.note,
+      createdAt: r.created_at
+    }));
+  }
+
+  /**
+   * Store a consolidated pattern as memory (R2 - Memory Consolidation)
+   * @param {{pattern: string, successes: number, failures: number, examples: Array, weight: number}} pattern
+   * @returns {{id: number, ok: boolean}}
+   */
+  storeConsolidatedPattern(pattern) {
+    if (!pattern || !pattern.pattern) return { ok: false, reason: 'pattern_required' };
+    
+    const now = new Date().toISOString();
+    const content = JSON.stringify({
+      type: 'consolidated',
+      pattern: pattern.pattern,
+      successes: pattern.successes || 0,
+      failures: pattern.failures || 0,
+      examples: pattern.examples || [],
+      consolidatedAt: now,
+      weight: pattern.weight || 1.5 // Boosted weight for consolidated patterns
+    });
+    
+    const result = this.db
+      .prepare(
+        'INSERT INTO memory_artifacts (session_id, artifact_type, content, source_ref, created_at) VALUES (?, ?, ?, ?, ?)'
+      )
+      .run(
+        'consolidator',
+        'consolidated',
+        content,
+        `pattern:${pattern.pattern}`,
+        now
+      );
+    
+    return {
+      ok: true,
+      id: result.lastInsertRowid
+    };
+  }
+
+  /**
+   * Get active consolidated patterns (R2 - Memory Consolidation)
+   * @param {{limit?: number}} options
+   * @returns {Array<{id: number, pattern: string, successes: number, failures: number, weight: number, createdAt: string}>}
+   */
+  getConsolidatedPatterns({ limit = 50 } = {}) {
+    const rows = this.db
+      .prepare(
+        'SELECT id, content, created_at FROM memory_artifacts WHERE artifact_type = ? ORDER BY created_at DESC LIMIT ?'
+      )
+      .all('consolidated', Math.max(1, Math.min(200, Number(limit || 50))));
+    
+    return rows.map(r => {
+      try {
+        const data = JSON.parse(r.content);
+        return {
+          id: r.id,
+          pattern: data.pattern,
+          successes: data.successes || 0,
+          failures: data.failures || 0,
+          weight: data.weight || 1.0,
+          examples: data.examples || [],
+          createdAt: r.created_at
+        };
+      } catch {
+        return null;
+      }
+    }).filter(Boolean);
   }
 }

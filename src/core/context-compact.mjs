@@ -1,4 +1,5 @@
 import { estimateMessagesTokens } from './context-budget.mjs';
+import { SleepCycle } from './sleep-cycle.mjs';
 
 function truncateText(text, maxChars) {
   const t = String(text || '').trim();
@@ -292,3 +293,40 @@ export function compactSessionMessages({
     postTokens
   };
 }
+
+/**
+ * Create a sleep-aware compaction wrapper (R9).
+ */
+export function createSleepAwareCompactor({ targetTokens, idleThresholdMs = 3600000, consolidator = null, protectRecentTurns = 8 } = {}) {
+  const compactFn = async (opts = {}) => {
+    const turns = opts.aggressive ? Math.max(2, Math.floor(protectRecentTurns / 2)) : protectRecentTurns;
+    return compactSessionMessages({
+      messages: opts.messages || [],
+      targetTokens: opts.targetTokens || targetTokens,
+      protectRecentTurns: turns,
+      preserveUserVerbatimBias: 0.9,
+      assistantCompressionAggression: opts.aggressive ? 0.8 : 0.6
+    });
+  };
+
+  const sleepCycle = new SleepCycle({ compactFn, consolidator, idleThresholdMs });
+
+  async function compactWithSleep(opts = {}) {
+    sleepCycle.touchActivity();
+    const { triggered } = await sleepCycle.checkAndSleep();
+    const result = compactSessionMessages({
+      messages: opts.messages || [],
+      targetTokens: opts.targetTokens || targetTokens,
+      protectRecentTurns: opts.protectRecentTurns || protectRecentTurns,
+      preserveUserVerbatimBias: opts.preserveUserVerbatimBias || 0.85,
+      assistantCompressionAggression: opts.assistantCompressionAggression || 0.6
+    });
+    result.sleepTriggered = triggered;
+    result.sleepState = sleepCycle.getState();
+    return result;
+  }
+
+  return { sleepCycle, compactWithSleep, compactFn: compactSessionMessages };
+}
+
+export { SleepCycle } from './sleep-cycle.mjs';

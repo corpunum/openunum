@@ -1,5 +1,7 @@
 # Operations Runbook
 
+**Last Updated:** 2026-04-07 (Phase 1-3 additions)
+
 ## 1. Start / Stop
 
 ### Foreground start
@@ -18,7 +20,52 @@ curl -sS http://127.0.0.1:18880/api/health
 node src/cli.mjs health
 ```
 
-## 2. Regression Gate
+## 2. Test Running Instructions
+
+### Full Deployment Gate
+```bash
+# Run all tests before deployment
+cd /home/corp-unum/openunum
+npm run deploy:gate
+```
+
+This runs:
+- Unit tests (`npm run test:unit`) — < 30 seconds
+- E2E tests (`npm run test:e2e`) — 2-5 minutes
+- Smoke tests (`npm run test:smoke`) — < 30 seconds
+
+### Individual Test Suites
+```bash
+# Unit tests only
+npm run test:unit
+
+# E2E tests only (requires running server)
+npm start  # in background
+npm run test:e2e
+
+# Smoke tests only (fastest)
+npm run test:smoke
+
+# Specific E2E test file
+node --test tests/e2e/verifier.e2e.mjs
+node --test tests/e2e/audit-logging.e2e.mjs
+node --test tests/e2e/freshness-decay.e2e.mjs
+```
+
+### Test Prerequisites
+```bash
+# Ensure dependencies installed
+pnpm install
+
+# Start server for E2E/smoke tests
+npm start
+
+# Set environment (optional)
+export OPENUNUM_API_URL=http://localhost:18880
+export NODE_ENV=test
+```
+
+## 3. Regression Gate
 
 ```bash
 cd /home/corp-unum/openunum
@@ -27,7 +74,7 @@ pnpm e2e
 
 Always run before/after major changes.
 
-## 3. OAuth-Safe UI Smoke Gate
+## 4. OAuth-Safe UI Smoke Gate
 
 Use this for routine frontend/backend wiring checks without launching GitHub/Google OAuth approval windows:
 
@@ -40,7 +87,7 @@ This flow intentionally avoids:
 - `POST /api/service/connect`
 - `POST /api/auth/job/input`
 
-## 4. Systemd User Service
+## 5. Systemd User Service
 
 Install:
 ```bash
@@ -55,14 +102,149 @@ systemctl --user restart openunum.service
 journalctl --user -u openunum.service -n 200 --no-pager
 ```
 
-## 5. Recommended Runtime Baseline
+## 6. Deployment Gate Instructions
+
+**Before deploying any changes:**
+
+1. **Run full test suite:**
+   ```bash
+   npm run deploy:gate
+   # Wait for: ✅ Deployment gate passed
+   ```
+
+2. **Verify critical endpoints:**
+   ```bash
+   curl -sS http://127.0.0.1:18880/api/health
+   curl -sS http://127.0.0.1:18880/api/config
+   curl -sS http://127.0.0.1:18880/api/audit/stats
+   curl -sS http://127.0.0.1:18880/api/verifier/stats
+   ```
+
+3. **Check Council validation status:**
+   ```bash
+   # Review latest council report
+   cat docs/COUNCIL_CONSOLIDATED_*.md | head -100
+   ```
+
+4. **Backup state:**
+   ```bash
+   cp ~/.openunum/openunum.db ~/.openunum/openunum.db.backup
+   cp ~/.openunum/openunum.json ~/.openunum/openunum.json.backup
+   ```
+
+5. **Deploy:**
+   ```bash
+   git pull origin main
+   pnpm install
+   systemctl --user restart openunum.service
+   ```
+
+6. **Post-deploy verification:**
+   ```bash
+   # Wait 10 seconds for startup
+   sleep 10
+   
+   # Verify health
+   curl -sS http://127.0.0.1:18880/api/health
+   
+   # Run smoke tests
+   npm run test:smoke
+   ```
+
+7. **Rollback if needed:**
+   ```bash
+   # Restore backups
+   cp ~/.openunum/openunum.db.backup ~/.openunum/openunum.db
+   cp ~/.openunum/openunum.json.backup ~/.openunum/openunum.json
+   
+   # Restart
+   systemctl --user restart openunum.service
+   ```
+
+## 7. Monitoring Checklist for Production
+
+### Daily Checks
+
+- [ ] **Health endpoint responds:**
+  ```bash
+  curl -sS http://127.0.0.1:18880/api/health
+  ```
+
+- [ ] **No critical errors in logs:**
+  ```bash
+  journalctl --user -u openunum.service --since "24 hours ago" | grep -i error
+  ```
+
+- [ ] **Memory freshness check:**
+  ```bash
+  curl -sS http://127.0.0.1:18880/api/memory/stale?threshold=0.3
+  ```
+
+- [ ] **Audit chain integrity:**
+  ```bash
+  curl -sS http://127.0.0.1:18880/api/audit/stats
+  ```
+
+- [ ] **Verifier status:**
+  ```bash
+  curl -sS http://127.0.0.1:18880/api/verifier/status
+  ```
+
+### Weekly Checks
+
+- [ ] **Run council validation:**
+  ```bash
+  node scripts/council-run-all.mjs
+  node scripts/council-consolidate.mjs
+  ```
+
+- [ ] **Review route lessons:**
+  ```bash
+  curl -sS http://127.0.0.1:18880/api/controller/behaviors?limit=80
+  ```
+
+- [ ] **Check replay consolidation:**
+  ```bash
+  curl -sS http://127.0.0.1:18880/api/replay/status
+  ```
+
+- [ ] **Verify provider health:**
+  ```bash
+  curl -sS http://127.0.0.1:18880/api/providers/health
+  ```
+
+### Monthly Checks
+
+- [ ] **Full E2E test suite:**
+  ```bash
+  npm run test:e2e
+  ```
+
+- [ ] **Database integrity:**
+  ```bash
+  sqlite3 ~/.openunum/openunum.db "PRAGMA integrity_check;"
+  ```
+
+- [ ] **Disk space check:**
+  ```bash
+  df -h ~/.openunum/
+  ```
+
+- [ ] **Archive old audit logs:**
+  ```bash
+  # Export logs older than 30 days
+  curl -sS "http://127.0.0.1:18880/api/audit/export?from=$(date -d '30 days ago' -I)" \
+    > audit-export-$(date +%Y%m).json
+  ```
+
+## 8. Recommended Runtime Baseline
 
 For high autonomy stability:
 - `autonomyMode=relentless`
 - `shellEnabled=true`
 - strict provider routing lock when model consistency matters
 
-## 6. Browser Automation Checklist
+## 9. Browser Automation Checklist
 
 1. Verify config endpoint:
 ```bash
@@ -77,7 +259,7 @@ curl -sS http://127.0.0.1:18880/api/browser/status
 curl -sS -X POST http://127.0.0.1:18880/api/browser/launch -H 'Content-Type: application/json' -d '{}'
 ```
 
-## 7. Telegram Checklist
+## 10. Telegram Checklist
 
 1. Save token via API/UI.
 2. Start loop:
@@ -89,11 +271,13 @@ curl -sS -X POST http://127.0.0.1:18880/api/telegram/start -H 'Content-Type: app
 curl -sS http://127.0.0.1:18880/api/telegram/status
 ```
 
-## 8. Data / Logs
+## 11. Data / Logs
 
 - Config: `~/.openunum/openunum.json`
 - DB: `~/.openunum/openunum.db`
 - Executor log: `~/.openunum/logs/executor.jsonl`
+- Audit log: `~/.openunum/logs/audit.jsonl` (Phase 4)
+- Replay patterns: `~/.openunum/data/replay-patterns.json` (Phase 4)
 
 Useful DB inspection (example):
 ```bash
@@ -101,7 +285,7 @@ sqlite3 ~/.openunum/openunum.db '.tables'
 sqlite3 ~/.openunum/openunum.db 'select tool_name, ok, created_at from tool_runs order by id desc limit 20;'
 ```
 
-## 9. Troubleshooting
+## 12. Troubleshooting
 
 ### Symptom: "No response generated"
 - Check provider/model reachability.
@@ -137,3 +321,26 @@ curl -sS http://127.0.0.1:18880/api/providers/config
 - Do not click provider `Connect` actions during routine smoke tests.
 - Run `pnpm smoke:ui:noauth` for safe verification.
 - Reserve OAuth launcher checks for explicit auth-flow validation runs.
+
+### Symptom: Audit chain verification fails
+```bash
+# Check last 10 audit entries
+curl -sS http://127.0.0.1:18880/api/audit/log?limit=10
+
+# Verify chain integrity
+curl -sS -X POST http://127.0.0.1:18880/api/audit/verify
+
+# If broken, check for manual DB edits or disk corruption
+```
+
+### Symptom: Verifier rejecting valid operations
+```bash
+# Check verifier stats
+curl -sS http://127.0.0.1:18880/api/verifier/stats
+
+# Review recent rejections
+curl -sS http://127.0.0.1:18880/api/verifier/status
+
+# Temporarily bypass for emergency (not recommended):
+# Edit config to disable verifier for low-stakes ops
+```

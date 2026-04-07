@@ -2,7 +2,9 @@
 
 OpenUnum is an Ubuntu-first autonomous assistant framework focused on high tool reliability, strict model control, and agent-operable runtime behavior.
 
-Current state (2026-04-03):
+**Current State (2026-04-07):**
+- ✅ **Phase 1-3 Complete** — Working memory, context compaction, model behavior registry, execution envelopes, council validation
+- 🟡 **Phase 4 Planned** — Remediation roadmap (audit logging, independent verifier, hippocampal replay, ODD, freshness decay)
 - Web UI with Gemini-inspired glass styling while preserving full backend feature coverage
 - Visible/traceable tool execution from chat (expand/collapse execution traces)
 - Multi-provider model handling with strict primary-provider lock option
@@ -17,6 +19,7 @@ Current state (2026-04-03):
 - Pending chat handling (`/api/chat` + `/api/chat/pending`) to avoid "stuck loading"
 - Session-aware pending handling in UI to prevent cross-session reply bleed when switching chats
 - Local session history persistence in SQLite until user clicks `New Chat`
+- **Council Validation Framework** — 6 domain experts, 35 dimensions assessed (Amber maturity: 60%)
 
 ## Fast Start
 
@@ -47,16 +50,22 @@ pnpm smoke:ui:noauth
 ## New Session Onboarding (for another agent)
 
 Read in this exact order:
-1. [docs/INDEX.md](/home/corp-unum/openunum/docs/INDEX.md)
-2. [docs/AGENT_ONBOARDING.md](/home/corp-unum/openunum/docs/AGENT_ONBOARDING.md)
-3. [docs/CODEBASE_MAP.md](/home/corp-unum/openunum/docs/CODEBASE_MAP.md)
-4. [docs/API_REFERENCE.md](/home/corp-unum/openunum/docs/API_REFERENCE.md)
-5. [docs/AUTONOMY_AND_MEMORY.md](/home/corp-unum/openunum/docs/AUTONOMY_AND_MEMORY.md)
-6. [docs/OPERATIONS_RUNBOOK.md](/home/corp-unum/openunum/docs/OPERATIONS_RUNBOOK.md)
-7. [docs/COMPETITIVE_ANALYSIS_CLAW_CODE.md](/home/corp-unum/openunum/docs/COMPETITIVE_ANALYSIS_CLAW_CODE.md)
-8. [docs/COMPETITIVE_ANALYSIS_OPENAI_CODEX.md](/home/corp-unum/openunum/docs/COMPETITIVE_ANALYSIS_OPENAI_CODEX.md)
-9. [docs/COMPETITIVE_ANALYSIS_GEMINI_CLI.md](/home/corp-unum/openunum/docs/COMPETITIVE_ANALYSIS_GEMINI_CLI.md)
-10. [docs/OPENUNUM_MULTI_MODEL_CONTROLLER_ACTION_PLAN.md](/home/corp-unum/openunum/docs/OPENUNUM_MULTI_MODEL_CONTROLLER_ACTION_PLAN.md)
+1. [docs/INDEX.md](docs/INDEX.md)
+2. [docs/AGENT_ONBOARDING.md](docs/AGENT_ONBOARDING.md)
+3. [BRAIN.MD](BRAIN.MD) — Core Operating Principles (9 principles)
+4. [docs/COUNCIL_ARCHITECTURE.md](docs/COUNCIL_ARCHITECTURE.md) — 7-member council validation framework
+5. [docs/PHASE4_PLAN.md](docs/PHASE4_PLAN.md) — Current remediation roadmap
+6. [docs/CODEBASE_MAP.md](docs/CODEBASE_MAP.md)
+7. [docs/API_REFERENCE.md](docs/API_REFERENCE.md)
+8. [docs/AUTONOMY_AND_MEMORY.md](docs/AUTONOMY_AND_MEMORY.md)
+9. [docs/OPERATIONS_RUNBOOK.md](docs/OPERATIONS_RUNBOOK.md)
+10. [docs/TESTING.md](docs/TESTING.md)
+
+**Quick Reference:**
+- **Phase 1-3 Status:** ✅ Complete (12 systems validated)
+- **Council Maturity:** 🟡 Amber (60% of ideal patterns)
+- **Next Milestone:** Phase 4 remediation (6 weeks, starts 2026-04-08)
+- **Test Coverage:** 45+ unit, 37 E2E phases, 8 smoke scripts
 
 ## Commands
 

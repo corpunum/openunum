@@ -4,32 +4,36 @@ This folder is optimized for fast machine onboarding (fresh agent session, no pr
 
 ## Reading Order
 
-1. [AGENT_ONBOARDING.md](/home/corp-unum/openunum/docs/AGENT_ONBOARDING.md)
-2. [BRAIN.MD](/home/corp-unum/openunum/BRAIN.MD) - Core Operating Principles
-3. [CODEBASE_MAP.md](/home/corp-unum/openunum/docs/CODEBASE_MAP.md)
-4. [API_REFERENCE.md](/home/corp-unum/openunum/docs/API_REFERENCE.md)
-4. [KERNEL_OVERLAY_CAPABILITY_MATRIX.md](/home/corp-unum/openunum/docs/KERNEL_OVERLAY_CAPABILITY_MATRIX.md)
-5. [AUTONOMY_PACKS.md](/home/corp-unum/openunum/docs/AUTONOMY_PACKS.md)
-6. [AUTONOMY_AND_MEMORY.md](/home/corp-unum/openunum/docs/AUTONOMY_AND_MEMORY.md)
-7. [UI_BEHAVIOR.md](/home/corp-unum/openunum/docs/UI_BEHAVIOR.md)
-8. [OPERATIONS_RUNBOOK.md](/home/corp-unum/openunum/docs/OPERATIONS_RUNBOOK.md)
-9. [CONFIG_SCHEMA.md](/home/corp-unum/openunum/docs/CONFIG_SCHEMA.md)
-10. [ULTIMATE_AUTONOMY_MODEL.md](/home/corp-unum/openunum/docs/ULTIMATE_AUTONOMY_MODEL.md)
-11. [SKILLS_EMAIL_RESEARCH.md](/home/corp-unum/openunum/docs/SKILLS_EMAIL_RESEARCH.md)
-12. [CONTEXT_COMPACTION.md](/home/corp-unum/openunum/docs/CONTEXT_COMPACTION.md)
-13. [PROJECT_STATE_SNAPSHOT.md](/home/corp-unum/openunum/docs/PROJECT_STATE_SNAPSHOT.md)
-14. [SERVER_REFACTOR_BLUEPRINT.md](/home/corp-unum/openunum/docs/SERVER_REFACTOR_BLUEPRINT.md)
-15. [CHANGELOG_CURRENT.md](/home/corp-unum/openunum/docs/CHANGELOG_CURRENT.md)
-16. [MODEL_AWARE_CONTROLLER.md](/home/corp-unum/openunum/docs/MODEL_AWARE_CONTROLLER.md)
-17. [COMPETITIVE_ANALYSIS_CLAW_CODE.md](/home/corp-unum/openunum/docs/COMPETITIVE_ANALYSIS_CLAW_CODE.md)
-18. [COMPETITIVE_ANALYSIS_OPENAI_CODEX.md](/home/corp-unum/openunum/docs/COMPETITIVE_ANALYSIS_OPENAI_CODEX.md)
-19. [COMPETITIVE_ANALYSIS_GEMINI_CLI.md](/home/corp-unum/openunum/docs/COMPETITIVE_ANALYSIS_GEMINI_CLI.md)
-20. [COMPETITIVE_ANALYSIS_MIMOUNUM.md](/home/corp-unum/openunum/docs/COMPETITIVE_ANALYSIS_MIMOUNUM.md)
-21. [OPENUNUM_MULTI_MODEL_CONTROLLER_ACTION_PLAN.md](/home/corp-unum/openunum/docs/OPENUNUM_MULTI_MODEL_CONTROLLER_ACTION_PLAN.md)
-22. [HF_DATASET_PIPELINE.md](/home/corp-unum/openunum/docs/HF_DATASET_PIPELINE.md)
-23. [SELF_MONITORING.md](/home/corp-unum/openunum/docs/SELF_MONITORING.md)
-24. [IMPROVEMENT_SUMMARY.md](/home/corp-unum/openunum/docs/IMPROVEMENT_SUMMARY.md)
-25. [../NEXT_TASKS.md](/home/corp-unum/openunum/NEXT_TASKS.md)
+**First-time onboarding:**
+1. [AGENT_ONBOARDING.md](AGENT_ONBOARDING.md) — Start here
+2. [BRAIN.MD](../BRAIN.MD) — Core Operating Principles (9 principles)
+3. [COUNCIL_ARCHITECTURE.md](COUNCIL_ARCHITECTURE.md) — 7-member council validation framework
+4. [PHASE4_PLAN.md](PHASE4_PLAN.md) — Current remediation roadmap
+5. [CODEBASE_MAP.md](CODEBASE_MAP.md) — File/folder structure
+6. [API_REFERENCE.md](API_REFERENCE.md) — All API endpoints
+7. [TESTING.md](TESTING.md) — Test suites and how to run them
+8. [KERNEL_OVERLAY_CAPABILITY_MATRIX.md](KERNEL_OVERLAY_CAPABILITY_MATRIX.md)
+9. [AUTONOMY_PACKS.md](AUTONOMY_PACKS.md)
+10. [AUTONOMY_AND_MEMORY.md](AUTONOMY_AND_MEMORY.md)
+11. [UI_BEHAVIOR.md](UI_BEHAVIOR.md)
+12. [OPERATIONS_RUNBOOK.md](OPERATIONS_RUNBOOK.md) — How to run/maintain
+13. [CONFIG_SCHEMA.md](CONFIG_SCHEMA.md)
+14. [ULTIMATE_AUTONOMY_MODEL.md](ULTIMATE_AUTONOMY_MODEL.md)
+15. [SKILLS_EMAIL_RESEARCH.md](SKILLS_EMAIL_RESEARCH.md)
+16. [CONTEXT_COMPACTION.md](CONTEXT_COMPACTION.md)
+17. [PROJECT_STATE_SNAPSHOT.md](PROJECT_STATE_SNAPSHOT.md) — Current state + Council results
+18. [SERVER_REFACTOR_BLUEPRINT.md](SERVER_REFACTOR_BLUEPRINT.md)
+19. [CHANGELOG_CURRENT.md](CHANGELOG_CURRENT.md) — Recent changes
+20. [MODEL_AWARE_CONTROLLER.md](MODEL_AWARE_CONTROLLER.md)
+21. [COMPETITIVE_ANALYSIS_CLAW_CODE.md](COMPETITIVE_ANALYSIS_CLAW_CODE.md)
+22. [COMPETITIVE_ANALYSIS_OPENAI_CODEX.md](COMPETITIVE_ANALYSIS_OPENAI_CODEX.md)
+23. [COMPETITIVE_ANALYSIS_GEMINI_CLI.md](COMPETITIVE_ANALYSIS_GEMINI_CLI.md)
+24. [COMPETITIVE_ANALYSIS_MIMOUNUM.md](COMPETITIVE_ANALYSIS_MIMOUNUM.md)
+25. [OPENUNUM_MULTI_MODEL_CONTROLLER_ACTION_PLAN.md](OPENUNUM_MULTI_MODEL_CONTROLLER_ACTION_PLAN.md)
+26. [HF_DATASET_PIPELINE.md](HF_DATASET_PIPELINE.md)
+27. [SELF_MONITORING.md](SELF_MONITORING.md)
+28. [IMPROVEMENT_SUMMARY.md](IMPROVEMENT_SUMMARY.md)
+29. [../NEXT_TASKS.md](../NEXT_TASKS.md)
 
 ## Legacy Planning Docs
 

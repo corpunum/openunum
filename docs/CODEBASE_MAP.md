@@ -1,11 +1,11 @@
 # Codebase Map
 
-This map is implementation-accurate as of 2026-04-03.
+This map is implementation-accurate as of 2026-04-07.
 
 ## Top-Level Structure
 
 - `src/server.mjs`: HTTP API server and Web UI host
-- `src/server/routes/*.mjs`: extracted route handlers (health, ui, sessions, missions, model, auth, config, autonomy, chat/tools, browser, telegram, research)
+- `src/server/routes/*.mjs`: extracted route handlers (health, ui, sessions, missions, model, auth, config, autonomy, chat/tools, browser, telegram, research, **audit**, **verifier**, **memory**, **state**)
 - `src/server/services/*.mjs`: extracted runtime helpers (chat, auth jobs, browser runtime, telegram runtime, research runtime, config service, auth service)
 - `src/core/agent.mjs`: provider chat loop, tool-call execution, trace generation
 - `src/core/missions.mjs`: autonomous mission runner with proof-aware completion
@@ -18,6 +18,21 @@ This map is implementation-accurate as of 2026-04-03.
 - `src/core/model-behavior-registry.mjs`: behavior classes + runtime learning hints per provider/model
 - `src/core/context-pack-builder.mjs`: behavior-aware context/system pack assembly
 - `src/core/execution-contract.mjs`: deterministic continuation and proof-backed completion checks
+- `src/core/completion-checklist.mjs`: task step tracking, prevents premature "Done" declarations
+- `src/core/alternative-paths.mjs`: suggests alternative tools when failures occur
+- `src/core/task-decomposer.mjs`: breaks complex tasks into explicit steps at start
+- `src/core/context-pressure.mjs`: monitors context size, compacts when approaching limits
+- `src/core/confidence-scorer.mjs`: scores confidence in outputs, triggers verification if low
+- `src/core/audit-log.mjs`: **NEW** — Tamper-evident HMAC-SHA256 chain hashing for audit trail
+- `src/core/verifier.mjs`: **NEW** — Independent state validation component
+- `src/core/memory-consolidator.mjs`: **NEW** — Hippocampal replay with scheduled consolidation
+- `src/core/state-diff.mjs`: **NEW** — Structured diff computation before state changes
+- `src/core/merkle-tree.mjs`: **NEW** — Merkle root computation for state commitments
+- `src/core/sleep-cycle.mjs`: **NEW** — Idle-triggered aggressive compaction
+- `src/core/finality.mjs`: **NEW** — Explicit finality after N successful tool runs
+- `src/core/role-model-registry.mjs`: **NEW** — Task-type to model-tier mapping
+- `src/core/attention.mjs`: **NEW** — Dynamic salience-based attention weighting
+- `src/core/turn-recovery-summary.mjs`: bounded evidence-based summaries on tool failures
 - `src/tools/runtime.mjs`: unified tool schema + execution routing
 - `src/tools/executor-daemon.mjs`: retry/backoff executor with JSONL logs
 - `src/tools/google-workspace.mjs`: native Google Workspace OAuth + Gmail/Google API client
@@ -27,13 +42,23 @@ This map is implementation-accurate as of 2026-04-03.
 - `src/core/autonomy-master.mjs`: continuous autonomy coordinator (self-heal, self-test, self-improve, skill learning)
 - `src/core/context-budget.mjs`: model-aware context window estimation + token usage checks
 - `src/core/context-compact.mjs`: old-message compaction and artifact extraction
-- `src/memory/store.mjs`: SQLite persistence for sessions/messages/facts/tool runs/strategy outcomes plus mission/task durability
+- `src/memory/store.mjs`: SQLite persistence for sessions/messages/facts/tool runs/strategy outcomes plus mission/task durability **+ freshness decay + state roots**
 - `src/browser/cdp.mjs`: Chrome DevTools Protocol abstraction
-- `src/providers/*`: provider adapters
+- `src/providers/*`: provider adapters **+ retry policy + health tracking**
 - `src/models/catalog.mjs`: provider model discovery/ranking + OpenClaw key import
 - `src/ui/index.html`: menu-driven Web UI and chat trace renderer
 - `src/channels/telegram.mjs`: Telegram poll/send loop
 - `src/cli.mjs`: command-line entry
+- `src/webui/`: **NEW** — WebUI components and SSE endpoints (Phase 3)
+
+## New Directories (Phase 1-3)
+
+| Directory | Purpose | Key Files |
+|-----------|---------|----------|
+| `src/audit/` | Tamper-evident audit logging | `audit-log.mjs`, `hmac-chain.mjs` |
+| `src/verifier/` | Independent validation | `verifier.mjs`, `validation-contracts.mjs` |
+| `src/webui/` | WebUI components + SSE | `sse-broker.mjs`, `live-trace.mjs` |
+| `src/memory/` | Enhanced memory systems | `store.mjs` (decay), `consolidator.mjs` (replay) |
 
 ## Request Flow (Chat)
 

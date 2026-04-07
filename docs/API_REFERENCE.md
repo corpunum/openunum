@@ -2,6 +2,8 @@
 
 Base URL: `http://127.0.0.1:18880`
 
+**Last Updated:** 2026-04-07 (Phase 1-3 endpoints added)
+
 ## Health
 
 - `GET /health`
@@ -10,6 +12,144 @@ Base URL: `http://127.0.0.1:18880`
 Returns:
 ```json
 {"ok":true,"service":"openunum"}
+```
+
+## Audit (NEW - Phase 4)
+
+- `GET /api/audit/stats` — Audit log statistics
+- `GET /api/audit/log?limit=100&offset=0` — Retrieve audit log entries
+- `GET /api/audit/log/:id` — Get specific audit entry
+- `POST /api/audit/verify` — Verify HMAC chain integrity
+- `GET /api/audit/export?from=ISO&to=ISO` — Export audit log for external review
+
+Returns:
+```json
+{
+  "entries": [
+    {
+      "entryId": "audit_001234",
+      "timestamp": "2026-04-07T15:30:00Z",
+      "eventType": "tool_call",
+      "correlationId": "trace_abc123",
+      "previousHash": "sha256_prev...",
+      "currentHash": "sha256_current...",
+      "payload": { "tool": "file_write", "path": "/tmp/test.txt" }
+    }
+  ],
+  "chainValid": true,
+  "merkleRoot": "sha256_root..."
+}
+```
+
+## Verifier (NEW - Phase 4)
+
+- `GET /api/verifier/stats` — Verifier statistics
+- `POST /api/verifier/check` — Validate state changes independently
+- `GET /api/verifier/status` — Verifier health status
+
+Request:
+```json
+{
+  "operation": "state_change",
+  "stateDiff": { /* diff object */ },
+  "context": { "sessionId": "abc", "taskId": "xyz" }
+}
+```
+
+Response:
+```json
+{
+  "verified": true,
+  "checks": [
+    { "name": "state_consistency", "passed": true },
+    { "name": "invariant_preservation", "passed": true }
+  ],
+  "confidence": 0.95
+}
+```
+
+## Memory - Freshness & Decay (NEW - Phase 4)
+
+- `GET /api/memory/freshness` — Get freshness scores for memories
+- `GET /api/memory/stale?threshold=0.3` — List stale memories below threshold
+- `POST /api/memory/refresh` — Manually refresh specific memories
+- `GET /api/memory/stats` — Memory statistics with decay info
+
+Returns:
+```json
+{
+  "staleMemories": [
+    { "id": "mem_123", "ageDays": 45, "freshness": 0.35, "halfLife": 30 }
+  ],
+  "totalMemories": 150,
+  "averageFreshness": 0.72
+}
+```
+
+## Replay (NEW - Phase 4)
+
+- `GET /api/replay/status` — Hippocampal replay status
+- `POST /api/replay/trigger` — Manually trigger consolidation
+- `GET /api/replay/patterns?limit=50` — List extracted patterns
+- `GET /api/replay/pattern/:id` — Get specific pattern details
+
+Returns:
+```json
+{
+  "patterns": [
+    {
+      "patternId": "pattern_001",
+      "type": "success",
+      "description": "Browser navigation succeeds after retry on timeout",
+      "occurrences": 5,
+      "heuristic": "Retry browser.navigate with 2s timeout on first failure"
+    }
+  ],
+  "lastConsolidation": "2026-04-07T02:00:00Z",
+  "nextScheduled": "2026-04-08T02:00:00Z"
+}
+```
+
+## ODD (Operational Design Domain) (NEW - Phase 4)
+
+- `GET /api/odd/status` — Current ODD enforcement status
+- `GET /api/odd/tiers` — Execution tier definitions
+- `POST /api/odd/override` — Request ODD override (requires approval)
+- `GET /api/odd/gates` — Active confidence gates
+
+Returns:
+```json
+{
+  "tiers": {
+    "compact": {
+      "maxConfidenceRequired": 0.7,
+      "allowedTools": ["file_read", "http_request"],
+      "blockedTools": ["file_write", "shell_run"]
+    },
+    "balanced": { ... },
+    "full": { ... }
+  },
+  "currentTier": "balanced",
+  "activeGates": 3
+}
+```
+
+## WebUI - SSE Endpoints (NEW - Phase 3)
+
+- `GET /api/ui/sse` — Server-sent events for live updates
+- `GET /api/ui/trace/:sessionId` — Live execution trace stream
+- `GET /api/ui/pending/:sessionId` — Pending operation status stream
+
+SSE Event Types:
+```
+event: trace_update
+data: {"sessionId": "abc", "step": 3, "tool": "file_write", "status": "running"}
+
+event: pending_status
+data: {"sessionId": "abc", "status": "Executing tools", "progress": 0.6}
+
+event: complete
+data: {"sessionId": "abc", "success": true}
 ```
 
 ## Config

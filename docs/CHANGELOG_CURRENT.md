@@ -1,6 +1,89 @@
 # Changelog (Current Consolidated)
 
-Date: 2026-04-03
+Date: 2026-04-07
+
+## Phase 1-3 Completion + Council Validation (2026-04-07)
+
+**Status:** ✅ Phase 1-3 Complete | 🟡 Phase 4 Planned
+
+### Council Validation Framework Implemented
+
+**New Modules Created:**
+1. `scripts/council-brain.mjs` — Cognitive architecture evaluation
+2. `scripts/council-ethereum.mjs` — Execution architecture evaluation
+3. `scripts/council-starknet.mjs` — Verification architecture evaluation
+4. `scripts/council-karpathy.mjs` — Data & learning evaluation
+5. `scripts/council-openmodel.mjs` — Model operations evaluation
+6. `scripts/council-safety.mjs` — Safety & alignment evaluation
+7. `scripts/council-consolidate.mjs` — Report consolidation & voting
+
+**Validation Results:**
+- 6 domain experts evaluated 35 dimensions
+- Overall maturity: 🟡 Amber (60% of ideal patterns)
+- 8 Green dimensions, 22 Amber, 5 Red
+- 32 prioritized recommendations generated
+- Top 5: Audit logging, Independent verifier, Hippocampal replay, ODD definitions, Freshness decay
+
+**Documentation Created:**
+- `docs/COUNCIL_ARCHITECTURE.md` — Council framework documentation
+- `docs/PHASE4_PLAN.md` — Remediation roadmap (6 weeks)
+- `docs/COUNCIL_CONSOLIDATED_2026_04_07.md` — Full consolidated report
+- `docs/COUNCIL_BRAIN_2026_04_07.md` — Brain domain report
+- `docs/COUNCIL_ETHEREUM_2026_04_07.md` — Ethereum domain report
+- `docs/COUNCIL_STARKNET_2026_04_07.md` — StarkNet domain report
+- `docs/COUNCIL_KARPATHY_2026_04_07.md` — Karpathy domain report
+- `docs/COUNCIL_OPENMODEL_2026_04_07.md` — OpenModel domain report
+- `docs/COUNCIL_SAFETY_2026_04_07.md` — Safety domain report
+
+### Phase 1-3 Deliverables Summary
+
+**Completed Systems:**
+- ✅ Working memory anchor with drift detection
+- ✅ Context compaction with enriched artifacts
+- ✅ Model behavior registry (9 classes, 349 route lessons)
+- ✅ Execution envelopes (compact/balanced/full tiers)
+- ✅ Pre-flight validation & policy engine
+- ✅ Proof-based completion scoring
+- ✅ Planner-backed generic tasks
+- ✅ Self-edit pipeline with path-aware promotion
+- ✅ Model scout workflow (HF discovery + local eval)
+- ✅ Worker orchestration with allowlists
+- ✅ Pending rehydration & live trace state
+- ✅ Turn recovery with evidence summaries
+- ✅ Research answer shaping
+
+**Test Coverage:**
+- 45+ unit tests
+- 37 E2E test phases
+- 8 smoke test scripts
+- 3 browser test suites
+
+**New E2E Tests:**
+- `tests/e2e/freshness-decay.e2e.mjs`
+- `tests/e2e/hippocampal-replay.e2e.mjs`
+- `tests/e2e/verifier.e2e.mjs`
+- `tests/e2e/audit-logging.e2e.mjs`
+- `tests/e2e/odd-enforcement.e2e.mjs`
+
+### Documentation Updates
+
+**Updated Core Docs:**
+- `docs/AGENT_ONBOARDING.md` — Added Phase 1-3 overview, council refs
+- `docs/BRAIN.MD` — Added anti-patterns, Phase 1-3 systems
+- `docs/CODEBASE_MAP.md` — Added new directories (audit/, verifier/, webui/)
+- `docs/API_REFERENCE.md` — Added Phase 4 endpoints (audit, verifier, memory, replay, ODD, SSE)
+- `docs/PROJECT_STATE_SNAPSHOT.md` — Full Phase 1-3 status + Council results
+- `docs/OPERATIONS_RUNBOOK.md` — Added test running, deployment gates, monitoring
+- `docs/INDEX.md` — Updated reading order
+
+**Breaking Changes:** None
+
+**Migration Notes:**
+- No breaking changes; all Phase 1-3 systems are additive
+- Phase 4 (remediation) begins 2026-04-08
+- Council validation recommended quarterly
+
+---
 
 ## Model-Agnostic Autonomy Enhancements (2026-04-03)
 
