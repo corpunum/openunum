@@ -86,7 +86,7 @@ export class SkillManager {
   }
 
   init() {
-    fs.mkdirSync(this.customDir, { recursive: true });
+    if (!fs.existsSync(this.customDir)) fs.mkdirSync(this.customDir, { recursive: true });
     if (!fs.existsSync(this.manifestPath)) {
       const initial = { version: MANIFEST_VERSION, updatedAt: nowIso(), skills: [] };
       fs.writeFileSync(this.manifestPath, JSON.stringify(initial, null, 2), 'utf8');
@@ -116,11 +116,52 @@ export class SkillManager {
       installedAt: s.installedAt,
       lastUsedAt: s.lastUsedAt || null,
       usageCount: Number(s.usageCount || 0),
-      findings: s.findings || []
+      findings: s.findings || [],
+      isBundle: Boolean(s.isBundle)
     }));
   }
 
+  async loadSkillBundle(name) {
+    const normalized = normalizeSkillName(name);
+    const manifest = this.loadManifest();
+    const skill = manifest.skills.find((s) => s.name === normalized);
+    if (!skill) throw new Error('skill_not_found');
+
+    if (!skill.isBundle) {
+      // Legacy single-file support: just return content and metadata
+      const content = fs.readFileSync(skill.filePath, 'utf8');
+      return {
+        name: skill.name,
+        isBundle: false,
+        files: { [skill.fileName]: content }
+      };
+    }
+
+    // New bundle support: load all files in the skill directory
+    const bundleDir = skill.filePath; // For bundles, filePath points to the directory
+    if (!fs.existsSync(bundleDir) || !fs.statSync(bundleDir).isDirectory()) {
+      throw new Error('skill_bundle_directory_missing');
+    }
+
+    const files = {};
+    const entries = fs.readdirSync(bundleDir);
+    for (const entry of entries) {
+      const fullPath = path.join(bundleDir, entry);
+      if (fs.statSync(fullPath).isFile()) {
+        files[entry] = fs.readFileSync(fullPath, 'utf8');
+      }
+    }
+
+    return {
+      name: skill.name,
+      isBundle: true,
+      path: bundleDir,
+      files
+    };
+  }
+
   async installSkill({ source, name, content }) {
+    // ... existing installSkill implementation (kept for single-file compat)
     let code = String(content || '');
     if (!code && source) {
       if (String(source).startsWith('http://') || String(source).startsWith('https://')) {
@@ -256,6 +297,33 @@ export class SkillManager {
     return { ok: true, name: skill.name, approved: true };
   }
 
+  async installSkillBundle({ name, files = {}, source = 'manual' }) {
+    const normalized = normalizeSkillName(name || `bundle-${Date.now()}`);
+    const bundleDir = path.join(this.customDir, normalized);
+    if (fs.existsSync(bundleDir)) throw new Error('skill_exists');
+
+    fs.mkdirSync(bundleDir, { recursive: true });
+    for (const [fileName, content] of Object.entries(files)) {
+      const filePath = path.join(bundleDir, fileName);
+      fs.writeFileSync(filePath, String(content), 'utf8');
+    }
+
+    const manifest = this.loadManifest();
+    manifest.skills.push({
+      name: normalized,
+      isBundle: true,
+      filePath: bundleDir,
+      source,
+      installedAt: nowIso(),
+      approved: true, // Bundles from factory/manual are trusted by default in this context
+      verdict: 'safe',
+      usageCount: 0
+    });
+    this.saveManifest(manifest);
+
+    return { ok: true, name: normalized, path: bundleDir };
+  }
+
   async executeSkill(name, args = {}) {
     const normalized = normalizeSkillName(name);
     const manifest = this.loadManifest();
@@ -263,7 +331,15 @@ export class SkillManager {
     if (!skill) throw new Error('skill_not_found');
     if (!skill.approved && skill.verdict !== 'safe') throw new Error('skill_not_approved');
 
-    const mod = await import(`${pathToFileURL(skill.filePath).href}?t=${Date.now()}`);
+    let execPath = skill.filePath;
+    if (skill.isBundle) {
+      execPath = path.join(skill.filePath, 'execute.mjs');
+      if (!fs.existsSync(execPath)) {
+        throw new Error('skill_bundle_no_executable');
+      }
+    }
+
+    const mod = await import(`${pathToFileURL(execPath).href}?t=${Date.now()}`);
     const fn = typeof mod.execute === 'function' ? mod.execute : (typeof mod.default === 'function' ? mod.default : null);
     if (!fn) throw new Error('invalid_skill_exports');
     const result = await fn(args);
@@ -280,7 +356,15 @@ export class SkillManager {
     const idx = manifest.skills.findIndex((s) => s.name === normalized);
     if (idx < 0) throw new Error('skill_not_found');
     const [skill] = manifest.skills.splice(idx, 1);
-    if (skill?.filePath && fs.existsSync(skill.filePath)) fs.unlinkSync(skill.filePath);
+    
+    if (skill?.filePath && fs.existsSync(skill.filePath)) {
+      if (skill.isBundle && fs.statSync(skill.filePath).isDirectory()) {
+        fs.rmSync(skill.filePath, { recursive: true, force: true });
+      } else {
+        fs.unlinkSync(skill.filePath);
+      }
+    }
+    
     this.saveManifest(manifest);
     return { ok: true, name: normalized, removed: true };
   }

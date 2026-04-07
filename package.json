@@ -12,7 +12,7 @@
     "bootstrap": "node bootstrap.mjs",
     "test:self": "node tests/self-test-runner.mjs",
     "test:unit": "vitest run tests/unit",
-    "test:health": "node -e \"import('./src/core/self-test.mjs').then(m => new m.SelfTester({config:await import('./src/config.mjs').then(c=>c.loadConfig()),memory:await import('./src/memory/store.mjs').then(m=>new m.MemoryStore()),agent:null,browser:null}).runAll())\"",
+    "test:health": "node -e \"(async () => { const { SelfTestSuite } = await import('./src/core/self-test.mjs'); const { loadConfig } = await import('./src/config.mjs'); const { MemoryStore } = await import('./src/memory/store.mjs'); const tester = new SelfTestSuite({ config: await loadConfig(), memory: new MemoryStore(), agent: null, browser: null }); const summary = await tester.runAllTests(); console.log(JSON.stringify(summary, null, 2)); if (!summary.overallOk) process.exit(1); })()\"",
     "phase0:e2e": "node tests/phase0.e2e.mjs",
     "phase1:e2e": "node tests/phase1.e2e.mjs",
     "phase2:e2e": "node tests/phase2.e2e.mjs",
@@ -38,7 +38,11 @@
     "hf:pilot": "node scripts/hf-pilot-ingest.mjs",
     "deploy:gate": "pnpm test:all && node tests/self-test-runner.mjs",
     "smoke:check": "node scripts/smoke-check.mjs",
-    "smoke:ui:noauth": "node scripts/ui-smoke-noauth.mjs"
+    "smoke:ui:noauth": "node scripts/ui-smoke-noauth.mjs",
+    "test:e2e": "node --test tests/e2e/*.e2e.mjs",
+    "test:smoke": "node scripts/smoke-check.mjs && node scripts/smoke-audit.mjs && node scripts/smoke-verifier.mjs && node scripts/smoke-memory.mjs",
+    "test:all": "npm run test:unit && npm run test:e2e && npm run test:smoke",
+    "deploy:gate": "npm run test:all && echo '✅ Deployment gate passed'"
   },
   "dependencies": {
     "@mariozechner/pi-ai": "0.64.0",

@@ -4,6 +4,23 @@ All notable changes to OpenUnum are documented in this file.
 
 ---
 
+## [2.2.1] - 2026-04-07
+
+### Added
+- **Maintenance Directory** — Centralized legacy planning and temporary logs (`maintenance/`)
+- **Hardware Stabilization** — Created `qwen-stable` and `lfm-stable` CPU-only modelfiles for ROG Ally X to prevent ROCm/GPU driver crashes (`unspecified launch failure`)
+
+### Fixed
+- **Dataset Research Trigger** — Corrected regex in `extractRequirements` to properly identify high-intent dataset requests like "hugging face datasets" (`src/core/turn-recovery-summary.mjs`)
+- **Root Directory Cleanup** — Moved misplaced scripts to `scripts/` and roadmap to `docs/ROADMAP.md`
+- **System Stability** — Switched default model to `qwen-stable:latest` (Qwen 2.5 1.5B) to resolve chat timeouts and GPU-induced system restarts
+
+### Changed
+- **Server Modularization** — Extracted configuration and authentication logic from `src/server.mjs` into dedicated services (`src/server/services/config_service.mjs`, `src/server/services/auth_service.mjs`)
+- **Test Consolidation** — Merged `test/` directory into `tests/` for better organization
+
+---
+
 ## [2.2.0] - 2026-04-05
 
 ### Added

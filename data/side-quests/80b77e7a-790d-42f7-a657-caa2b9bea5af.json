@@ -1,0 +1,263 @@
+{
+  "questId": "80b77e7a-790d-42f7-a657-caa2b9bea5af",
+  "parentSessionId": "e3173364-f0bd-4ec9-bf41-a159a8b8e02e",
+  "childSessionId": "33e12fe2-7618-42bb-b1d7-c9494337d2d3",
+  "purpose": "repair",
+  "taskDescription": "Tool file_read failed 2 times. Last error: tool_circuit_open. Diagnose root cause and propose a fix or workaround.",
+  "status": "completed",
+  "createdAt": 1775553579075,
+  "startedAt": 1775553579086,
+  "completedAt": 1775553689155,
+  "result": {
+    "sessionId": "33e12fe2-7618-42bb-b1d7-c9494337d2d3",
+    "reply": "Turn timed out after 60000ms before the model produced a final response.\nTool actions executed so far: 2. Open execution trace for the latest results.\nRetry with a narrower prompt, fewer steps, or a faster model.\n\n📋 Progress: 0/3 (0%)",
+    "model": {
+      "provider": "xiaomimimo",
+      "model": "xiaomimimo/mimo-v2-pro",
+      "activeProvider": "openrouter",
+      "activeModel": "openrouter/qwen/qwen3-coder"
+    },
+    "trace": {
+      "provider": "openrouter",
+      "model": "openrouter/qwen/qwen3-coder",
+      "executionProfile": "structured-api-cloud",
+      "behaviorClass": "timeout_prone_deep_thinker",
+      "behaviorConfidence": 0.95,
+      "behaviorSource": "runtime_learned",
+      "memoryRecall": {
+        "error": "sid is not defined"
+      },
+      "intervention_trace": [],
+      "localRuntimeTask": false,
+      "uiCodeEditTask": false,
+      "executionEnvelope": {
+        "tier": "balanced",
+        "profile": {
+          "maxHistoryMessages": 520,
+          "maxToolIterations": 5,
+          "allowedTools": [],
+          "includeKernelTools": true
+        },
+        "enforceRestrictions": true,
+        "toolAllowlist": null,
+        "maxHistoryMessages": 520,
+        "maxToolIterations": 5,
+        "inferredParamsB": null,
+        "verySmallModel": false
+      },
+      "routedTools": [],
+      "iterations": [
+        {
+          "step": 1,
+          "toolCalls": [
+            {
+              "name": "shell_run",
+              "args": {
+                "cmd": "systemctl is-active openunum-agent"
+              },
+              "result": {
+                "ok": false,
+                "error": "tool_circuit_open",
+                "path": null,
+                "url": null,
+                "hookEventCount": 0
+              }
+            }
+          ],
+          "assistantText": ""
+        },
+        {
+          "step": 2,
+          "toolCalls": [
+            {
+              "name": "shell_run",
+              "args": {
+                "cmd": "ps aux | grep openunum"
+              },
+              "result": {
+                "ok": false,
+                "error": "tool_circuit_open",
+                "path": null,
+                "url": null,
+                "hookEventCount": 0
+              }
+            }
+          ],
+          "assistantText": ""
+        }
+      ],
+      "recoveryUsed": true,
+      "permissionDenials": [
+        {
+          "tool": "shell_run",
+          "reason": "tool_circuit_open",
+          "detail": "tool_circuit_open"
+        },
+        {
+          "tool": "shell_run",
+          "reason": "tool_circuit_open",
+          "detail": "tool_circuit_open"
+        }
+      ],
+      "toolStateTransitions": [
+        {
+          "at": "2026-04-07T09:19:42.075Z",
+          "tool": "shell_run",
+          "state": "scheduled",
+          "step": 1
+        },
+        {
+          "at": "2026-04-07T09:19:42.075Z",
+          "tool": "shell_run",
+          "state": "executing",
+          "step": 1
+        },
+        {
+          "at": "2026-04-07T09:19:42.080Z",
+          "tool": "shell_run",
+          "state": "error",
+          "step": 1,
+          "reason": "tool_circuit_open"
+        },
+        {
+          "at": "2026-04-07T09:19:43.738Z",
+          "tool": "shell_run",
+          "state": "scheduled",
+          "step": 2
+        },
+        {
+          "at": "2026-04-07T09:19:43.738Z",
+          "tool": "shell_run",
+          "state": "executing",
+          "step": 2
+        },
+        {
+          "at": "2026-04-07T09:19:43.745Z",
+          "tool": "shell_run",
+          "state": "error",
+          "step": 2,
+          "reason": "tool_circuit_open"
+        }
+      ],
+      "lowSignalPivotUsed": false,
+      "predictiveWarnings": [
+        {
+          "type": "error_rate_spike",
+          "severity": "critical",
+          "confidence": 0.95,
+          "currentValue": 94,
+          "threshold": 3,
+          "recommendation": "investigate_root_cause_immediately"
+        }
+      ],
+      "timedOut": true,
+      "timeoutMs": 60000,
+      "proofScorer": {
+        "score": 0.533,
+        "confident": false,
+        "evidence": [
+          "all_tools_succeeded",
+          "minimal_output",
+          "no_errors",
+          "no_verification",
+          "vague_claims"
+        ],
+        "breakdown": {
+          "toolSuccess": {
+            "weight": 0.25,
+            "ratio": 1,
+            "earned": 0.25
+          },
+          "outputSubstance": {
+            "weight": 0.2,
+            "maxChars": 15,
+            "earned": 0.05
+          },
+          "goalAlignment": {
+            "weight": 0.2,
+            "matched": 5,
+            "total": 16,
+            "earned": 0.0625
+          },
+          "noErrors": {
+            "weight": 0.15,
+            "errorCount": 0,
+            "earned": 0.15
+          },
+          "verificationDepth": {
+            "weight": 0.1,
+            "score": 0.1,
+            "earned": 0.010000000000000002
+          },
+          "claimSpecificity": {
+            "weight": 0.1,
+            "score": 0.1,
+            "earned": 0.010000000000000002
+          }
+        },
+        "toolCount": 2,
+        "threshold": 0.6,
+        "timestamp": "2026-04-07T09:21:29.019Z",
+        "decisionPoint": "isProofBackedDone"
+      },
+      "confidenceScorer": {
+        "score": 0.5,
+        "level": "medium",
+        "recommendation": "Consider additional verification"
+      },
+      "answerAssessment": {
+        "shape": "summary",
+        "score": 100,
+        "shouldReplace": false,
+        "evidenceResourceCount": 0,
+        "evidenceMentions": 0,
+        "unsupportedIds": [],
+        "requirements": {
+          "asksRanking": false,
+          "asksSteps": false,
+          "asksStatus": true,
+          "asksResearch": false,
+          "asksDataset": false,
+          "asksComparison": false
+        }
+      },
+      "pivotHints": [
+        "A tool circuit is open. Do not retry the same tool family immediately.",
+        "shell_run failed repeatedly. Switch method instead of repeating the same call.",
+        "Turn timed out. Narrow the scope or switch to a faster provider/model."
+      ],
+      "turnSummary": {
+        "toolRuns": 2,
+        "iterationCount": 2,
+        "permissionDenials": 2,
+        "routedTools": [],
+        "answerShape": "summary",
+        "answerScore": 100
+      }
+    },
+    "context": {
+      "budget": {
+        "contextLimit": 16000,
+        "usageTokens": 281,
+        "usagePct": 0.0175625,
+        "triggerPct": 0.7,
+        "targetPct": 0.4,
+        "hardFailPct": 0.9,
+        "overTrigger": false,
+        "overHardFail": false
+      },
+      "compaction": null
+    }
+  },
+  "condensedSummary": "Turn timed out after 60000ms before the model produced a final response.\nTool actions executed so far: 2. Open execution trace for the latest results.\nRetry with a narrower prompt, fewer steps, or a faster model.\n\n📋 Progress: 0/3 (0%)",
+  "metadata": {
+    "maxTokens": 4000,
+    "timeoutMs": 120000,
+    "modelOverride": null,
+    "toolsAllow": [
+      "file_read",
+      "exec",
+      "shell"
+    ]
+  }
+}

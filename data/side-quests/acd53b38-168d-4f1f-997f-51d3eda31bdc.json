@@ -1,0 +1,80 @@
+{
+  "questId": "acd53b38-168d-4f1f-997f-51d3eda31bdc",
+  "parentSessionId": "524de7eb-26c6-43f5-a276-efb0f83169f6",
+  "childSessionId": "9c5a7c2f-959b-457e-b4a9-e5db0526fc80",
+  "purpose": "repair",
+  "taskDescription": "Tool shell_run failed 2 times. Last error: tool_circuit_open. Diagnose root cause and propose a fix or workaround.",
+  "status": "completed",
+  "createdAt": 1775553639143,
+  "startedAt": 1775553639156,
+  "completedAt": 1775553682809,
+  "result": {
+    "sessionId": "9c5a7c2f-959b-457e-b4a9-e5db0526fc80",
+    "reply": "All configured providers failed.\nxiaomimimo: kind=rate_limited action=switch_provider error=OpenAI-compatible provider failed: 429 {\n    \"error\": {\n        \"code\": \"429\",\n        \"message\": \"Too many requests\",\n        \"type\": \"limitation\"\n    }\n}\n\n\n✅ Task complete!",
+    "model": {
+      "provider": "xiaomimimo",
+      "model": "xiaomimimo/mimo-v2-pro",
+      "activeProvider": "xiaomimimo",
+      "activeModel": "xiaomimimo/mimo-v2-pro"
+    },
+    "trace": {
+      "provider": "xiaomimimo",
+      "model": "xiaomimimo/mimo-v2-pro",
+      "routedTools": [
+        {
+          "tool": "shell_run",
+          "score": 1
+        }
+      ],
+      "iterations": [],
+      "failures": [
+        "xiaomimimo: kind=rate_limited action=switch_provider error=OpenAI-compatible provider failed: 429 {\n    \"error\": {\n        \"code\": \"429\",\n        \"message\": \"Too many requests\",\n        \"type\": \"limitation\"\n    }\n}\n"
+      ],
+      "providerFailures": [
+        {
+          "provider": "xiaomimimo",
+          "model": "xiaomimimo/mimo-v2-pro",
+          "attempt": 1,
+          "kind": "rate_limited",
+          "action": "switch_provider",
+          "cooldownMs": 120000,
+          "error": "OpenAI-compatible provider failed: 429 {\n    \"error\": {\n        \"code\": \"429\",\n        \"message\": \"Too many requests\",\n        \"type\": \"limitation\"\n    }\n}\n"
+        }
+      ],
+      "permissionDenials": [],
+      "pivotHints": [],
+      "turnSummary": {
+        "toolRuns": 0,
+        "iterationCount": 0,
+        "permissionDenials": 0,
+        "routedTools": [
+          "shell_run"
+        ]
+      }
+    },
+    "context": {
+      "budget": {
+        "contextLimit": 16000,
+        "usageTokens": 281,
+        "usagePct": 0.0175625,
+        "triggerPct": 0.7,
+        "targetPct": 0.4,
+        "hardFailPct": 0.9,
+        "overTrigger": false,
+        "overHardFail": false
+      },
+      "compaction": null
+    }
+  },
+  "condensedSummary": "All configured providers failed.\nxiaomimimo: kind=rate_limited action=switch_provider error=OpenAI-compatible provider failed: 429 {\n    \"error\": {\n        \"code\": \"429\",\n        \"message\": \"Too many requests\",\n        \"type\": \"limitation\"\n    }\n}\n\n\n✅ Task complete!",
+  "metadata": {
+    "maxTokens": 4000,
+    "timeoutMs": 120000,
+    "modelOverride": null,
+    "toolsAllow": [
+      "file_read",
+      "exec",
+      "shell"
+    ]
+  }
+}

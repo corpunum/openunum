@@ -54,13 +54,21 @@ function inferParamsB(text) {
 
 export function extractRequirements(userMessage = '') {
   const prompt = String(userMessage || '').toLowerCase();
+  
+  // Dataset/research requests need explicit action verbs or question patterns - not just keyword mentions
+  // This prevents false positives when user is quoting/critiquing a previous dataset response
+  const datasetActionPattern = /\b(recommend|find|search|list|show|suggest|get|fetch|pull|download|use|train on|evaluate with|check)\b.*(dataset|training data|benchmark data|hugging face)/;
+  const datasetQuestionPattern = /\b(what|which|where|how|can|should|could|recommend|suggest)\b.*\b(dataset|training data|benchmark|hugging face)\b/i;
+  const explicitDatasetAsk = /\b(show me|list|recommend|find me|check)\b.*(dataset|datasets|training data)/;
+  const datasetKeywordIntent = /\bhugging ?face\b.*\bdatasets?\b|\bdatasets? for (?:ai )?training\b/;
+
   return {
     asksModelRanking: /model|gguf|ollama|uncensor|unsensor|local/.test(prompt) && /top ?\d+|best|hardware|run/.test(prompt),
     asksRanking: /top ?\d+|best|rank|ranking|compare|which is better/.test(prompt),
     asksSteps: /\bhow\b|steps|guide|setup|configure|install|onboard|procedure/.test(prompt),
     asksStatus: /status|health|inspect|diagnose|check|report|what happened|why failed|why is/.test(prompt),
-    asksResearch: /research|find|search|compare|hugging ?face|datasets?|training data|benchmark|usable datasets|recommend datasets/.test(prompt),
-    asksDataset: /dataset|datasets|training data|benchmark data|planner\/tasks data|task data/.test(prompt),
+    asksResearch: (datasetActionPattern.test(prompt) || datasetQuestionPattern.test(prompt) || explicitDatasetAsk.test(prompt) || datasetKeywordIntent.test(prompt)) && /hugging ?face|dataset|training|benchmark/.test(prompt),
+    asksDataset: datasetActionPattern.test(prompt) || datasetQuestionPattern.test(prompt) || explicitDatasetAsk.test(prompt) || datasetKeywordIntent.test(prompt),
     asksComparison: /compare|comparison|versus|vs\b/.test(prompt),
     wantsLocal: /local|ollama|run for this hardware|run on this hardware|this hardware/.test(prompt),
     wantsUncensored: /uncensor|uncensored|unsensored|unsensor/.test(prompt),
@@ -343,7 +351,8 @@ function formatToolResultHuman(run) {
   }
   
   if (name === 'http_request') {
-    const status = Number(r.status) ?? '?';
+    const statusVal = Number(r.status);
+    const status = Number.isFinite(statusVal) ? statusVal : '?';
     const url = r.url ? clipText(new URL(r.url).hostname, 40) : '';
     return `${name}: ✅ HTTP ${status} ${url}`;
   }

@@ -1,0 +1,25 @@
+{
+  "questId": "d833d046-d127-4c9f-b7a9-06bfd0698c89",
+  "parentSessionId": "83b5cece-5683-4815-9354-ff980ee448f6",
+  "childSessionId": "ee0fad3b-79f9-4e70-b92c-4d07402c7a34",
+  "purpose": "repair",
+  "taskDescription": "Tool shell_run failed 2 times. Last error: tool_circuit_open. Diagnose root cause and propose a fix or workaround.",
+  "status": "failed",
+  "createdAt": 1775553566102,
+  "startedAt": 1775553566117,
+  "completedAt": 1775553686118,
+  "result": {
+    "error": "Quest timeout"
+  },
+  "condensedSummary": null,
+  "metadata": {
+    "maxTokens": 4000,
+    "timeoutMs": 120000,
+    "modelOverride": null,
+    "toolsAllow": [
+      "file_read",
+      "exec",
+      "shell"
+    ]
+  }
+}

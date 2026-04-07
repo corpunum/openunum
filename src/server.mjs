@@ -79,6 +79,8 @@ import { handleChatToolsRoute } from './server/routes/chat_tools.mjs';
 import { handleSkillsResearchRoute } from './server/routes/skills_research.mjs';
 import { handleCommandRoute, handleCommandsListRoute } from './server/routes/commands.mjs';
 import { loadBuiltinCommands } from './commands/loader.mjs';
+import { createConfigService } from './server/services/config_service.mjs';
+import { createAuthService } from './server/services/auth_service.mjs';
 import { createAuthJobsService } from './server/services/auth_jobs.mjs';
 import { createBrowserRuntimeService } from './server/services/browser_runtime.mjs';
 import { createTelegramRuntimeService } from './server/services/telegram_runtime.mjs';
@@ -86,8 +88,35 @@ import { createResearchRuntimeService } from './server/services/research_runtime
 import { createChatRuntimeService } from './server/services/chat_runtime.mjs';
 
 const config = loadConfig();
-normalizeModelSettings();
 const memory = new MemoryStore();
+
+const configService = createConfigService({
+  config,
+  PROVIDER_ORDER,
+  reloadConfigSecrets: () => reloadConfigSecrets()
+});
+const normalizeModelSettings = configService.normalizeModelSettings;
+const behaviorOverrideKey = configService.behaviorOverrideKey;
+const getProviderConfigPayload = configService.getProviderConfigPayload;
+const persistSecretUpdates = configService.persistSecretUpdates;
+
+normalizeModelSettings();
+
+const authService = createAuthService({
+  config,
+  PROVIDER_ORDER,
+  reloadConfigSecrets: () => reloadConfigSecrets()
+});
+const buildAuthMethodRows = authService.buildAuthMethodRows;
+const providerConnectionOverrides = authService.providerConnectionOverrides;
+const secretForService = authService.secretForService;
+const testProviderConnection = authService.testProviderConnection;
+const testServiceConnection = authService.testServiceConnection;
+const oauthCommandForService = authService.oauthCommandForService;
+const launchInTerminal = authService.launchInTerminal;
+const launchOauthCommand = authService.launchOauthCommand;
+const buildAuthCatalogPayload = authService.buildAuthCatalogPayload;
+
 const agent = new OpenUnumAgent({ config, memoryStore: memory });
 loadBuiltinCommands();
 const missions = new MissionRunner({ agent, memoryStore: memory, config });
@@ -151,33 +180,6 @@ const completeGoogleWorkspaceAuthJob = authJobsService.completeGoogleWorkspaceAu
 const getAuthJob = authJobsService.getAuthJob;
 const completeAuthJob = authJobsService.completeAuthJob;
 
-function normalizeModelSettings() {
-  config.model.provider = normalizeProviderId(config.model.provider);
-  config.model.providerModels = config.model.providerModels || {};
-  if (config.model.providerModels.generic && !config.model.providerModels.openai) {
-    config.model.providerModels.openai = String(config.model.providerModels.generic).replace(/^generic\//, 'openai/');
-  }
-  delete config.model.providerModels.generic;
-  config.model.openaiBaseUrl = config.model.openaiBaseUrl || config.model.genericBaseUrl || 'https://api.openai.com/v1';
-  config.model.openaiApiKey = config.model.openaiApiKey || config.model.genericApiKey || '';
-  config.model.xiaomimimoBaseUrl = config.model.xiaomimimoBaseUrl || 'https://token-plan-ams.xiaomimimo.com/v1';
-  config.model.xiaomimimoAnthropicBaseUrl = config.model.xiaomimimoAnthropicBaseUrl || 'https://token-plan-ams.xiaomimimo.com/anthropic';
-  config.model.genericBaseUrl = config.model.openaiBaseUrl;
-  config.model.genericApiKey = config.model.openaiApiKey;
-  config.model.model = String(config.model.model || '').replace(/^generic\//, 'openai/');
-  config.model.routing = config.model.routing || {};
-  config.model.routing.fallbackProviders = (config.model.routing.fallbackProviders || PROVIDER_ORDER)
-    .map((provider) => normalizeProviderId(provider))
-    .filter((provider, index, arr) => provider && arr.indexOf(provider) === index);
-  config.model.behaviorOverrides = config.model.behaviorOverrides || {};
-}
-
-function behaviorOverrideKey(provider, model) {
-  const p = normalizeProviderId(provider || 'ollama');
-  const m = String(model || '').trim().toLowerCase();
-  return `${p}::${m}`;
-}
-
 function reloadConfigSecrets() {
   const applied = applySecretsToConfig({ model: config.model, channels: config.channels });
   config.model = { ...config.model, ...(applied.model || {}) };
@@ -191,408 +193,9 @@ function reloadConfigSecrets() {
   normalizeModelSettings();
 }
 
-function getProviderConfigPayload() {
-  return {
-    ollamaBaseUrl: config.model.ollamaBaseUrl,
-    openrouterBaseUrl: config.model.openrouterBaseUrl,
-    nvidiaBaseUrl: config.model.nvidiaBaseUrl,
-    xiaomimimoBaseUrl: config.model.xiaomimimoBaseUrl,
-    xiaomimimoAnthropicBaseUrl: config.model.xiaomimimoAnthropicBaseUrl,
-    openaiBaseUrl: config.model.openaiBaseUrl || config.model.genericBaseUrl,
-    genericBaseUrl: config.model.openaiBaseUrl || config.model.genericBaseUrl,
-    hasOpenrouterApiKey: Boolean(config.model.openrouterApiKey),
-    hasNvidiaApiKey: Boolean(config.model.nvidiaApiKey),
-    hasXiaomimimoApiKey: Boolean(config.model.xiaomimimoApiKey),
-    hasOpenaiApiKey: Boolean(config.model.openaiApiKey || config.model.genericApiKey),
-    hasGenericApiKey: Boolean(config.model.openaiApiKey || config.model.genericApiKey)
-  };
-}
+// Services are now initialized above
 
-function persistSecretUpdates(secretUpdates = {}, clear = []) {
-  const currentStore = loadSecretStore();
-  const nextStore = mergeSecrets(currentStore, secretUpdates, clear);
-  saveSecretStore(nextStore);
-  reloadConfigSecrets();
-  return nextStore;
-}
-
-function buildAuthMethodRows(store, scan, cliStatus) {
-  const secrets = store.secrets || {};
-  const storedOpenAiOauth = getStoredOpenAICodexOAuth(store);
-  const effectiveOpenAiOauth = getEffectiveOpenAICodexOAuthStatus();
-  const storedGoogleOauth = getStoredGoogleWorkspaceOAuth(store);
-  const effectiveGoogleOauth = getEffectiveGoogleWorkspaceOAuthStatus();
-  const googleOauthConfig = getGoogleWorkspaceOAuthConfig(store);
-  return [
-    {
-      id: 'github',
-      display_name: 'GitHub',
-      auth_kind: 'token_or_oauth',
-      configured: Boolean(secrets.githubToken || cliStatus.github?.authenticated),
-      stored: Boolean(secrets.githubToken),
-      stored_preview: secretPreview(secrets.githubToken),
-      discovered: Boolean(scan.secrets.githubToken),
-      discovered_source: scan.sourceMap.githubToken || null,
-      cli: cliStatus.github
-    },
-    {
-      id: 'google-workspace',
-      display_name: 'Google Workspace',
-      auth_kind: 'oauth_native',
-      configured: Boolean(effectiveGoogleOauth.active),
-      stored: Boolean(storedGoogleOauth?.access),
-      stored_preview: secretPreview(storedGoogleOauth?.access),
-      discovered: Boolean(scan.oauthConfigs?.googleWorkspaceClientId),
-      discovered_source: scan.sourceMap.googleWorkspaceClientId || null,
-      cli: {
-        cli: 'openunum',
-        available: Boolean(googleOauthConfig.clientId),
-        authenticated: Boolean(effectiveGoogleOauth.active),
-        account: effectiveGoogleOauth.active?.email || null,
-        detail: effectiveGoogleOauth.active
-          ? 'authenticated'
-          : (googleOauthConfig.clientId ? 'client_id_saved' : 'client_id_missing')
-      },
-      oauth_client_id: googleOauthConfig.clientId || '',
-      oauth_client_id_preview: secretPreview(googleOauthConfig.clientId),
-      oauth_client_secret_preview: secretPreview(googleOauthConfig.clientSecret),
-      oauth_scopes: googleOauthConfig.scopes
-    },
-    {
-      id: 'huggingface',
-      display_name: 'HuggingFace',
-      auth_kind: 'api_key_or_cli',
-      configured: Boolean(secrets.huggingfaceApiKey || cliStatus.huggingface?.authenticated),
-      stored: Boolean(secrets.huggingfaceApiKey),
-      stored_preview: secretPreview(secrets.huggingfaceApiKey),
-      discovered: Boolean(scan.secrets.huggingfaceApiKey),
-      discovered_source: scan.sourceMap.huggingfaceApiKey || null,
-      cli: cliStatus.huggingface
-    },
-    {
-      id: 'elevenlabs',
-      display_name: 'ElevenLabs',
-      auth_kind: 'api_key',
-      configured: Boolean(secrets.elevenlabsApiKey),
-      stored: Boolean(secrets.elevenlabsApiKey),
-      stored_preview: secretPreview(secrets.elevenlabsApiKey),
-      discovered: Boolean(scan.secrets.elevenlabsApiKey),
-      discovered_source: scan.sourceMap.elevenlabsApiKey || null,
-      cli: cliStatus.elevenlabs
-    },
-    {
-      id: 'telegram',
-      display_name: 'Telegram',
-      auth_kind: 'bot_token',
-      configured: Boolean(secrets.telegramBotToken),
-      stored: Boolean(secrets.telegramBotToken),
-      stored_preview: secretPreview(secrets.telegramBotToken),
-      discovered: Boolean(scan.secrets.telegramBotToken),
-      discovered_source: scan.sourceMap.telegramBotToken || null,
-      cli: null
-    },
-    {
-      id: 'openai-oauth',
-      display_name: 'OpenAI Codex OAuth',
-      auth_kind: 'oauth_native',
-      configured: Boolean(effectiveOpenAiOauth.active),
-      stored: Boolean(storedOpenAiOauth?.access),
-      stored_preview: secretPreview(storedOpenAiOauth?.access || secrets.openaiOauthToken),
-      discovered: Boolean(scan.secrets.openaiOauthToken),
-      discovered_source: scan.sourceMap.openaiOauthToken || null,
-      cli: cliStatus.openclaw
-    },
-    {
-      id: 'github-copilot',
-      display_name: 'GitHub Copilot',
-      auth_kind: 'token',
-      configured: Boolean(secrets.copilotGithubToken),
-      stored: Boolean(secrets.copilotGithubToken),
-      stored_preview: secretPreview(secrets.copilotGithubToken),
-      discovered: Boolean(scan.secrets.copilotGithubToken),
-      discovered_source: scan.sourceMap.copilotGithubToken || null,
-      cli: null
-    }
-  ];
-}
-
-const PROVIDER_SECRET_FIELD = {
-  ollama: null,
-  nvidia: 'nvidiaApiKey',
-  openrouter: 'openrouterApiKey',
-  xiaomimimo: 'xiaomimimoApiKey',
-  openai: 'openaiApiKey'
-};
-
-const PROVIDER_BASE_FIELD = {
-  ollama: 'ollamaBaseUrl',
-  nvidia: 'nvidiaBaseUrl',
-  openrouter: 'openrouterBaseUrl',
-  xiaomimimo: 'xiaomimimoBaseUrl',
-  openai: 'openaiBaseUrl'
-};
-
-function providerConnectionOverrides(provider, body = {}) {
-  const normalized = normalizeProviderId(provider);
-  const baseField = PROVIDER_BASE_FIELD[normalized];
-  const secretField = PROVIDER_SECRET_FIELD[normalized];
-  return {
-    provider: normalized,
-    baseUrl: String(body.baseUrl || config.model?.[baseField] || '').trim(),
-    apiKey: secretField ? String(body.apiKey || config.model?.[secretField] || '').trim() : ''
-  };
-}
-
-function secretForService(service, providedSecret = '') {
-  const secret = String(providedSecret || '').trim();
-  if (secret) return secret;
-  const store = loadSecretStore();
-  const secrets = store.secrets || {};
-  const scan = scanLocalAuthSources();
-  if (service === 'github') return String(secrets.githubToken || '').trim();
-  if (service === 'huggingface') return String(secrets.huggingfaceApiKey || '').trim();
-  if (service === 'elevenlabs') return String(secrets.elevenlabsApiKey || '').trim();
-  if (service === 'telegram') return String(secrets.telegramBotToken || '').trim();
-  if (service === 'openai-oauth') return String(secrets.openaiOauthToken || scan.secrets.openaiOauthToken || '').trim();
-  if (service === 'github-copilot') return String(secrets.copilotGithubToken || '').trim();
-  return '';
-}
-
-async function testProviderConnection({ provider, baseUrl, apiKey }) {
-  const normalized = normalizeProviderId(provider);
-  let models = [];
-  if (normalized === 'ollama') models = await fetchOllamaModels(baseUrl);
-  else if (normalized === 'nvidia') models = await fetchNvidiaModels(baseUrl, apiKey);
-  else if (normalized === 'openrouter') models = await fetchOpenRouterModels(baseUrl, apiKey);
-  else models = await fetchOpenAIModels(baseUrl, apiKey);
-  return {
-    ok: true,
-    provider: normalized,
-    modelCount: models.length,
-    topModel: models[0]?.model_id || null,
-    status: 'healthy'
-  };
-}
-
-async function testServiceConnection({ service, secret }) {
-  const id = String(service || '').trim().toLowerCase();
-  const cli = getCliAuthStatus();
-  if (id === 'github') {
-    if (secret) {
-      const res = await fetch('https://api.github.com/user', {
-        headers: {
-          Authorization: `Bearer ${secret}`,
-          'User-Agent': 'openunum'
-        },
-        signal: AbortSignal.timeout(8000)
-      });
-      if (!res.ok) throw new Error(`github_test_failed:${res.status}`);
-      const data = await res.json();
-      return { ok: true, service: id, status: 'authenticated', account: data.login || null };
-    }
-    return {
-      ok: Boolean(cli.github?.authenticated),
-      service: id,
-      status: cli.github?.authenticated ? 'authenticated' : (cli.github?.available ? 'available' : 'unavailable'),
-      account: cli.github?.account || null,
-      detail: cli.github?.detail || null
-    };
-  }
-  if (id === 'google-workspace') {
-    const googleClient = new (await import('./tools/google-workspace.mjs')).GoogleWorkspaceClient(config);
-    const status = await googleClient.status();
-    return {
-      ok: Boolean(status.authenticated),
-      service: id,
-      status: status.authenticated ? 'authenticated' : (status.installed ? 'available' : 'unavailable'),
-      account: status.account || null,
-      detail: status.detail || null,
-      prerequisite: status.installed ? null : status.hint || 'Save a Google OAuth Desktop Client ID first.'
-    };
-  }
-  if (id === 'huggingface') {
-    if (secret) {
-      const res = await fetch('https://huggingface.co/api/whoami-v2', {
-        headers: { Authorization: `Bearer ${secret}` },
-        signal: AbortSignal.timeout(8000)
-      });
-      if (!res.ok) throw new Error(`huggingface_test_failed:${res.status}`);
-      const data = await res.json();
-      return { ok: true, service: id, status: 'authenticated', account: data.name || data.fullname || null };
-    }
-    return {
-      ok: Boolean(cli.huggingface?.authenticated),
-      service: id,
-      status: cli.huggingface?.authenticated ? 'authenticated' : (cli.huggingface?.available ? 'available' : 'unavailable'),
-      account: cli.huggingface?.account || null,
-      detail: cli.huggingface?.detail || null
-    };
-  }
-  if (id === 'elevenlabs') {
-    if (!secret) {
-      return {
-        ok: false,
-        service: id,
-        status: cli.elevenlabs?.available ? 'available' : 'unavailable',
-        detail: cli.elevenlabs?.detail || 'secret_required'
-      };
-    }
-    const res = await fetch('https://api.elevenlabs.io/v1/user', {
-      headers: { 'xi-api-key': secret },
-      signal: AbortSignal.timeout(8000)
-    });
-    if (!res.ok) throw new Error(`elevenlabs_test_failed:${res.status}`);
-    const data = await res.json();
-    return { ok: true, service: id, status: 'authenticated', account: data.subscription?.tier || data.email || null };
-  }
-  if (id === 'telegram') {
-    if (!secret) throw new Error('telegram_token_missing');
-    const res = await fetch(`https://api.telegram.org/bot${secret}/getMe`, { signal: AbortSignal.timeout(8000) });
-    if (!res.ok) throw new Error(`telegram_test_failed:${res.status}`);
-    const data = await res.json();
-    if (!data.ok) throw new Error(`telegram_test_failed:${data.description || 'unknown'}`);
-    return { ok: true, service: id, status: 'authenticated', account: data.result?.username || data.result?.first_name || null };
-  }
-  if (id === 'openai-oauth') {
-    if (!secret) throw new Error('openai_oauth_token_missing');
-    const res = await fetch('https://chatgpt.com/backend-api/wham/usage', {
-      headers: { Authorization: `Bearer ${secret}` },
-      signal: AbortSignal.timeout(8000)
-    });
-    if (!res.ok) throw new Error(`openai_oauth_test_failed:${res.status}`);
-    const data = await res.json();
-    return {
-      ok: true,
-      service: id,
-      status: 'authenticated',
-      account: data.plan_type || null,
-      detail: data.rate_limit?.primary_window ? 'usage endpoint reachable' : 'oauth token accepted'
-    };
-  }
-  if (id === 'github-copilot') {
-    if (!secret) throw new Error('copilot_token_missing');
-    const res = await fetch('https://api.github.com/user', {
-      headers: {
-        Authorization: `Bearer ${secret}`,
-        'User-Agent': 'openunum'
-      },
-      signal: AbortSignal.timeout(8000)
-    });
-    if (!res.ok) throw new Error(`github_copilot_test_failed:${res.status}`);
-    const data = await res.json();
-    return { ok: true, service: id, status: 'authenticated', account: data.login || null };
-  }
-  throw new Error(`unsupported_service:${id}`);
-}
-
-function oauthCommandForService(service) {
-  const id = String(service || '').trim().toLowerCase();
-  if (id === 'github') return 'gh auth login -w';
-  if (id === 'openai-oauth') return 'openclaw models auth login --provider openai-codex';
-  return null;
-}
-
-function launchInTerminal(cmd) {
-  const wrapped = `${cmd}; printf '\\n'; read -r -p 'Press Enter to close...' _`;
-  const candidates = [
-    ['x-terminal-emulator', ['-e', 'bash', '-lc', wrapped]],
-    ['gnome-terminal', ['--', 'bash', '-lc', wrapped]]
-  ];
-  for (const [bin, args] of candidates) {
-    try {
-      execSync(`command -v ${bin}`, { stdio: 'ignore' });
-    } catch {
-      continue;
-    }
-    try {
-      const child = spawn(bin, args, { detached: true, stdio: 'ignore' });
-      child.unref();
-      return { ok: true, started: true, command: cmd, launcher: bin, pid: child.pid };
-    } catch {
-      continue;
-    }
-  }
-  return { ok: false, started: false, error: 'terminal_not_available', command: cmd };
-}
-
-function launchOauthCommand(service) {
-  const cmd = oauthCommandForService(service);
-  if (!cmd) return { ok: false, started: false, error: 'oauth_not_supported' };
-  const cli = getCliAuthStatus();
-  if (service === 'github' && !cli.github?.available) return { ok: false, started: false, error: 'gh_not_available' };
-  if (service === 'openai-oauth' && !cli.openclaw?.available) {
-    return {
-      ok: false,
-      started: false,
-      error: 'openclaw_not_available',
-      prerequisite: 'Install or expose the `openclaw` CLI to launch the OpenAI Codex OAuth flow.'
-    };
-  }
-  return launchInTerminal(cmd);
-}
-
-async function buildAuthCatalogPayload() {
-  reloadConfigSecrets();
-  const [catalog] = await Promise.all([buildModelCatalog(config.model)]);
-  const store = loadSecretStore();
-  const scan = scanLocalAuthSources();
-  const cliStatus = getCliAuthStatus();
-  const effectiveOpenAiOauth = getEffectiveOpenAICodexOAuthStatus();
-  const providerKeyField = {
-    ollama: null,
-    nvidia: 'nvidiaApiKey',
-    openrouter: 'openrouterApiKey',
-    xiaomimimo: 'xiaomimimoApiKey',
-    openai: 'openaiApiKey'
-  };
-  const providerBaseField = {
-    ollama: 'ollamaBaseUrl',
-    nvidia: 'nvidiaBaseUrl',
-    openrouter: 'openrouterBaseUrl',
-    xiaomimimo: 'xiaomimimoBaseUrl',
-    openai: 'openaiBaseUrl'
-  };
-
-  return {
-    contract_version: AUTH_CATALOG_CONTRACT_VERSION,
-    secret_store_path: getSecretsPath(),
-    provider_order: [...PROVIDER_ORDER],
-    auth_targets: AUTH_TARGET_DEFS,
-    scanned_files: scan.filesScanned,
-    providers: catalog.providers.map((provider) => {
-      const keyField = providerKeyField[provider.provider];
-      const baseField = providerBaseField[provider.provider];
-      const storedValue = keyField ? store.secrets?.[keyField] : '';
-      const discoveredValue = keyField ? scan.secrets?.[keyField] : '';
-      return {
-        provider: provider.provider,
-        display_name: provider.display_name,
-        auth_kind: provider.provider === 'ollama' ? 'none' : 'api_key',
-        selected: catalog.selected?.provider === provider.provider,
-        status: provider.status,
-        degraded_reason: provider.degraded_reason,
-        base_url: config.model?.[baseField] || null,
-        base_url_source: scan.sourceMap?.[baseField] || null,
-        model_count: provider.models?.length || 0,
-        top_model: provider.models?.[0]?.model_id || null,
-        top_model_rank: provider.models?.[0]?.rank || null,
-        stored: Boolean(storedValue),
-        stored_preview: secretPreview(storedValue),
-        discovered: Boolean(discoveredValue),
-        discovered_source: keyField ? (scan.sourceMap?.[keyField] || null) : null,
-        auth_ready: provider.provider === 'ollama'
-          ? true
-          : provider.provider === 'openai'
-            ? Boolean(config.model?.[keyField] || effectiveOpenAiOauth.active)
-            : Boolean(config.model?.[keyField]),
-        auth_mode: provider.provider === 'openai' && effectiveOpenAiOauth.active && !config.model?.[keyField]
-          ? 'oauth'
-          : (provider.provider === 'ollama' ? 'none' : 'api_key')
-      };
-    }),
-    auth_methods: buildAuthMethodRows(store, scan, cliStatus)
-  };
-}
+// buildAuthCatalogPayload is now in authService
 
 function buildCapabilitiesPayload() {
   const dynamicProviders = [...new Set([

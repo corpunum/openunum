@@ -6,7 +6,7 @@ This map is implementation-accurate as of 2026-04-03.
 
 - `src/server.mjs`: HTTP API server and Web UI host
 - `src/server/routes/*.mjs`: extracted route handlers (health, ui, sessions, missions, model, auth, config, autonomy, chat/tools, browser, telegram, research)
-- `src/server/services/*.mjs`: extracted runtime helpers (chat, auth jobs, browser runtime, telegram runtime, research runtime)
+- `src/server/services/*.mjs`: extracted runtime helpers (chat, auth jobs, browser runtime, telegram runtime, research runtime, config service, auth service)
 - `src/core/agent.mjs`: provider chat loop, tool-call execution, trace generation
 - `src/core/missions.mjs`: autonomous mission runner with proof-aware completion
 - `src/core/goal-task-planner.mjs`: deterministic goal-to-task compiler for planner-backed autonomy

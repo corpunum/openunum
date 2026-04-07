@@ -1,0 +1,12 @@
+{
+  "userOrigin": "Say hello",
+  "planAgreed": "",
+  "contract": {
+    "successCriteria": "Task completed as specified",
+    "forbiddenDrift": [],
+    "requiredOutputs": []
+  },
+  "subplans": [],
+  "currentSubplanIndex": 0,
+  "createdAt": "2026-04-07T09:54:48.691Z"
+}

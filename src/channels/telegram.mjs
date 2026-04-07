@@ -147,18 +147,39 @@ export class TelegramChannel {
     return results;
   }
 
-  async pollOnce() {
-    const res = await fetch(this.api(`/getUpdates?timeout=20&offset=${this.offset}`));
-    if (!res.ok) throw new Error(`Telegram poll failed: ${res.status}`);
-    const data = await res.json();
-    const updates = data?.result || [];
-    for (const u of updates) {
-      this.offset = Math.max(this.offset, u.update_id + 1);
-      const msg = u.message?.text;
-      const chatId = u.message?.chat?.id;
-      if (!msg || !chatId) continue;
-      const reply = await this.onMessage(msg, `telegram:${chatId}`);
-      await this.send(chatId, reply);
+  async pollOnce(retryCount = 0, maxRetries = 3) {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 25000); // 25s timeout (slightly longer than poll timeout=20)
+    
+    try {
+      const res = await fetch(this.api(`/getUpdates?timeout=20&offset=${this.offset}`), {
+        signal: controller.signal
+      });
+      
+      if (!res.ok) {
+        throw new Error(`Telegram poll failed: ${res.status} ${res.statusText}`);
+      }
+      
+      const data = await res.json();
+      const updates = data?.result || [];
+      
+      for (const u of updates) {
+        this.offset = Math.max(this.offset, u.update_id + 1);
+        const msg = u.message?.text;
+        const chatId = u.message?.chat?.id;
+        if (!msg || !chatId) continue;
+        const reply = await this.onMessage(msg, `telegram:${chatId}`);
+        await this.send(chatId, reply);
+      }
+    } catch (err) {
+      if (retryCount < maxRetries) {
+        const delay = Math.pow(2, retryCount) * 1000; // Exponential backoff: 1s, 2s, 4s
+        await new Promise(r => setTimeout(r, delay));
+        return this.pollOnce(retryCount + 1, maxRetries);
+      }
+      throw err;
+    } finally {
+      clearTimeout(timeoutId);
     }
   }
 }

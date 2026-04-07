@@ -3,12 +3,14 @@ import { SelfEditPipeline } from './self-edit-pipeline.mjs';
 import { ModelScoutWorkflow } from './model-scout-workflow.mjs';
 import { TaskOrchestrator } from './task-orchestrator.mjs';
 import { GoalTaskPlanner } from './goal-task-planner.mjs';
+import { DaemonManager } from './daemon-manager.mjs';
 
 let workerOrchestrator = null;
 let selfEditPipeline = null;
 let modelScoutWorkflow = null;
 let taskOrchestrator = null;
 let goalTaskPlanner = null;
+let daemonManager = null;
 
 function syncWorkerOrchestrator(ctx) {
   if (!workerOrchestrator) {
@@ -107,4 +109,23 @@ export function getTaskOrchestrator(ctx) {
 
 export function getGoalTaskPlanner(ctx) {
   return syncGoalTaskPlanner(ctx);
+}
+
+function syncDaemonManager(ctx) {
+  if (!daemonManager) {
+    daemonManager = new DaemonManager({
+      toolRuntime: ctx.agent.toolRuntime,
+      memoryStore: ctx.memory,
+      workspaceRoot: ctx.config.runtime?.workspaceRoot || process.cwd()
+    });
+    daemonManager.startHealthLoop();
+  }
+  daemonManager.toolRuntime = ctx.agent.toolRuntime;
+  daemonManager.memoryStore = ctx.memory;
+  daemonManager.workspaceRoot = ctx.config.runtime?.workspaceRoot || process.cwd();
+  return daemonManager;
+}
+
+export function getDaemonManager(ctx) {
+  return syncDaemonManager(ctx);
 }

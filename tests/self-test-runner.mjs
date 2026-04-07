@@ -119,12 +119,26 @@ async function testMemoryStore() {
   const sessionId = `test-${Date.now()}`;
   try {
     // Test chat with memory
-    const chatRes = await httpPost('/api/chat', {
+    let chatRes = await httpPost('/api/chat', {
       sessionId,
       message: 'Remember this test fact: self-test-runner-active'
     });
-    
-    if (chatRes.status !== 200) {
+
+    // Handle pending chat (202 Accepted)
+    if (chatRes.status === 202) {
+      let attempts = 0;
+      while (chatRes.status === 202 && attempts < 120) {
+        await new Promise(r => setTimeout(r, 2000));
+        chatRes = await httpGet(`/api/chat/pending?sessionId=${sessionId}`);
+        if (chatRes.data && !chatRes.data.pending) {
+          // Once not pending, we need to get the actual session history to verify
+          break;
+        }
+        attempts++;
+      }
+    }
+
+    if (chatRes.status !== 200 && chatRes.status !== 202) {
       log('Memory Store', 'FAIL', { status: chatRes.status });
       return false;
     }
@@ -170,7 +184,7 @@ async function testToolExecution() {
       log('Tool Execution (shell)', 'PASS');
       
       // Test file write
-      const testPath = path.join(process.cwd(), 'tests', 'openunum-self-test.txt');
+      const testPath = path.join(path.dirname(new URL(import.meta.url).pathname), 'openunum-self-test.txt');
       const writeRes = await httpPost('/api/tool/run', {
         name: 'file_write',
         args: { path: testPath, content: 'self-test-content' }

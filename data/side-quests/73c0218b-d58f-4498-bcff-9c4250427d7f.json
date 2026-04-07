@@ -1,0 +1,23 @@
+{
+  "questId": "73c0218b-d58f-4498-bcff-9c4250427d7f",
+  "parentSessionId": "test-1775549918635",
+  "childSessionId": "a7271bde-3f34-46e9-b5af-a1d4f3bb9967",
+  "purpose": "repair",
+  "taskDescription": "Tool shell_run failed 2 times. Last error: Command failed: test\n. Diagnose root cause and propose a fix or workaround.",
+  "status": "pending",
+  "createdAt": 1775549954601,
+  "startedAt": null,
+  "completedAt": null,
+  "result": null,
+  "condensedSummary": null,
+  "metadata": {
+    "maxTokens": 4000,
+    "timeoutMs": 120000,
+    "modelOverride": null,
+    "toolsAllow": [
+      "file_read",
+      "exec",
+      "shell"
+    ]
+  }
+}

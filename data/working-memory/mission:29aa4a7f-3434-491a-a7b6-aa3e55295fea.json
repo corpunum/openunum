@@ -1,0 +1,12 @@
+{
+  "userOrigin": "Autonomous mission goal: Check if /tmp directory exists\nWorkspace root for file tools: /home/corp-unum/openunum. file_read/file_write/file_patch only work inside this root. Use shell_run for /tmp or other external paths.\nProvider path hint:\n- For local Ollama verification, prefer the local HTTP/JSON API over interactive `ollama run` if both are available, and use the `http_request` tool instead of `shell_run` with curl when possible.\nMission completion contract: generic-proof-v1. DONE is valid only when checkpoint + proof requirements are satisfied.\nExecution contract:\n- Do exactly one verified substep per turn.\n- Prefer shell-first local inspection for local-machine tasks.\n- If uncertain, inspect current state before choosing a tool.\n- If a route fails twice, pivot to a different route without asking for help.\n- Do not dump large logs into your answer; summarize proof from tool results.\nAt the end of this turn append exactly:\nCHECKPOINT: <one concise line>\nMISSION_STATUS: DONE\nor\nCHECKPOINT: <one concise line>\nMISSION_STATUS: CONTINUE",
+  "planAgreed": "Execute: check → Execute: run",
+  "contract": {
+    "successCriteria": "Complete all 2 steps",
+    "forbiddenDrift": [],
+    "requiredOutputs": []
+  },
+  "subplans": [],
+  "currentSubplanIndex": 0,
+  "createdAt": "2026-04-07T09:54:02.398Z"
+}

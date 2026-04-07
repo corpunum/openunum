@@ -1,0 +1,23 @@
+{
+  "questId": "e5877273-8dc5-4486-b43d-b3a71b6e5c5d",
+  "parentSessionId": "test-1775549918635",
+  "childSessionId": "c027acac-609e-4d11-8ee8-19f92f4b926a",
+  "purpose": "repair",
+  "taskDescription": "Tool file_write failed 2 times. Last error: Path outside workspace is blocked: /home/user/workspace/test-fact.txt. Diagnose root cause and propose a fix or workaround.",
+  "status": "pending",
+  "createdAt": 1775549964273,
+  "startedAt": null,
+  "completedAt": null,
+  "result": null,
+  "condensedSummary": null,
+  "metadata": {
+    "maxTokens": 4000,
+    "timeoutMs": 120000,
+    "modelOverride": null,
+    "toolsAllow": [
+      "file_read",
+      "exec",
+      "shell"
+    ]
+  }
+}

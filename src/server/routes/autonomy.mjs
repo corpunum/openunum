@@ -3,7 +3,8 @@ import {
   getSelfEditPipeline,
   getModelScoutWorkflow,
   getTaskOrchestrator,
-  getGoalTaskPlanner
+  getGoalTaskPlanner,
+  getDaemonManager
 } from '../../core/autonomy-registry.mjs';
 
 export async function handleAutonomyRoute({ req, res, url, ctx }) {
@@ -200,6 +201,66 @@ export async function handleAutonomyRoute({ req, res, url, ctx }) {
     const body = await ctx.parseBody(req);
     const out = await orchestrator.runTask(body || {});
     ctx.sendJson(res, out.ok ? 200 : 400, out);
+    return true;
+  }
+
+  // PHASE 4: Daemon Manager Routes (file watchers, processes, HTTP monitors)
+  if (req.method === 'GET' && url.pathname === '/api/autonomy/daemons') {
+    const daemonManager = getDaemonManager(ctx);
+    const limit = Number(url.searchParams.get('limit') || 50);
+    const type = url.searchParams.get('type') || null;
+    const state = url.searchParams.get('state') || null;
+    ctx.sendJson(res, 200, daemonManager.listDaemons({ type, state, limit }));
+    return true;
+  }
+
+  if (req.method === 'GET' && url.pathname === '/api/autonomy/daemons/status') {
+    const daemonManager = getDaemonManager(ctx);
+    const id = String(url.searchParams.get('id') || '').trim();
+    if (!id) {
+      ctx.sendJson(res, 400, { ok: false, error: 'id is required' });
+      return true;
+    }
+    const out = daemonManager.getDaemon(id);
+    ctx.sendJson(res, out.ok ? 200 : 404, out);
+    return true;
+  }
+
+  if (req.method === 'GET' && url.pathname === '/api/autonomy/daemons/stats') {
+    const daemonManager = getDaemonManager(ctx);
+    ctx.sendJson(res, 200, daemonManager.getStats());
+    return true;
+  }
+
+  if (req.method === 'POST' && url.pathname === '/api/autonomy/daemons/start') {
+    const daemonManager = getDaemonManager(ctx);
+    const body = await ctx.parseBody(req);
+    const out = await daemonManager.startDaemon(body || {});
+    ctx.sendJson(res, out.ok ? 200 : 400, out);
+    return true;
+  }
+
+  if (req.method === 'POST' && url.pathname === '/api/autonomy/daemons/stop') {
+    const daemonManager = getDaemonManager(ctx);
+    const body = await ctx.parseBody(req);
+    const out = await daemonManager.stopDaemon(body?.id);
+    ctx.sendJson(res, out.ok ? 200 : 404, out);
+    return true;
+  }
+
+  if (req.method === 'POST' && url.pathname === '/api/autonomy/daemons/restart') {
+    const daemonManager = getDaemonManager(ctx);
+    const body = await ctx.parseBody(req);
+    const out = await daemonManager.restartDaemon(body?.id);
+    ctx.sendJson(res, out.ok ? 200 : 404, out);
+    return true;
+  }
+
+  if (req.method === 'DELETE' && url.pathname === '/api/autonomy/daemons/remove') {
+    const daemonManager = getDaemonManager(ctx);
+    const body = await ctx.parseBody(req);
+    const out = daemonManager.removeDaemon(body?.id);
+    ctx.sendJson(res, out.ok ? 200 : 404, out);
     return true;
   }
 

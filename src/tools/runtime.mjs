@@ -6,6 +6,7 @@ import { pathToFileURL } from 'node:url';
 import { CDPBrowser } from '../browser/cdp.mjs';
 import { ExecutorDaemon } from './executor-daemon.mjs';
 import { SkillManager } from '../skills/manager.mjs';
+import { SkillFactory } from '../skills/factory.mjs';
 import { GoogleWorkspaceClient } from './google-workspace.mjs';
 import { ResearchManager } from '../research/manager.mjs';
 import { ExecutionPolicyEngine } from '../core/execution-policy-engine.mjs';
@@ -252,11 +253,13 @@ function parseOllamaListModelName(listOutput, ref) {
 }
 
 export class ToolRuntime {
-  constructor(config, memoryStore = null) {
+  constructor(config, memoryStore = null, chatRuntime = null) {
     this.config = config;
     this.memoryStore = memoryStore;
+    this.chatRuntime = chatRuntime;
     this.workspaceRoot = resolveWorkspaceRoot(config);
     this.skillManager = new SkillManager();
+    this.skillFactory = new SkillFactory(config, chatRuntime);
     this.googleWorkspace = new GoogleWorkspaceClient(config);
     this.researchManager = new ResearchManager({ config });
     this.toolCircuit = new Map();
@@ -486,6 +489,35 @@ export class ToolRuntime {
           name: 'desktop_xdotool',
           description: 'Run xdotool command for desktop control',
           parameters: { type: 'object', properties: { cmd: { type: 'string' } }, required: ['cmd'] }
+        }
+      },
+      {
+        type: 'function',
+        function: {
+          name: 'skill_forge',
+          description: 'Autonomously research and generate a high-quality Skill Bundle folder for a specific goal.',
+          parameters: {
+            type: 'object',
+            properties: {
+              goal: { type: 'string', description: 'What this skill should do' },
+              research: { type: 'boolean', description: 'Perform web research before generating' }
+            },
+            required: ['goal']
+          }
+        }
+      },
+      {
+        type: 'function',
+        function: {
+          name: 'skill_load',
+          description: 'Read a skill bundle documentation and inject its rules/knowledge into the current session context.',
+          parameters: {
+            type: 'object',
+            properties: {
+              name: { type: 'string', description: 'Name of the skill to load' }
+            },
+            required: ['name']
+          }
         }
       },
       {
@@ -1269,6 +1301,53 @@ export class ToolRuntime {
     }
     if (name === 'skill_list') {
       return { ok: true, skills: this.skillManager.listSkills() };
+    }
+    if (name === 'skill_forge') {
+      const budgetError = ensureBudget();
+      if (budgetError) return budgetError;
+      
+      let researchSummary = '';
+      if (args.research) {
+        const researchOut = await this.executeTool('browser_search', { query: `best practices for ${args.goal}` }, context);
+        researchSummary = researchOut.ok ? researchOut.stdout || researchOut.text : '';
+      }
+      
+      const generation = await this.skillFactory.generateBundle(args.goal, researchSummary);
+      if (!generation.ok) return generation;
+      
+      // Get name from SKILL.md or metadata
+      const nameMatch = generation.files['SKILL.md'].match(/name:\s*(\S+)/);
+      const skillName = nameMatch ? nameMatch[1] : `forged-${Date.now()}`;
+      
+      return this.skillManager.installSkillBundle({
+        name: skillName,
+        files: generation.files,
+        source: 'factory'
+      });
+    }
+    if (name === 'skill_load') {
+      const budgetError = ensureBudget();
+      if (budgetError) return budgetError;
+      
+      const bundle = await this.skillManager.loadSkillBundle(args.name);
+      if (!bundle) return { ok: false, error: 'skill_load_failed' };
+
+      // Inject into memory if available
+      if (this.memoryStore?.addMemoryArtifact) {
+        this.memoryStore.addMemoryArtifact({
+          sessionId: context.sessionId,
+          artifactType: 'skill_manual',
+          content: JSON.stringify(bundle.files),
+          sourceRef: args.name
+        });
+      }
+
+      return { 
+        ok: true, 
+        name: args.name, 
+        message: `Skill "${args.name}" rules loaded into context. Use its decision tree to guide your next actions.`,
+        files: Object.keys(bundle.files) 
+      };
     }
     if (name === 'skill_install') {
       return this.skillManager.installSkill(args || {});

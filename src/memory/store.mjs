@@ -1049,6 +1049,22 @@ export class MemoryStore {
       .reverse();
   }
 
+  getSession(sessionId) {
+    const summary = this.getSessionSummary(sessionId);
+    if (!summary) return null;
+    const messages = this.getMessages(sessionId, 1000);
+    return { ...summary, messages };
+  }
+
+  saveSession(session) {
+    if (!session || !session.id) return null;
+    this.ensureSession(session.id);
+    if (Array.isArray(session.messages)) {
+      return this.importSession({ sessionId: session.id, messages: session.messages });
+    }
+    return this.getSessionSummary(session.id);
+  }
+
   rememberFact(key, value) {
     this.db
       .prepare('INSERT INTO facts (key, value, created_at) VALUES (?, ?, ?)')

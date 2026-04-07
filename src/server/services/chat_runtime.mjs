@@ -21,19 +21,19 @@ export function createChatRuntimeService({ agent, saveConfig }) {
     const existing = pendingChats.get(sid);
     if (existing) return existing;
     const startedAt = new Date().toISOString();
-    const promise = agent.chat({ message, sessionId: sid })
+    const entry = { sessionId: sid, message, startedAt, promise: null, trace: null, interventions: [] };
+    entry.promise = agent.chat({ message, sessionId: sid })
       .then((out) => {
         saveConfig();
         // PHASE 3: Store trace in pending chat for retrieval
-        existing.trace = out.trace || null;
-        existing.interventions = out.trace?.interventions || [];
-        existing.completedAt = new Date().toISOString();
+        entry.trace = out.trace || null;
+        entry.interventions = out.trace?.interventions || [];
+        entry.completedAt = new Date().toISOString();
         return out;
       })
       .finally(() => {
         pendingChats.delete(sid);
       });
-    const entry = { sessionId: sid, message, startedAt, promise, trace: null, interventions: [] };
     pendingChats.set(sid, entry);
     return entry;
   }

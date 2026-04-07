@@ -1,0 +1,12 @@
+{
+  "userOrigin": "Remember this test fact: self-test-runner-active",
+  "planAgreed": "Execute: test",
+  "contract": {
+    "successCriteria": "Complete all 1 steps",
+    "forbiddenDrift": [],
+    "requiredOutputs": []
+  },
+  "subplans": [],
+  "currentSubplanIndex": 0,
+  "createdAt": "2026-04-07T07:55:17.394Z"
+}

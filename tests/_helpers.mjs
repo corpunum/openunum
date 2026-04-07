@@ -23,6 +23,7 @@ function clearTestPort() {
 
 export async function startServer() {
   clearTestPort();
+  await new Promise((resolve) => setTimeout(resolve, 1000));
   fs.rmSync(TEST_HOME, { recursive: true, force: true });
   const proc = spawn('node', ['src/server.mjs'], {
     cwd: process.cwd(),
@@ -53,7 +54,11 @@ export async function startServer() {
 export async function stopServer(proc) {
   if (!proc) return;
   proc.kill('SIGTERM');
-  await new Promise((resolve) => setTimeout(resolve, 300));
+  await new Promise((resolve) => setTimeout(resolve, 1000));
+  if (proc.exitCode == null) {
+    proc.kill('SIGKILL');
+    await new Promise((resolve) => setTimeout(resolve, 500));
+  }
 }
 
 export async function jget(path) {

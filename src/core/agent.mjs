@@ -49,6 +49,7 @@ import { PolicyLoader, buildSystemMessage } from './policy-loader.mjs';
 import { PredictiveFailureDetector } from './predictive-failure.mjs';
 import { TaskOrchestrator } from './task-orchestrator.mjs';
 import { WorkerOrchestrator } from './worker-orchestrator.mjs';
+import { DaemonManager } from './daemon-manager.mjs';
 import { logInfo, logError } from '../logger.mjs';
 
 function inferParamsB(modelId) {
@@ -568,6 +569,33 @@ function applyNoScrollbarUiFix(workspaceRoot) {
   return { ok: true, path: targetPath, changed: true };
 }
 
+export function isConversationalAliveQuestion(text) {
+  const t = String(text || '').toLowerCase().trim();
+  // Check for conversational questions about being alive/dead that shouldn't trigger tools
+  const alivePatterns = [
+    /^so you are alive\??$/,
+    /^are you (dead|alive)\??$/,
+    /^are you dead or alive\??$/,
+    /^so you are dead\??$/,
+    /.*\balive\b.*\?$/,
+    /.*\bdead\b.*\?$/
+  ];
+
+  // Additional check to make sure it's a conversational question, not a technical request
+  const technicalPatterns = [
+    'health', 'status', 'check', 'diagnose', 'monitor', 'debug', 'test', 'verify'
+  ];
+
+  // If it contains technical terms, it might be a legitimate health check request
+  const hasTechnicalTerms = technicalPatterns.some(term => t.includes(term));
+
+  if (hasTechnicalTerms) {
+    return false; // Let the normal classification handle it
+  }
+
+  return alivePatterns.some(pattern => pattern.test(t));
+}
+
 export class OpenUnumAgent {
   constructor({ config, memoryStore }) {
     this.config = config;
@@ -610,6 +638,15 @@ export class OpenUnumAgent {
       planner: null, // Optional: wire if planner exists
       workspaceRoot: config?.runtime?.workspaceRoot || process.cwd()
     });
+    
+    // PHASE 4: Initialize Daemon Manager (for background file watchers, processes, HTTP monitors)
+    this.daemonManager = new DaemonManager({
+      toolRuntime: this.toolRuntime,
+      memoryStore,
+      workspaceRoot: config?.runtime?.workspaceRoot || process.cwd()
+    });
+    // Start the health loop for daemon monitoring
+    this.daemonManager.startHealthLoop();
     
     // Initialize Policy Loader (hierarchical AGENTS.md loading)
     this.policyLoader = new PolicyLoader({
@@ -1698,6 +1735,32 @@ export class OpenUnumAgent {
           model: this.config.model.model,
           iterations: [],
           note: 'Model info response generated directly from runtime state.'
+        }
+      };
+    }
+
+    // Handle conversational questions about being alive/dead to prevent inappropriate tool execution
+    if (isConversationalAliveQuestion(message)) {
+      const reply = "Yes, I'm here and operational! I'm ready to help with any tasks you'd like me to work on. What would you like me to do?";
+      this.memoryStore.addMessage(sessionId, 'user', message);
+      this.memoryStore.addMessage(sessionId, 'assistant', reply);
+      for (const fact of extractAutomaticFacts({
+        message,
+        reply,
+        model: this.getCurrentModel(),
+        trace: null
+      })) {
+        this.memoryStore.rememberFact(fact.key, fact.value);
+      }
+      return {
+        sessionId,
+        reply,
+        model: this.getCurrentModel(),
+        trace: {
+          provider: this.config.model.provider,
+          model: this.config.model.model,
+          iterations: [],
+          note: 'Conversational alive/dead question handled directly'
         }
       };
     }
