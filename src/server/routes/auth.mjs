@@ -14,16 +14,7 @@ export async function handleAuthRoute({ req, res, url, ctx }) {
     if (typeof providerBaseUrls.ollamaBaseUrl === 'string' && providerBaseUrls.ollamaBaseUrl.trim()) ctx.config.model.ollamaBaseUrl = providerBaseUrls.ollamaBaseUrl.trim();
     if (typeof providerBaseUrls.openrouterBaseUrl === 'string' && providerBaseUrls.openrouterBaseUrl.trim()) ctx.config.model.openrouterBaseUrl = providerBaseUrls.openrouterBaseUrl.trim();
     if (typeof providerBaseUrls.nvidiaBaseUrl === 'string' && providerBaseUrls.nvidiaBaseUrl.trim()) ctx.config.model.nvidiaBaseUrl = providerBaseUrls.nvidiaBaseUrl.trim();
-    if (typeof providerBaseUrls.xiaomimimoBaseUrl === 'string' && providerBaseUrls.xiaomimimoBaseUrl.trim()) ctx.config.model.xiaomimimoBaseUrl = providerBaseUrls.xiaomimimoBaseUrl.trim();
-    if (typeof providerBaseUrls.xiaomimimoAnthropicBaseUrl === 'string' && providerBaseUrls.xiaomimimoAnthropicBaseUrl.trim()) {
-      ctx.config.model.xiaomimimoAnthropicBaseUrl = providerBaseUrls.xiaomimimoAnthropicBaseUrl.trim();
-    }
     if (typeof providerBaseUrls.openaiBaseUrl === 'string' && providerBaseUrls.openaiBaseUrl.trim()) ctx.config.model.openaiBaseUrl = providerBaseUrls.openaiBaseUrl.trim();
-    if (typeof body?.telegram?.enabled === 'boolean') {
-      ctx.config.channels.telegram = ctx.config.channels.telegram || {};
-      ctx.config.channels.telegram.enabled = body.telegram.enabled;
-    }
-
     ctx.persistSecretUpdates(secretUpdates, clear);
     if (oauthConfig.googleWorkspace && typeof oauthConfig.googleWorkspace === 'object') {
       ctx.saveGoogleWorkspaceOAuthConfig(ctx.normalizeGoogleWorkspaceOAuthConfig({
@@ -50,10 +41,6 @@ export async function handleAuthRoute({ req, res, url, ctx }) {
     if (scan.providerBaseUrls.ollamaBaseUrl && (overwriteBaseUrls || !ctx.config.model.ollamaBaseUrl)) ctx.config.model.ollamaBaseUrl = scan.providerBaseUrls.ollamaBaseUrl;
     if (scan.providerBaseUrls.openrouterBaseUrl && (overwriteBaseUrls || !ctx.config.model.openrouterBaseUrl)) ctx.config.model.openrouterBaseUrl = scan.providerBaseUrls.openrouterBaseUrl;
     if (scan.providerBaseUrls.nvidiaBaseUrl && (overwriteBaseUrls || !ctx.config.model.nvidiaBaseUrl)) ctx.config.model.nvidiaBaseUrl = scan.providerBaseUrls.nvidiaBaseUrl;
-    if (scan.providerBaseUrls.xiaomimimoBaseUrl && (overwriteBaseUrls || !ctx.config.model.xiaomimimoBaseUrl)) ctx.config.model.xiaomimimoBaseUrl = scan.providerBaseUrls.xiaomimimoBaseUrl;
-    if (scan.providerBaseUrls.xiaomimimoAnthropicBaseUrl && (overwriteBaseUrls || !ctx.config.model.xiaomimimoAnthropicBaseUrl)) {
-      ctx.config.model.xiaomimimoAnthropicBaseUrl = scan.providerBaseUrls.xiaomimimoAnthropicBaseUrl;
-    }
     if (scan.providerBaseUrls.openaiBaseUrl && (overwriteBaseUrls || !ctx.config.model.openaiBaseUrl)) ctx.config.model.openaiBaseUrl = scan.providerBaseUrls.openaiBaseUrl;
     ctx.saveConfig(ctx.config);
     ctx.agent.reloadTools();
@@ -62,7 +49,6 @@ export async function handleAuthRoute({ req, res, url, ctx }) {
       imported: {
         openrouterApiKey: Boolean(scan.secrets.openrouterApiKey),
         nvidiaApiKey: Boolean(scan.secrets.nvidiaApiKey),
-        xiaomimimoApiKey: Boolean(scan.secrets.xiaomimimoApiKey),
         openaiApiKey: Boolean(scan.secrets.openaiApiKey),
         githubToken: Boolean(scan.secrets.githubToken),
         huggingfaceApiKey: Boolean(scan.secrets.huggingfaceApiKey),

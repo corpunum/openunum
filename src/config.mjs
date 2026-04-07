@@ -20,7 +20,7 @@ function normalizeModelRef(provider, model) {
   const normalizedProvider = normalizeProviderId(provider);
   const raw = String(model || '').trim();
   if (!raw) return raw;
-  return raw.replace(/^(ollama|openrouter|nvidia|xiaomimimo|generic|openai)\//, `${normalizedProvider}/`);
+  return raw.replace(/^(ollama|openrouter|nvidia|generic|openai)\//, `${normalizedProvider}/`);
 }
 
 function normalizeModelConfig(model = {}) {
@@ -187,7 +187,6 @@ export function defaultConfig() {
         ollama: 'ollama/minimax-m2.7:cloud',
         openrouter: 'openrouter/openai/gpt-4o-mini',
         nvidia: 'nvidia/qwen/qwen3-coder-480b-a35b-instruct',
-        xiaomimimo: 'xiaomimimo/gpt-4o-mini',
         openai: 'openai/gpt-4o-mini'
       },
       contextHints: {
@@ -200,20 +199,17 @@ export function defaultConfig() {
       },
       routing: {
         fallbackEnabled: true,
-        fallbackProviders: ['ollama', 'nvidia', 'openrouter', 'xiaomimimo', 'openai'],
+        fallbackProviders: ['ollama', 'nvidia', 'openrouter', 'openai'],
         forcePrimaryProvider: false
       },
       behaviorOverrides: {},
       ollamaBaseUrl: process.env.OLLAMA_BASE_URL || 'http://127.0.0.1:11434',
       openrouterBaseUrl: process.env.OPENROUTER_BASE_URL || 'https://openrouter.ai/api/v1',
       nvidiaBaseUrl: process.env.NVIDIA_BASE_URL || 'https://integrate.api.nvidia.com/v1',
-      xiaomimimoBaseUrl: process.env.XIAOMIMIMO_BASE_URL || 'https://token-plan-ams.xiaomimimo.com/v1',
-      xiaomimimoAnthropicBaseUrl: process.env.XIAOMIMIMO_ANTHROPIC_BASE_URL || 'https://token-plan-ams.xiaomimimo.com/anthropic',
       openaiBaseUrl: process.env.OPENAI_BASE_URL || process.env.GENERIC_BASE_URL || 'https://api.openai.com/v1',
       genericBaseUrl: process.env.GENERIC_BASE_URL || process.env.OPENAI_BASE_URL || 'https://api.openai.com/v1',
       openrouterApiKey: '',
       nvidiaApiKey: '',
-      xiaomimimoApiKey: '',
       openaiApiKey: '',
       genericApiKey: ''
     },
@@ -272,7 +268,7 @@ export function loadConfig() {
   config = applySecretsToConfig(config);
   config.model = normalizeModelConfig(config.model);
   if (!config.model.routing.fallbackProviders?.length) {
-    config.model.routing.fallbackProviders = ['ollama', 'nvidia', 'openrouter', 'xiaomimimo', 'openai'];
+    config.model.routing.fallbackProviders = ['ollama', 'nvidia', 'openrouter', 'openai'];
   }
   return config;
 }

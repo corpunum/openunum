@@ -120,7 +120,6 @@ export function createAuthService({ config, PROVIDER_ORDER, reloadConfigSecrets 
     ollama: null,
     nvidia: 'nvidiaApiKey',
     openrouter: 'openrouterApiKey',
-    xiaomimimo: 'xiaomimimoApiKey',
     openai: 'openaiApiKey'
   };
 
@@ -128,7 +127,6 @@ export function createAuthService({ config, PROVIDER_ORDER, reloadConfigSecrets 
     ollama: 'ollamaBaseUrl',
     nvidia: 'nvidiaBaseUrl',
     openrouter: 'openrouterBaseUrl',
-    xiaomimimo: 'xiaomimimoBaseUrl',
     openai: 'openaiBaseUrl'
   };
 

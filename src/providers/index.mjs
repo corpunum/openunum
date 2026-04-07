@@ -41,14 +41,6 @@ export function buildProvider(config) {
       timeoutMs
     });
   }
-  if (provider === 'xiaomimimo') {
-    return new OpenAICompatibleProvider({
-      baseUrl: config.model.xiaomimimoBaseUrl,
-      apiKey: config.model.xiaomimimoApiKey,
-      model: normalizeProviderModelId('xiaomimimo', model),
-      timeoutMs
-    });
-  }
   if (provider === 'nvidia') {
     return new OpenAICompatibleProvider({
       baseUrl: config.model.nvidiaBaseUrl,

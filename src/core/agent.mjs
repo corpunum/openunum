@@ -77,7 +77,7 @@ function isModelInfoQuestion(text) {
 
 function normalizeModelForProvider(provider, model) {
   const normalizedProvider = String(provider || 'ollama').trim().toLowerCase() === 'generic' ? 'openai' : String(provider || 'ollama').trim().toLowerCase();
-  const raw = String(model || '').replace(/^(ollama|openrouter|nvidia|xiaomimimo|generic|openai)\//, '');
+  const raw = String(model || '').replace(/^(ollama|openrouter|nvidia|generic|openai)\//, '');
   return `${normalizedProvider}/${raw}`;
 }
 
@@ -87,7 +87,7 @@ function providerModelLabel(provider, model) {
   if (!p) return m;
   if (!m) return p;
   if (m.startsWith(`${p}/`)) return m;
-  if (/^(ollama|openrouter|nvidia|xiaomimimo|generic|openai)\//.test(m)) return m.replace(/^generic\//, 'openai/');
+  if (/^(ollama|openrouter|nvidia|generic|openai)\//.test(m)) return m.replace(/^generic\//, 'openai/');
   return `${p}/${m}`;
 }
 
@@ -207,7 +207,7 @@ function extractAutomaticFacts({ message = '', reply = '', model = null, trace =
 
   const preferencePatterns = [
     { regex: /\bi prefer\s+([^.\n]{2,80})/i, key: 'owner.preference.general' },
-    { regex: /\buse\s+(ollama|openai|openrouter|nvidia|xiaomimimo)\b/i, key: 'owner.preference.provider' },
+    { regex: /\buse\s+(ollama|openai|openrouter|nvidia|\b/i, key: 'owner.preference.provider' },
     { regex: /\b(?:avoid|don\'t use|do not use)\s+(browser|shell|telegram|email)\b/i, key: 'owner.preference.avoid_surface' }
   ];
   for (const pattern of preferencePatterns) {
@@ -352,7 +352,7 @@ const EXECUTION_PROFILES = [
     ]
   },
   {
-    match: ({ provider }) => provider === 'nvidia' || provider === 'openrouter' || provider === 'xiaomimimo',
+    match: ({ provider }) => provider === 'nvidia' || provider === 'openrouter' || ,
     name: 'structured-api-cloud',
     turnBudgetMs: 90000,
     maxIters: 4,
@@ -1050,7 +1050,7 @@ export class OpenUnumAgent {
       )
     );
     const baseTurnBudgetMs = executionProfile.turnBudgetMs || this.config.runtime?.agentTurnTimeoutMs || 420000;
-    const isCloudController = ['nvidia', 'openrouter', 'xiaomimimo', 'openai'].includes(String(provider || '').toLowerCase()) ||
+    const isCloudController = ['nvidia', 'openrouter', 'openai'].includes(String(provider || '').toLowerCase()) ||
       (String(provider || '').toLowerCase() === 'ollama' && /cloud/.test(String(model || '').toLowerCase()));
     const turnBudgetMs = localRuntimeTask && !isCloudController
       ? Math.max(baseTurnBudgetMs, 180000)

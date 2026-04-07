@@ -9,7 +9,6 @@ export const AUTH_CATALOG_CONTRACT_VERSION = '2026-04-01.auth-catalog.v1';
 export const SECRET_FIELD_LABELS = {
   openrouterApiKey: 'OpenRouter API Key',
   nvidiaApiKey: 'NVIDIA API Key',
-  xiaomimimoApiKey: 'XiaomiMimo API Key',
   openaiApiKey: 'OpenAI API Key',
   openaiOauthToken: 'OpenAI OAuth Token',
   githubToken: 'GitHub Token',
@@ -32,7 +31,6 @@ export const GOOGLE_WORKSPACE_DEFAULT_SCOPES = [
 export const AUTH_TARGET_DEFS = [
   { id: 'openrouterApiKey', display_name: 'OpenRouter', category: 'provider', auth_kind: 'api_key' },
   { id: 'nvidiaApiKey', display_name: 'NVIDIA', category: 'provider', auth_kind: 'api_key' },
-  { id: 'xiaomimimoApiKey', display_name: 'XiaomiMimo', category: 'provider', auth_kind: 'api_key' },
   { id: 'openaiApiKey', display_name: 'OpenAI', category: 'provider', auth_kind: 'api_key' },
   { id: 'openaiOauthToken', display_name: 'OpenAI OAuth', category: 'integration', auth_kind: 'oauth_token' },
   { id: 'githubToken', display_name: 'GitHub API', category: 'integration', auth_kind: 'token_or_oauth' },
@@ -63,7 +61,6 @@ function defaultSecrets() {
     secrets: {
       openrouterApiKey: '',
       nvidiaApiKey: '',
-      xiaomimimoApiKey: '',
       openaiApiKey: '',
       openaiOauthToken: '',
       githubToken: '',
@@ -449,9 +446,6 @@ export function scanLocalAuthSources() {
     setIfMissing(providerBaseUrls, 'nvidiaBaseUrl', openClaw?.models?.providers?.nvidia?.baseUrl, `${openClawConfigPath}:models.providers.nvidia.baseUrl`, sourceMap);
     setIfMissing(secrets, 'openrouterApiKey', openClaw?.models?.providers?.openrouter?.apiKey, `${openClawConfigPath}:models.providers.openrouter.apiKey`, sourceMap);
     setIfMissing(providerBaseUrls, 'openrouterBaseUrl', openClaw?.models?.providers?.openrouter?.baseUrl, `${openClawConfigPath}:models.providers.openrouter.baseUrl`, sourceMap);
-    setIfMissing(secrets, 'xiaomimimoApiKey', openClaw?.models?.providers?.xiaomimimo?.apiKey, `${openClawConfigPath}:models.providers.xiaomimimo.apiKey`, sourceMap);
-    setIfMissing(providerBaseUrls, 'xiaomimimoBaseUrl', openClaw?.models?.providers?.xiaomimimo?.baseUrl, `${openClawConfigPath}:models.providers.xiaomimimo.baseUrl`, sourceMap);
-    setIfMissing(providerBaseUrls, 'xiaomimimoAnthropicBaseUrl', openClaw?.models?.providers?.xiaomimimo?.anthropicBaseUrl, `${openClawConfigPath}:models.providers.xiaomimimo.anthropicBaseUrl`, sourceMap);
     setIfMissing(secrets, 'openaiApiKey', openClaw?.models?.providers?.openai?.apiKey, `${openClawConfigPath}:models.providers.openai.apiKey`, sourceMap);
     setIfMissing(providerBaseUrls, 'openaiBaseUrl', openClaw?.models?.providers?.openai?.baseUrl, `${openClawConfigPath}:models.providers.openai.baseUrl`, sourceMap);
     setIfMissing(providerBaseUrls, 'ollamaBaseUrl', openClaw?.models?.providers?.ollama?.baseUrl, `${openClawConfigPath}:models.providers.ollama.baseUrl`, sourceMap);
@@ -472,7 +466,6 @@ export function scanLocalAuthSources() {
     setIfMissing(secrets, 'openrouterApiKey', env.OPENROUTER_API_KEY, `${filePath}:OPENROUTER_API_KEY`, sourceMap);
     setIfMissing(secrets, 'nvidiaApiKey', env.NVIDIA_API_KEY || env.NVIDIA_NIM_API_KEY, `${filePath}:NVIDIA_API_KEY`, sourceMap);
     setIfMissing(secrets, 'openaiApiKey', env.OPENAI_API_KEY || env.GENERIC_API_KEY, `${filePath}:OPENAI_API_KEY`, sourceMap);
-    setIfMissing(secrets, 'xiaomimimoApiKey', env.XIAOMIMIMO_API_KEY, `${filePath}:XIAOMIMIMO_API_KEY`, sourceMap);
     setIfMissing(secrets, 'openaiOauthToken', env.OPENAI_OAUTH_TOKEN, `${filePath}:OPENAI_OAUTH_TOKEN`, sourceMap);
     setIfMissing(secrets, 'githubToken', env.GITHUB_TOKEN, `${filePath}:GITHUB_TOKEN`, sourceMap);
     setIfMissing(secrets, 'copilotGithubToken', env.COPILOT_GITHUB_TOKEN, `${filePath}:COPILOT_GITHUB_TOKEN`, sourceMap);
@@ -486,15 +479,12 @@ export function scanLocalAuthSources() {
     setIfMissing(providerBaseUrls, 'openrouterBaseUrl', env.OPENROUTER_BASE_URL, `${filePath}:OPENROUTER_BASE_URL`, sourceMap);
     setIfMissing(providerBaseUrls, 'nvidiaBaseUrl', env.NVIDIA_BASE_URL, `${filePath}:NVIDIA_BASE_URL`, sourceMap);
     setIfMissing(providerBaseUrls, 'openaiBaseUrl', env.OPENAI_BASE_URL || env.GENERIC_BASE_URL, `${filePath}:OPENAI_BASE_URL`, sourceMap);
-    setIfMissing(providerBaseUrls, 'xiaomimimoBaseUrl', env.XIAOMIMIMO_BASE_URL, `${filePath}:XIAOMIMIMO_BASE_URL`, sourceMap);
-    setIfMissing(providerBaseUrls, 'xiaomimimoAnthropicBaseUrl', env.XIAOMIMIMO_ANTHROPIC_BASE_URL, `${filePath}:XIAOMIMIMO_ANTHROPIC_BASE_URL`, sourceMap);
   }
 
   const envSource = 'process.env';
   setIfMissing(secrets, 'openrouterApiKey', process.env.OPENROUTER_API_KEY, `${envSource}:OPENROUTER_API_KEY`, sourceMap);
   setIfMissing(secrets, 'nvidiaApiKey', process.env.NVIDIA_API_KEY || process.env.NVIDIA_NIM_API_KEY, `${envSource}:NVIDIA_API_KEY`, sourceMap);
   setIfMissing(secrets, 'openaiApiKey', process.env.OPENAI_API_KEY || process.env.GENERIC_API_KEY, `${envSource}:OPENAI_API_KEY`, sourceMap);
-  setIfMissing(secrets, 'xiaomimimoApiKey', process.env.XIAOMIMIMO_API_KEY, `${envSource}:XIAOMIMIMO_API_KEY`, sourceMap);
   setIfMissing(secrets, 'openaiOauthToken', process.env.OPENAI_OAUTH_TOKEN, `${envSource}:OPENAI_OAUTH_TOKEN`, sourceMap);
   setIfMissing(secrets, 'githubToken', process.env.GITHUB_TOKEN, `${envSource}:GITHUB_TOKEN`, sourceMap);
   setIfMissing(secrets, 'copilotGithubToken', process.env.COPILOT_GITHUB_TOKEN, `${envSource}:COPILOT_GITHUB_TOKEN`, sourceMap);
@@ -508,8 +498,6 @@ export function scanLocalAuthSources() {
   setIfMissing(providerBaseUrls, 'openrouterBaseUrl', process.env.OPENROUTER_BASE_URL, `${envSource}:OPENROUTER_BASE_URL`, sourceMap);
   setIfMissing(providerBaseUrls, 'nvidiaBaseUrl', process.env.NVIDIA_BASE_URL, `${envSource}:NVIDIA_BASE_URL`, sourceMap);
   setIfMissing(providerBaseUrls, 'openaiBaseUrl', process.env.OPENAI_BASE_URL || process.env.GENERIC_BASE_URL, `${envSource}:OPENAI_BASE_URL`, sourceMap);
-  setIfMissing(providerBaseUrls, 'xiaomimimoBaseUrl', process.env.XIAOMIMIMO_BASE_URL, `${envSource}:XIAOMIMIMO_BASE_URL`, sourceMap);
-  setIfMissing(providerBaseUrls, 'xiaomimimoAnthropicBaseUrl', process.env.XIAOMIMIMO_ANTHROPIC_BASE_URL, `${envSource}:XIAOMIMIMO_ANTHROPIC_BASE_URL`, sourceMap);
 
   const openClawOauth = getOpenClawOauthStatus();
   for (const entry of openClawOauth.profiles) {
@@ -563,7 +551,6 @@ export function scrubSecretsFromConfig(config = {}) {
   if (!clone.channels.telegram) clone.channels.telegram = {};
   clone.model.openrouterApiKey = '';
   clone.model.nvidiaApiKey = '';
-  clone.model.xiaomimimoApiKey = '';
   clone.model.openaiApiKey = '';
   clone.model.genericApiKey = '';
   clone.channels.telegram.botToken = '';
@@ -579,7 +566,6 @@ export function applySecretsToConfig(config = {}) {
   const secrets = store.secrets || {};
   merged.model.openrouterApiKey = String(secrets.openrouterApiKey || process.env.OPENROUTER_API_KEY || merged.model.openrouterApiKey || '').trim();
   merged.model.nvidiaApiKey = String(secrets.nvidiaApiKey || process.env.NVIDIA_API_KEY || process.env.NVIDIA_NIM_API_KEY || merged.model.nvidiaApiKey || '').trim();
-  merged.model.xiaomimimoApiKey = String(secrets.xiaomimimoApiKey || process.env.XIAOMIMIMO_API_KEY || merged.model.xiaomimimoApiKey || '').trim();
   merged.model.openaiApiKey = String(secrets.openaiApiKey || process.env.OPENAI_API_KEY || process.env.GENERIC_API_KEY || merged.model.openaiApiKey || merged.model.genericApiKey || '').trim();
   merged.model.genericApiKey = merged.model.openaiApiKey;
   merged.channels.telegram.botToken = String(secrets.telegramBotToken || process.env.TELEGRAM_BOT_TOKEN || merged.channels.telegram.botToken || '').trim();
@@ -590,7 +576,6 @@ export function migrateLegacySecretsFromConfig(config = {}) {
   const legacy = {
     openrouterApiKey: config?.model?.openrouterApiKey || '',
     nvidiaApiKey: config?.model?.nvidiaApiKey || '',
-    xiaomimimoApiKey: config?.model?.xiaomimimoApiKey || '',
     openaiApiKey: config?.model?.openaiApiKey || config?.model?.genericApiKey || '',
     telegramBotToken: config?.channels?.telegram?.botToken || ''
   };
