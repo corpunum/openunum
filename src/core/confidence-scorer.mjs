@@ -42,6 +42,44 @@ export function scoreConfidence(action, evidence = {}) {
 }
 
 /**
+ * Gate an action based on confidence level and tool type
+ * @param {string} toolName - Name of the tool
+ * @param {number} confidence - Current confidence score (0-1)
+ * @param {string} tier - Execution tier (compact, balanced, full)
+ * @returns {{ blocked: boolean, reason?: string, requiresApproval?: boolean }}
+ */
+export function gateAction(toolName, confidence, tier) {
+  const MUTATING_TOOLS = new Set([
+    'file_write',
+    'file_patch',
+    'file_restore_last',
+    'shell_run',
+    'desktop_open',
+    'desktop_xdotool',
+    'skill_install',
+    'skill_approve',
+    'skill_execute',
+    'skill_uninstall',
+    'email_send',
+    'gworkspace_call',
+    'research_approve'
+  ]);
+
+  // Rule 1: If confidence < 0.3 AND tool is mutating → block, require approval
+  if (confidence < 0.3 && MUTATING_TOOLS.has(toolName)) {
+    return { blocked: true, reason: 'low_confidence_mutating', requiresApproval: true };
+  }
+
+  // Rule 2: If confidence < 0.5 AND tool is shell_run → block, require approval
+  if (confidence < 0.5 && toolName === 'shell_run') {
+    return { blocked: true, reason: 'low_confidence_shell', requiresApproval: true };
+  }
+
+  // Otherwise, allow
+  return { blocked: false };
+}
+
+/**
  * Score a "Done" claim specifically
  * @param {object} params - Evidence about the task
  * @returns {{ canClaimDone: boolean, score: number, blockers: string[] }}

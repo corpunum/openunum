@@ -131,17 +131,35 @@ export function defaultConfig() {
             'skill_list',
             'email_status',
             'research_list_recent'
-          ]
+          ],
+          odd: {
+            maxConfidenceRequired: 0.7,
+            allowedTools: ['file_read', 'http_request', 'browser_snapshot', 'skill_list', 'email_status', 'research_list_recent'],
+            blockedTools: ['file_write', 'shell_run', 'file_patch', 'desktop_open', 'desktop_xdotool'],
+            requireHumanApproval: true
+          }
         },
         balanced: {
           maxHistoryMessages: 520,
           maxToolIterations: 5,
-          allowedTools: []
+          allowedTools: [],
+          odd: {
+            maxConfidenceRequired: 0.5,
+            allowedTools: ['file_read', 'file_write', 'file_patch', 'http_request', 'browser_snapshot', 'browser_extract', 'shell_run'],
+            blockedTools: ['desktop_open', 'desktop_xdotool'],
+            requireHumanApproval: false
+          }
         },
         full: {
           maxHistoryMessages: 1200,
           maxToolIterations: 8,
-          allowedTools: []
+          allowedTools: [],
+          odd: {
+            maxConfidenceRequired: 0.3,
+            allowedTools: 'all',
+            blockedTools: [],
+            requireHumanApproval: false
+          }
         }
       },
       autonomyMasterAutoStart: false,
