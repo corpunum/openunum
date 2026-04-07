@@ -1,4 +1,5 @@
 import crypto from 'node:crypto';
+import { RoleModelResolver, roleModelRegistry } from './role-model-registry.mjs';
 
 function trim(value, fallback = '') {
   return String(value ?? fallback).trim();
@@ -69,6 +70,34 @@ export class GoalTaskPlanner {
     this.runtime = runtime;
     this.baseUrl = baseUrl;
     this.workspaceRoot = workspaceRoot;
+    this.roleResolver = new RoleModelResolver(roleModelRegistry);
+  }
+
+  /**
+   * Resolve appropriate model for a task type based on role-model registry
+   * @param {string} taskType - Task type (e.g., 'research', 'code_gen', 'file_ops')
+   * @param {string[]} availableModels - List of available model references
+   * @returns {{model: string|null, reason: string, minTier: string}}
+   */
+  resolveModelForTask(taskType, availableModels = []) {
+    const roleConfig = this.roleResolver.resolve(taskType);
+    const recommended = this.roleResolver.getRecommended(taskType, availableModels);
+
+    if (recommended.length > 0) {
+      return {
+        model: recommended[0],
+        reason: `Selected from recommended models for role '${taskType}'`,
+        minTier: roleConfig.minTier
+      };
+    }
+
+    // Fallback: pick first available model that meets tier requirement
+    // For now, just return null if no recommended models available
+    return {
+      model: null,
+      reason: `No recommended models available for role '${taskType}'`,
+      minTier: roleConfig.minTier
+    };
   }
 
   plan(payload = {}) {
