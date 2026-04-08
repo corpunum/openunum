@@ -11,11 +11,11 @@ All notable changes to OpenUnum are documented in this file.
 - Added defensive keyword-array handling in classifier scoring to prevent runtime exceptions from malformed/partial config.
 
 ### Changed
-- Extended fast small-talk lane to include short health-check phrases:
-  - `all good?`
-  - `you failed?`
-  - `are you ok?`
-- These now return immediate deterministic responses with zero tool calls.
+- Reworked fast small-talk handling into a framework-level low-intent heuristic lane:
+  - short utterance bounds (word/char limits),
+  - task/action signal suppression,
+  - code/path/noise suppression.
+  This avoids brittle phrase-by-phrase hardcoding and preserves normal routing for continuation/task intents.
 
 ### Added
 - Regression tests for deep-merge router config behavior and small-talk greeting classification.

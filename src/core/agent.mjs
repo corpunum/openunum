@@ -538,14 +538,15 @@ function toolRunFailed(result) {
 
 function deterministicGreetingReply(message) {
   const text = String(message || '').toLowerCase().replace(/[^\w\s]/g, ' ').replace(/\s+/g, ' ').trim();
-  if (/^all good$/.test(text)) return 'All good. Ready when you are.';
-  if (/^you failed$/.test(text)) return 'No failure on this turn. Ready to continue.';
-  if (/^are you (ok|okay|there)$/.test(text)) return 'Yes, I am here and ready.';
   if (/^good morning\b/.test(text)) return 'Good morning. How can I help?';
   if (/^good afternoon\b/.test(text)) return 'Good afternoon. How can I help?';
   if (/^good evening\b/.test(text)) return 'Good evening. How can I help?';
   if (/^(hi|hello|hey|yo|greetings)\b/.test(text)) return 'Hello. How can I help?';
   return '';
+}
+
+function deterministicLightChatReply() {
+  return 'Ready. Tell me what you want to do next.';
 }
 
 function touchedUiSourceFile(run) {
@@ -1977,8 +1978,16 @@ export class OpenUnumAgent {
     const fastAwarenessResult = fastAwarenessRouter.classify(message);
 
     // Deterministic ultra-fast greeting path: skip provider call entirely.
-    if (fastAwarenessResult?.category === 'greeting') {
-      const quick = deterministicGreetingReply(message);
+    if (fastAwarenessResult?.category === 'greeting' || fastAwarenessResult?.category === 'light-chat') {
+      const rawHistoryUserTurns = rawHistory.filter((m) => m.role === 'user').length;
+      const canFastReturn = fastAwarenessResult.category === 'greeting'
+        ? true
+        : rawHistoryUserTurns <= 4;
+      const quick = !canFastReturn
+        ? ''
+        : (fastAwarenessResult.category === 'greeting'
+            ? deterministicGreetingReply(message)
+            : deterministicLightChatReply());
       if (quick) {
         finalText = quick;
         trace = {

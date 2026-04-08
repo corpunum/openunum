@@ -79,7 +79,7 @@ const DEFAULT_CONFIG = {
 /**
  * Classification result shape
  * @typedef {Object} ClassificationResult
- * @property {string} category - 'greeting' | 'task-meta' | 'continuation' | 'external' | 'deep-inspect' | 'knowledge' | 'unknown'
+ * @property {string} category - 'greeting' | 'light-chat' | 'task-meta' | 'continuation' | 'external' | 'deep-inspect' | 'knowledge' | 'unknown'
  * @property {number} confidence - 0.0 to 1.0
  * @property {boolean} shouldShortCircuit - Whether to skip tool execution
  * @property {string} strategy - 'skip-retrieval' | 'hot-only' | 'indexed-only' | 'full-search' | 'deep-inspect'
@@ -210,6 +210,7 @@ export class FastAwarenessRouter {
     const deepInspectKeywords = Array.isArray(rules?.deepInspectKeywords) ? rules.deepInspectKeywords : [];
     const scores = {
       greeting: 0,
+      lightChat: 0,
       taskMeta: 0,
       continuation: 0,
       external: 0,
@@ -224,6 +225,9 @@ export class FastAwarenessRouter {
           scores.greeting = Math.max(scores.greeting, 0.92);
         }
       }
+    }
+    if (this._isLowIntentUtterance(normalized)) {
+      scores.lightChat = 0.9;
     }
 
     // Check each category - presence-based scoring with boost
@@ -269,7 +273,7 @@ export class FastAwarenessRouter {
    * @private
    */
   _determineStrategy({ normalized, isAboutCurrentTask, hasWorkingMemory, keywordScores }) {
-    const { greeting, taskMeta, continuation, external, deepInspect } = keywordScores;
+    const { greeting, lightChat, taskMeta, continuation, external, deepInspect } = keywordScores;
 
     if (this._isSimpleGreeting(normalized)) {
       return {
@@ -292,6 +296,19 @@ export class FastAwarenessRouter {
         strategy: 'skip-retrieval',
         reason: `greeting_keywords: ${greeting.toFixed(2)}`,
         matchedKeywords: { greeting },
+        recommendedTools: this.config.strategyTools['skip-retrieval'] || []
+      };
+    }
+
+    // Strategy 0.5: generic low-intent short utterance fast path
+    if (lightChat >= this.config.minConfidenceForSkip) {
+      return {
+        category: 'light-chat',
+        confidence: lightChat,
+        shouldShortCircuit: true,
+        strategy: 'skip-retrieval',
+        reason: `low_intent_short_utterance: ${lightChat.toFixed(2)}`,
+        matchedKeywords: { lightChat },
         recommendedTools: this.config.strategyTools['skip-retrieval'] || []
       };
     }
@@ -383,6 +400,7 @@ export class FastAwarenessRouter {
     for (const [category, factor] of Object.entries(adjustmentFactors)) {
       const scoreKey = category === 'task-meta' ? 'taskMeta' :
                        category === 'greeting' ? null :
+                       category === 'light-chat' ? null :
                        category === 'continuation' ? 'continuation' :
                        category === 'external' ? 'external' :
                        category === 'deep-inspect' ? 'deepInspect' : null;
@@ -447,7 +465,7 @@ export class FastAwarenessRouter {
   _recalculateAdjustmentFactors() {
     const factors = {};
     
-    for (const category of ['greeting', 'task-meta', 'continuation', 'external', 'deep-inspect', 'knowledge']) {
+    for (const category of ['greeting', 'light-chat', 'task-meta', 'continuation', 'external', 'deep-inspect', 'knowledge']) {
       const successes = this.learningData.successByCategory[category] || 0;
       const failures = this.learningData.failureByCategory[category] || 0;
       const total = successes + failures;
@@ -507,12 +525,22 @@ export class FastAwarenessRouter {
       /^good (morning|afternoon|evening)$/,
       /^hi [a-z]+$/,
       /^hello [a-z]+$/,
-      /^hey [a-z]+$/,
-      /^all good$/,
-      /^you failed$/,
-      /^are you (ok|okay|there)$/
+      /^hey [a-z]+$/
     ];
     return greetingPatterns.some((rx) => rx.test(text));
+  }
+
+  _isLowIntentUtterance(normalized) {
+    const text = String(normalized || '').trim();
+    if (!text) return false;
+    const words = text.split(/\s+/).filter(Boolean);
+    if (words.length > 5) return false;
+    if (text.length > 34) return false;
+    const hasTaskSignal = /\b(what|how|why|where|when|which|who|can you|please|show|list|check|fix|create|build|run|install|open|search|find|write|read|explain|configure|debug|error|trace|stack|app|runtime|model|provider|continue|proceed|next|keep going|go on|grep|file|files|web|latest|news|today|current)\b/.test(text);
+    if (hasTaskSignal) return false;
+    const hasCodeLike = /[\\/`$={}[\]<>]/.test(text) || /\d{2,}/.test(text);
+    if (hasCodeLike) return false;
+    return true;
   }
 
   /**

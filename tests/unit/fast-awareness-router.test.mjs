@@ -79,10 +79,15 @@ describe('FastAwarenessRouter', () => {
       it('should classify short health-check small-talk as greeting fast-path', () => {
         const r1 = router.classify('all good ?');
         const r2 = router.classify('you failed ?');
-        expect(r1.category).toBe('greeting');
+        expect(r1.category).toBe('light-chat');
         expect(r1.shouldShortCircuit).toBe(true);
-        expect(r2.category).toBe('greeting');
+        expect(r2.category).toBe('light-chat');
         expect(r2.shouldShortCircuit).toBe(true);
+      });
+
+      it('should not classify task-like short questions as light-chat', () => {
+        const r = router.classify('what is app ?');
+        expect(r.category).not.toBe('light-chat');
       });
     });
 
