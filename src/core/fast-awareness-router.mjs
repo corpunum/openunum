@@ -89,7 +89,20 @@ const DEFAULT_CONFIG = {
 
 export class FastAwarenessRouter {
   constructor(config = {}, workingMemory = null) {
-    this.config = { ...DEFAULT_CONFIG, ...config };
+    const userRules = config?.classificationRules || {};
+    const userStrategyTools = config?.strategyTools || {};
+    this.config = {
+      ...DEFAULT_CONFIG,
+      ...config,
+      classificationRules: {
+        ...DEFAULT_CONFIG.classificationRules,
+        ...userRules
+      },
+      strategyTools: {
+        ...DEFAULT_CONFIG.strategyTools,
+        ...userStrategyTools
+      }
+    };
     this.workingMemory = workingMemory;
     this.cache = new Map();  // Simple LRU-like cache for classification results
     this.classificationCount = 0;
@@ -190,6 +203,11 @@ export class FastAwarenessRouter {
    */
   _scoreKeywords(normalized) {
     const rules = this.config.classificationRules;
+    const greetingKeywords = Array.isArray(rules?.greetingKeywords) ? rules.greetingKeywords : [];
+    const taskMetaKeywords = Array.isArray(rules?.taskMetaKeywords) ? rules.taskMetaKeywords : [];
+    const continuationKeywords = Array.isArray(rules?.continuationKeywords) ? rules.continuationKeywords : [];
+    const externalKeywords = Array.isArray(rules?.externalKeywords) ? rules.externalKeywords : [];
+    const deepInspectKeywords = Array.isArray(rules?.deepInspectKeywords) ? rules.deepInspectKeywords : [];
     const scores = {
       greeting: 0,
       taskMeta: 0,
@@ -201,7 +219,7 @@ export class FastAwarenessRouter {
     if (this._isSimpleGreeting(normalized)) {
       scores.greeting = 0.98;
     } else {
-      for (const kw of rules.greetingKeywords) {
+      for (const kw of greetingKeywords) {
         if (normalized === kw || normalized.startsWith(`${kw} `)) {
           scores.greeting = Math.max(scores.greeting, 0.92);
         }
@@ -209,26 +227,26 @@ export class FastAwarenessRouter {
     }
 
     // Check each category - presence-based scoring with boost
-    for (const kw of rules.taskMetaKeywords) {
+    for (const kw of taskMetaKeywords) {
       if (normalized.includes(kw)) {
         // Base score for presence + boost for phrase length
         scores.taskMeta = Math.max(scores.taskMeta, 0.75 + 0.05 * kw.split(' ').length);
       }
     }
 
-    for (const kw of rules.continuationKeywords) {
+    for (const kw of continuationKeywords) {
       if (normalized.includes(kw)) {
         scores.continuation = Math.max(scores.continuation, 0.75 + 0.05 * kw.split(' ').length);
       }
     }
 
-    for (const kw of rules.externalKeywords) {
+    for (const kw of externalKeywords) {
       if (normalized.includes(kw)) {
         scores.external = Math.max(scores.external, 0.75 + 0.05 * kw.split(' ').length);
       }
     }
 
-    for (const kw of rules.deepInspectKeywords) {
+    for (const kw of deepInspectKeywords) {
       if (normalized.includes(kw)) {
         scores.deepInspect = Math.max(scores.deepInspect, 0.75 + 0.05 * kw.split(' ').length);
       }
@@ -489,7 +507,10 @@ export class FastAwarenessRouter {
       /^good (morning|afternoon|evening)$/,
       /^hi [a-z]+$/,
       /^hello [a-z]+$/,
-      /^hey [a-z]+$/
+      /^hey [a-z]+$/,
+      /^all good$/,
+      /^you failed$/,
+      /^are you (ok|okay|there)$/
     ];
     return greetingPatterns.some((rx) => rx.test(text));
   }

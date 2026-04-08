@@ -4,6 +4,24 @@ All notable changes to OpenUnum are documented in this file.
 
 ---
 
+## [2.3.3] - 2026-04-08
+
+### Fixed
+- Resolved router crash on non-greeting turns caused by partial `classificationRules` overrides (`rules.greetingKeywords is not iterable`) by deep-merging router config defaults.
+- Added defensive keyword-array handling in classifier scoring to prevent runtime exceptions from malformed/partial config.
+
+### Changed
+- Extended fast small-talk lane to include short health-check phrases:
+  - `all good?`
+  - `you failed?`
+  - `are you ok?`
+- These now return immediate deterministic responses with zero tool calls.
+
+### Added
+- Regression tests for deep-merge router config behavior and small-talk greeting classification.
+
+---
+
 ## [2.3.2] - 2026-04-08
 
 ### Fixed

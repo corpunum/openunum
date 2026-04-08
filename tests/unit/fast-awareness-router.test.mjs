@@ -42,6 +42,17 @@ describe('FastAwarenessRouter', () => {
       expect(r.config.minConfidenceForHotOnly).toBe(0.70);
     });
 
+    it('should deep-merge classificationRules so new default keyword buckets remain available', () => {
+      const r = createFastAwarenessRouter({
+        classificationRules: {
+          taskMetaKeywords: ['current task']
+        }
+      });
+      const result = r.classify('all good ?');
+      expect(result).toBeTruthy();
+      expect(typeof result.category).toBe('string');
+    });
+
     it('should accept working memory reference', () => {
       const memory = new MockWorkingMemory();
       const r = createFastAwarenessRouter({}, memory);
@@ -63,6 +74,15 @@ describe('FastAwarenessRouter', () => {
         const result = router.classify('Good morning');
         expect(result.category).toBe('greeting');
         expect(result.shouldShortCircuit).toBe(true);
+      });
+
+      it('should classify short health-check small-talk as greeting fast-path', () => {
+        const r1 = router.classify('all good ?');
+        const r2 = router.classify('you failed ?');
+        expect(r1.category).toBe('greeting');
+        expect(r1.shouldShortCircuit).toBe(true);
+        expect(r2.category).toBe('greeting');
+        expect(r2.shouldShortCircuit).toBe(true);
       });
     });
 

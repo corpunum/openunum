@@ -538,6 +538,9 @@ function toolRunFailed(result) {
 
 function deterministicGreetingReply(message) {
   const text = String(message || '').toLowerCase().replace(/[^\w\s]/g, ' ').replace(/\s+/g, ' ').trim();
+  if (/^all good$/.test(text)) return 'All good. Ready when you are.';
+  if (/^you failed$/.test(text)) return 'No failure on this turn. Ready to continue.';
+  if (/^are you (ok|okay|there)$/.test(text)) return 'Yes, I am here and ready.';
   if (/^good morning\b/.test(text)) return 'Good morning. How can I help?';
   if (/^good afternoon\b/.test(text)) return 'Good afternoon. How can I help?';
   if (/^good evening\b/.test(text)) return 'Good evening. How can I help?';
