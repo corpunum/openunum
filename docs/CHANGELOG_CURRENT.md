@@ -13,6 +13,17 @@ Date: 2026-04-07
   - `src/core/autonomy-coordinator.mjs` -> `maintenance/autonomy-coordinator.legacy.mjs`
 - Updated docs index and audit status to reflect archive/canonicalization progress.
 
+## Phase 2 Stability Additions (2026-04-08)
+
+**Status:** ✅ Implemented and test-gated
+
+- Added autonomy master recovery e2e assertion:
+  - `tests/e2e/autonomy-master-recovery.e2e.mjs`
+- Added docs index freshness check command:
+  - `pnpm docs:index:check`
+  - `scripts/docs-index-freshness-check.mjs`
+- Added CI gate step in `.github/workflows/phase-gates.yml` to enforce docs index freshness.
+
 ## Phase 0 Closure Slice: Runtime Wiring + Gates + UI Diagnostics (2026-04-08)
 
 **Status:** ✅ Implemented and test-gated

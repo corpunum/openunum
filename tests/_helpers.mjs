@@ -4,7 +4,8 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
-const TEST_PORT = Number(process.env.OPENUNUM_TEST_PORT || 18881);
+const DEFAULT_DYNAMIC_PORT = 18000 + (process.pid % 2000);
+const TEST_PORT = Number(process.env.OPENUNUM_TEST_PORT || DEFAULT_DYNAMIC_PORT);
 const TEST_HOME = path.join(os.tmpdir(), `openunum-test-home-${TEST_PORT}`);
 
 function clearTestPort() {

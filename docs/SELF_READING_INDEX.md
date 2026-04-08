@@ -1,7 +1,5 @@
 # Self Reading Index
 
-Generated: 2026-04-08T09:37:51.001Z
-
 Purpose: curated file map for autonomous code/docs self-reading and update workflows.
 
 ## Core Runtime
@@ -26,7 +24,7 @@ Purpose: curated file map for autonomous code/docs self-reading and update workf
 
 ## Testing and Gates
 
-- ✅ `docs/TESTING.md` (270 lines)
+- ✅ `docs/TESTING.md` (273 lines)
 - ✅ `scripts/docs-completion-gate.mjs` (50 lines)
 - ✅ `scripts/smoke-isolated.mjs` (89 lines)
 - ✅ `scripts/session-imitation-regression.mjs` (84 lines)
@@ -37,5 +35,5 @@ Purpose: curated file map for autonomous code/docs self-reading and update workf
 - ✅ `BRAIN.MD` (190 lines)
 - ✅ `docs/AGENT_ONBOARDING.md` (401 lines)
 - ✅ `docs/ROADMAP.md` (165 lines)
-- ✅ `CHANGELOG.md` (266 lines)
+- ✅ `CHANGELOG.md` (281 lines)
 

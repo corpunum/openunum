@@ -4,6 +4,21 @@ All notable changes to OpenUnum are documented in this file.
 
 ---
 
+## [2.2.8] - 2026-04-08
+
+### Added
+- E2E recovery assertion for autonomy master cycle:
+  - `tests/e2e/autonomy-master-recovery.e2e.mjs`
+- Docs index freshness checker:
+  - `scripts/docs-index-freshness-check.mjs`
+  - npm command `pnpm docs:index:check`
+
+### Changed
+- CI phase-gates workflow now enforces docs index freshness.
+- Master phases plan updated with Phase 2 stability tasks completed.
+
+---
+
 ## [2.2.7] - 2026-04-08
 
 ### Added

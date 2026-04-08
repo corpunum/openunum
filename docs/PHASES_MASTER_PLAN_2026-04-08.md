@@ -35,8 +35,8 @@ Goals:
 
 Tasks:
 - [x] Route-level runtime-state wiring unit tests.
-- [ ] Add autonomy-master recovery e2e assertion.
-- [ ] Add CI check for docs index freshness (`pnpm docs:index` drift).
+- [x] Add autonomy-master recovery e2e assertion.
+- [x] Add CI check for docs index freshness (`pnpm docs:index` drift).
 
 Exit criteria:
 - critical runtime contracts tested and stable

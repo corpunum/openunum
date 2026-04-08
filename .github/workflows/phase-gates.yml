@@ -28,6 +28,9 @@ jobs:
       - name: Docs Gate
         run: pnpm docs:gate
 
+      - name: Docs Index Freshness
+        run: pnpm docs:index:check
+
       - name: Unit Tests
         run: pnpm test:unit
 

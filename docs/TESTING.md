@@ -12,6 +12,7 @@ Comprehensive testing documentation for the OpenUnum project.
 | **Smoke (Live Service)** | `npm run test:smoke:live` | Quick API health checks against the currently running service |
 | **Session Imitation** | `npm run test:imitation` | Replays chat-session recovery patterns against self-monitor continuation logic |
 | **Docs Gate** | `npm run docs:gate` | Fails when code changed without documentation updates |
+| **Docs Index Freshness** | `npm run docs:index:check` | Fails when `docs/SELF_READING_INDEX.md` is stale vs generator output |
 | **Compact Profile Gate** | `npm run gate:compact-profile` | Enforces `phase0:check` when compact-profile/4B-sensitive surfaces changed |
 | **All** | `npm run test:all` | Run complete test battery |
 
@@ -55,6 +56,7 @@ End-to-end tests validating complete system workflows:
 | `verifier.e2e.mjs` | Verifier API contract, state-change verification, tool-result verification |
 | `audit-logging.e2e.mjs` | Chain integrity, trace reconstruction, tamper detection, export formats, privacy hashing |
 | `odd-enforcement.e2e.mjs` | ODD definitions, mode enforcement, confidence thresholds, escalation paths, mode transitions |
+| `autonomy-master-recovery.e2e.mjs` | Autonomy master cycle returns health + recovery contract on degraded runtime |
 | `runtime-wiring-routes.test.mjs` | Route-level runtime contract wiring for mission/session responses |
 
 **Location:** `tests/e2e/`  
@@ -131,6 +133,7 @@ npm run test:e2e
 npm run test:smoke
 npm run test:smoke:live
 npm run test:imitation
+npm run docs:index:check
 npm run gate:compact-profile
 
 # Individual E2E test file

@@ -67,8 +67,6 @@ function build() {
   const lines = [];
   lines.push('# Self Reading Index');
   lines.push('');
-  lines.push(`Generated: ${new Date().toISOString()}`);
-  lines.push('');
   lines.push('Purpose: curated file map for autonomous code/docs self-reading and update workflows.');
   lines.push('');
 
