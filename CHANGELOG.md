@@ -4,6 +4,21 @@ All notable changes to OpenUnum are documented in this file.
 
 ---
 
+## [2.3.33] - 2026-04-08
+
+### Changed
+- Phase 6 fast-path refinement:
+  - upgraded low-intent/greeting detection in `src/core/fast-awareness-router.mjs` to feature-scored heuristics with stronger task/code penalties (reduced keyword-only behavior).
+  - added trace latency budget reporting in `src/core/agent.mjs` (`trace.latencyBudget`) with per-stage and path-aware thresholds.
+
+### Added
+- Phase 7 protective regression:
+  - extended `phase46.webui-mission-create-open.e2e.mjs` to assert mission stop lifecycle call path.
+  - added `phase47.chat-latency-budget.e2e.mjs` to enforce latency-budget telemetry contract on `/api/chat`.
+  - wired `phase47` into `pnpm e2e` and CI core e2e gate.
+
+---
+
 ## [2.3.32] - 2026-04-08
 
 ### Changed

@@ -39,6 +39,7 @@ try {
     finishedAt: null
   };
   let missionStartCalls = 0;
+  let missionStopCalls = 0;
 
   await page.route(/\/api\/missions(?:\/.*)?(?:\?.*)?$/, async (route) => {
     const req = route.request();
@@ -51,6 +52,16 @@ try {
         status: 200,
         contentType: 'application/json',
         body: JSON.stringify({ ok: true, id: mission.id, sessionId: mission.sessionId })
+      });
+      return;
+    }
+    if (method === 'POST' && url.pathname === '/api/missions/stop') {
+      missionStopCalls += 1;
+      mission.status = 'stopping';
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ ok: true, id: mission.id, status: mission.status })
       });
       return;
     }
@@ -141,6 +152,10 @@ try {
     const chatMeta = String(await page.locator('#chatMeta').textContent() || '');
     return chatMeta.includes(mission.sessionId);
   }, 10000);
+
+  await page.click('.menu-btn[data-view="missions"]');
+  await page.click('#stopMission');
+  await waitForCondition(async () => missionStopCalls > 0, 8000);
 
   await page.close();
   console.log('phase46.webui-mission-create-open.e2e: ok');

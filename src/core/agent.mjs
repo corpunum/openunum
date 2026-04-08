@@ -1842,6 +1842,13 @@ export class OpenUnumAgent {
       persistenceMs: 0,
       totalMs: 0
     };
+    const latencyBudgetMs = {
+      deterministicFastTotal: 450,
+      routerFastTotal: 3500,
+      awarenessStage: 150,
+      providerStage: 22000,
+      total: 35000
+    };
 
     // Start self-monitoring for automatic continuation
     this.selfMonitor.startMonitoring(sessionId, message);
@@ -2277,6 +2284,21 @@ export class OpenUnumAgent {
     latency.totalMs = Date.now() - startTime;
     if (trace && typeof trace === 'object') {
       trace.latency = latency;
+      const breaches = [];
+      if (latency.awarenessMs > latencyBudgetMs.awarenessStage) breaches.push(`awareness>${latencyBudgetMs.awarenessStage}`);
+      if (latency.providerMs > latencyBudgetMs.providerStage) breaches.push(`provider>${latencyBudgetMs.providerStage}`);
+      if (latency.totalMs > latencyBudgetMs.total) breaches.push(`total>${latencyBudgetMs.total}`);
+      if (latency.path === 'deterministic-fast' && latency.totalMs > latencyBudgetMs.deterministicFastTotal) {
+        breaches.push(`deterministicFastTotal>${latencyBudgetMs.deterministicFastTotal}`);
+      }
+      if (latency.path === 'router-fast' && latency.totalMs > latencyBudgetMs.routerFastTotal) {
+        breaches.push(`routerFastTotal>${latencyBudgetMs.routerFastTotal}`);
+      }
+      trace.latencyBudget = {
+        thresholdsMs: latencyBudgetMs,
+        breaches,
+        withinBudget: breaches.length === 0
+      };
     }
 
     return { sessionId, reply: finalText, model: this.getCurrentModel(), trace, context: { budget: triggerInfo, compaction: compactionMeta } };

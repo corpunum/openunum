@@ -38,6 +38,8 @@ const DEFAULT_CONFIG = {
   enabled: true,
   minConfidenceForSkip: 0.85,
   minConfidenceForHotOnly: 0.70,
+  minFeatureGreetingScore: 0.86,
+  minFeatureLowIntentScore: 0.76,
   weakModelTokenLimit: 4096,
   cacheHitWindowMs: 30000,
   learningEnabled: true,
@@ -217,7 +219,9 @@ export class FastAwarenessRouter {
       deepInspect: 0
     };
 
-    if (this._isSimpleGreeting(normalized)) {
+    const featureScores = this._scoreLowIntentFeatures(normalized);
+
+    if (featureScores.greeting >= this.config.minFeatureGreetingScore) {
       scores.greeting = 0.98;
     } else {
       for (const kw of greetingKeywords) {
@@ -226,9 +230,7 @@ export class FastAwarenessRouter {
         }
       }
     }
-    if (this._isLowIntentUtterance(normalized)) {
-      scores.lightChat = 0.9;
-    }
+    scores.lightChat = Math.max(scores.lightChat, featureScores.lowIntent);
 
     // Check each category - presence-based scoring with boost
     for (const kw of taskMetaKeywords) {
@@ -266,6 +268,43 @@ export class FastAwarenessRouter {
     }
 
     return scores;
+  }
+
+  _scoreLowIntentFeatures(normalized) {
+    const text = String(normalized || '').trim();
+    if (!text) return { greeting: 0, lowIntent: 0 };
+    const words = text.split(/\s+/).filter(Boolean);
+    const wordCount = words.length;
+    const charCount = text.length;
+    const punctuationCount = (text.match(/[?!.,:;]/g) || []).length;
+    const salutationHit = /^(hi|hello|hey|yo|greetings|good morning|good afternoon|good evening)\b/.test(text);
+    const hasTaskSignal = /\b(what|how|why|where|when|which|who|can you|please|show|list|check|fix|create|build|run|install|open|search|find|write|read|explain|configure|debug|error|trace|stack|app|runtime|model|provider|continue|proceed|next|keep going|go on|grep|file|files|web|latest|news|today|current)\b/.test(text);
+    const hasCodeLike = /[\\/`$={}[\]<>]/.test(text) || /\d{2,}/.test(text);
+
+    let lowIntent = 0;
+    if (wordCount <= 3) lowIntent += 0.45;
+    else if (wordCount <= 5) lowIntent += 0.25;
+    if (charCount <= 22) lowIntent += 0.3;
+    else if (charCount <= 34) lowIntent += 0.15;
+    if (punctuationCount <= 1) lowIntent += 0.05;
+    if (!hasTaskSignal) lowIntent += 0.2;
+    if (!hasCodeLike) lowIntent += 0.1;
+    if (hasTaskSignal) lowIntent -= 0.8;
+    if (hasCodeLike) lowIntent -= 0.7;
+    if (wordCount > 6 || charCount > 60) lowIntent -= 0.4;
+    lowIntent = Math.max(0, Math.min(1, lowIntent));
+
+    let greeting = 0;
+    if (hasTaskSignal || hasCodeLike) {
+      return { greeting: 0, lowIntent };
+    }
+    if (salutationHit) greeting += 0.6;
+    if (wordCount <= 3) greeting += 0.2;
+    if (charCount <= 24) greeting += 0.15;
+    if (!hasTaskSignal && !hasCodeLike) greeting += 0.1;
+    greeting = Math.max(0, Math.min(1, greeting));
+
+    return { greeting, lowIntent };
   }
 
   /**
@@ -513,34 +552,13 @@ export class FastAwarenessRouter {
   }
 
   _isSimpleGreeting(normalized) {
-    const text = String(normalized || '').trim();
-    if (!text) return false;
-    if (text.length > 32) return false;
-    const greetingPatterns = [
-      /^hi$/,
-      /^hello$/,
-      /^hey$/,
-      /^yo$/,
-      /^greetings$/,
-      /^good (morning|afternoon|evening)$/,
-      /^hi [a-z]+$/,
-      /^hello [a-z]+$/,
-      /^hey [a-z]+$/
-    ];
-    return greetingPatterns.some((rx) => rx.test(text));
+    const score = this._scoreLowIntentFeatures(normalized).greeting;
+    return score >= this.config.minFeatureGreetingScore;
   }
 
   _isLowIntentUtterance(normalized) {
-    const text = String(normalized || '').trim();
-    if (!text) return false;
-    const words = text.split(/\s+/).filter(Boolean);
-    if (words.length > 5) return false;
-    if (text.length > 34) return false;
-    const hasTaskSignal = /\b(what|how|why|where|when|which|who|can you|please|show|list|check|fix|create|build|run|install|open|search|find|write|read|explain|configure|debug|error|trace|stack|app|runtime|model|provider|continue|proceed|next|keep going|go on|grep|file|files|web|latest|news|today|current)\b/.test(text);
-    if (hasTaskSignal) return false;
-    const hasCodeLike = /[\\/`$={}[\]<>]/.test(text) || /\d{2,}/.test(text);
-    if (hasCodeLike) return false;
-    return true;
+    const score = this._scoreLowIntentFeatures(normalized).lowIntent;
+    return score >= this.config.minFeatureLowIntentScore;
   }
 
   /**
