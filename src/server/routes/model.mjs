@@ -1,3 +1,7 @@
+function isPlainObject(value) {
+  return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
+}
+
 export async function handleModelRoute({ req, res, url, ctx }) {
   if (req.method === 'GET' && url.pathname === '/api/model-catalog') {
     ctx.normalizeModelSettings();
@@ -25,9 +29,23 @@ export async function handleModelRoute({ req, res, url, ctx }) {
 
   if (req.method === 'POST' && url.pathname === '/api/model/switch') {
     const body = await ctx.parseBody(req);
+    if (!isPlainObject(body)) {
+      ctx.sendJson(res, 400, { ok: false, error: 'invalid_payload', details: [{ field: 'body', issue: 'expected JSON object' }] });
+      return true;
+    }
+    const provider = ctx.normalizeProviderId(body.provider);
+    const model = String(body.model || '').trim().replace(/^generic\//, 'openai/');
+    if (!provider || !model) {
+      ctx.sendJson(res, 400, { ok: false, error: 'provider and model are required' });
+      return true;
+    }
+    if (!ctx.PROVIDER_ORDER.includes(provider)) {
+      ctx.sendJson(res, 400, { ok: false, error: `unsupported_provider:${provider}` });
+      return true;
+    }
     const out = ctx.agent.switchModel(
-      ctx.normalizeProviderId(body.provider),
-      String(body.model || '').replace(/^generic\//, 'openai/')
+      provider,
+      model
     );
     ctx.normalizeModelSettings();
     ctx.saveConfig(ctx.config);

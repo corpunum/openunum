@@ -12,8 +12,8 @@ export async function handleProvidersRoute({ req, res, url, ctx }) {
   }
 
   // POST /api/providers/:provider/reset — reset health for a provider
-  if (req.method === 'POST' && url.pathname.includes('/reset')) {
-    const match = url.pathname.match(/\/api\/providers\/([^/]+)\/reset/);
+  if (req.method === 'POST' && /^\/api\/providers\/[^/]+\/reset$/.test(url.pathname)) {
+    const match = url.pathname.match(/^\/api\/providers\/([^/]+)\/reset$/);
     if (!match) {
       ctx.sendJson(res, 400, { ok: false, error: 'Invalid path format' });
       return true;

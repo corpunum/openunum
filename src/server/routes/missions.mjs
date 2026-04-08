@@ -1,3 +1,11 @@
+function isPlainObject(value) {
+  return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
+}
+
+function toFiniteNumber(value, fallback = null) {
+  return Number.isFinite(value) ? Number(value) : fallback;
+}
+
 export async function handleMissionsRoute({ req, res, url, ctx }) {
   const getRuntimeState = ({ sessionId = '', goal = '', phase = 'phase0', nextAction = '' } = {}) => {
     if (typeof ctx.buildRuntimeStateAttachment !== 'function') return null;
@@ -57,19 +65,28 @@ export async function handleMissionsRoute({ req, res, url, ctx }) {
 
   if (req.method === 'POST' && url.pathname === '/api/missions/start') {
     const body = await ctx.parseBody(req);
+    if (!isPlainObject(body)) {
+      ctx.sendJson(res, 400, { ok: false, error: 'invalid_payload', details: [{ field: 'body', issue: 'expected JSON object' }] });
+      return true;
+    }
+    const goal = String(body.goal || '').trim();
+    if (!goal) {
+      ctx.sendJson(res, 400, { ok: false, error: 'goal_required' });
+      return true;
+    }
     const out = ctx.missions.start({
-      goal: body.goal,
-      maxSteps: body.maxSteps,
-      intervalMs: body.intervalMs ?? ctx.config.runtime.missionDefaultIntervalMs,
-      maxRetries: body.maxRetries ?? ctx.config.runtime.missionDefaultMaxRetries,
+      goal,
+      maxSteps: toFiniteNumber(body.maxSteps, undefined),
+      intervalMs: toFiniteNumber(body.intervalMs, ctx.config.runtime.missionDefaultIntervalMs),
+      maxRetries: toFiniteNumber(body.maxRetries, ctx.config.runtime.missionDefaultMaxRetries),
       continueUntilDone: body.continueUntilDone ?? ctx.config.runtime.missionDefaultContinueUntilDone,
-      hardStepCap: body.hardStepCap ?? ctx.config.runtime.missionDefaultHardStepCap
+      hardStepCap: toFiniteNumber(body.hardStepCap, ctx.config.runtime.missionDefaultHardStepCap)
     });
     ctx.sendJson(res, 200, {
       ...out,
       runtimeState: getRuntimeState({
         sessionId: out.sessionId,
-        goal: body.goal,
+        goal,
         nextAction: 'Mission started; track until proof-complete'
       })
     });
@@ -78,7 +95,16 @@ export async function handleMissionsRoute({ req, res, url, ctx }) {
 
   if (req.method === 'POST' && url.pathname === '/api/missions/stop') {
     const body = await ctx.parseBody(req);
-    ctx.sendJson(res, 200, ctx.missions.stop(body.id));
+    if (!isPlainObject(body)) {
+      ctx.sendJson(res, 400, { ok: false, error: 'invalid_payload', details: [{ field: 'body', issue: 'expected JSON object' }] });
+      return true;
+    }
+    const id = String(body.id || '').trim();
+    if (!id) {
+      ctx.sendJson(res, 400, { ok: false, error: 'mission_id_required' });
+      return true;
+    }
+    ctx.sendJson(res, 200, ctx.missions.stop(id));
     return true;
   }
 
@@ -92,18 +118,27 @@ export async function handleMissionsRoute({ req, res, url, ctx }) {
 
   if (req.method === 'POST' && url.pathname === '/api/missions/schedule') {
     const body = await ctx.parseBody(req);
+    if (!isPlainObject(body)) {
+      ctx.sendJson(res, 400, { ok: false, error: 'invalid_payload', details: [{ field: 'body', issue: 'expected JSON object' }] });
+      return true;
+    }
+    const goal = String(body.goal || '').trim();
+    if (!goal) {
+      ctx.sendJson(res, 400, { ok: false, error: 'goal_required' });
+      return true;
+    }
     const out = ctx.missions.startSchedule({
-      goal: body.goal,
+      goal,
       runAt: body.runAt,
-      delayMs: body.delayMs,
-      intervalMs: body.intervalMs,
+      delayMs: toFiniteNumber(body.delayMs, undefined),
+      intervalMs: toFiniteNumber(body.intervalMs, undefined),
       enabled: body.enabled,
       options: {
-        maxSteps: body.maxSteps,
-        maxRetries: body.maxRetries,
+        maxSteps: toFiniteNumber(body.maxSteps, undefined),
+        maxRetries: toFiniteNumber(body.maxRetries, undefined),
         continueUntilDone: body.continueUntilDone,
-        hardStepCap: body.hardStepCap,
-        intervalMs: body.missionIntervalMs
+        hardStepCap: toFiniteNumber(body.hardStepCap, undefined),
+        intervalMs: toFiniteNumber(body.missionIntervalMs, undefined)
       }
     });
     ctx.sendJson(res, 200, out);
@@ -112,6 +147,10 @@ export async function handleMissionsRoute({ req, res, url, ctx }) {
 
   if (req.method === 'POST' && url.pathname === '/api/missions/schedule/update') {
     const body = await ctx.parseBody(req);
+    if (!isPlainObject(body)) {
+      ctx.sendJson(res, 400, { ok: false, error: 'invalid_payload', details: [{ field: 'body', issue: 'expected JSON object' }] });
+      return true;
+    }
     const id = String(body?.id || '').trim();
     if (!id) {
       ctx.sendJson(res, 400, { error: 'schedule_id_required' });

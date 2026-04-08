@@ -27,6 +27,19 @@ async function main() {
   assert(roleList.res.ok, 'roles_list_failed');
   assert(roleList.json?.ok === true, 'roles_list_invalid_payload');
   assert(roleList.json?.roles && typeof roleList.json.roles === 'object', 'roles_map_missing');
+  const roleNames = Object.keys(roleList.json.roles || {});
+  assert(roleNames.length > 0, 'roles_empty');
+  const sampleRole = roleNames[0];
+
+  const roleGet = await getJson(`/api/roles/${encodeURIComponent(sampleRole)}`);
+  assert(roleGet.res.ok, 'role_get_failed');
+  assert(roleGet.json?.ok === true, 'role_get_invalid_payload');
+
+  const roleOverride = await postJson(`/api/roles/${encodeURIComponent(sampleRole)}/override`, {
+    minTier: 'balanced'
+  });
+  assert(roleOverride.res.ok, 'role_override_failed');
+  assert(roleOverride.json?.ok === true, 'role_override_invalid_payload');
 
   const approvalRequest = await postJson('/api/approvals/request', {
     toolName: 'shell_run',

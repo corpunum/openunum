@@ -1,5 +1,9 @@
 import { getTaskOrchestrator } from '../../core/autonomy-registry.mjs';
 
+function isPlainObject(value) {
+  return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
+}
+
 function summarizeTaskReply(task) {
   const lines = [
     `Autonomous task ${task.id} ${task.status}.`,
@@ -42,6 +46,10 @@ function summarizeTaskReply(task) {
 export async function handleChatToolsRoute({ req, res, url, ctx }) {
   if (req.method === 'POST' && url.pathname === '/api/chat') {
     const body = await ctx.parseBody(req);
+    if (!isPlainObject(body)) {
+      ctx.sendJson(res, 400, { ok: false, error: 'invalid_payload', details: [{ field: 'body', issue: 'expected JSON object' }] });
+      return true;
+    }
     const sessionId = String(body.sessionId || '').trim();
     const message = String(body.message || '').trim();
     if (!sessionId) {
@@ -176,8 +184,17 @@ export async function handleChatToolsRoute({ req, res, url, ctx }) {
 
   if (req.method === 'POST' && url.pathname === '/api/tool/run') {
     const body = await ctx.parseBody(req);
+    if (!isPlainObject(body)) {
+      ctx.sendJson(res, 400, { ok: false, error: 'invalid_payload', details: [{ field: 'body', issue: 'expected JSON object' }] });
+      return true;
+    }
+    const name = String(body.name || '').trim();
+    if (!name) {
+      ctx.sendJson(res, 400, { ok: false, error: 'tool_name_required' });
+      return true;
+    }
     const sessionId = String(body?.sessionId || '').trim() || `tool-run:${Date.now()}`;
-    const out = await ctx.agent.runTool(body.name, body.args || {}, { sessionId });
+    const out = await ctx.agent.runTool(name, body.args || {}, { sessionId });
     ctx.sendJson(res, 200, { ok: true, result: out });
     return true;
   }
@@ -191,8 +208,17 @@ export async function handleChatToolsRoute({ req, res, url, ctx }) {
 
   if (req.method === 'POST' && url.pathname === '/api/context/compact') {
     const body = await ctx.parseBody(req);
+    if (!isPlainObject(body)) {
+      ctx.sendJson(res, 400, { ok: false, error: 'invalid_payload', details: [{ field: 'body', issue: 'expected JSON object' }] });
+      return true;
+    }
+    const sessionId = String(body.sessionId || '').trim();
+    if (!sessionId) {
+      ctx.sendJson(res, 400, { ok: false, error: 'sessionId is required' });
+      return true;
+    }
     const out = ctx.agent.compactSessionContext({
-      sessionId: body.sessionId,
+      sessionId,
       dryRun: Boolean(body.dryRun)
     });
     ctx.sendJson(res, 200, out);

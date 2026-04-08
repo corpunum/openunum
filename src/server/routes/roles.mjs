@@ -16,6 +16,10 @@ function getResolver() {
   return new RoleModelResolver(getRegistryWithOverrides());
 }
 
+function isPlainObject(value) {
+  return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
+}
+
 export async function handleRolesRoute({ req, res, url, ctx }) {
   // GET /api/roles — list all roles and their model mappings
   if (req.method === 'GET' && url.pathname === '/api/roles') {
@@ -46,8 +50,8 @@ export async function handleRolesRoute({ req, res, url, ctx }) {
   }
 
   // POST /api/roles/:role/override — override model for a role
-  if (req.method === 'POST' && url.pathname.includes('/override')) {
-    const match = url.pathname.match(/\/api\/roles\/([^/]+)\/override/);
+  if (req.method === 'POST' && /^\/api\/roles\/[^/]+\/override$/.test(url.pathname)) {
+    const match = url.pathname.match(/^\/api\/roles\/([^/]+)\/override$/);
     if (!match) {
       ctx.sendJson(res, 400, { ok: false, error: 'Invalid path format' });
       return true;
@@ -55,7 +59,7 @@ export async function handleRolesRoute({ req, res, url, ctx }) {
     const role = match[1];
     const body = await ctx.parseBody(req);
 
-    if (!body || typeof body !== 'object') {
+    if (!isPlainObject(body)) {
       ctx.sendJson(res, 400, { ok: false, error: 'Request body required' });
       return true;
     }
