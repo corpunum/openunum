@@ -4,6 +4,21 @@ All notable changes to OpenUnum are documented in this file.
 
 ---
 
+## [2.3.1] - 2026-04-08
+
+### Fixed
+- WebUI pending-reply recovery now preserves assistant HTML formatting during `/api/sessions/:id/activity` polling, preventing malformed/plain rendering until manual browser refresh.
+- Pending-run UI now reduces noisy retry chatter and performs short post-pending reconciliation fetches before declaring delayed persistence.
+
+### Added
+- Toast notification system for interactive WebUI actions (provider/service vault save/test/connect/delete, routing/runtime save, session import/export, mission start/stop, browser launch/save, model switch).
+- Toast behavior includes 5-second auto-close, manual `Dismiss`, and `Pin` to keep message visible.
+
+### Changed
+- Provider health/status lines still update in-place, but action outcomes now surface as popup toasts instead of only subtle bottom text.
+
+---
+
 ## [2.3.0] - 2026-04-08
 
 ### Added

@@ -239,6 +239,78 @@
     .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
     .pill { font-size: 12px; color: var(--muted); }
     .hint { color: var(--muted); font-size: 12px; }
+    .toast-stack {
+      position: fixed;
+      right: 14px;
+      bottom: 14px;
+      z-index: 9999;
+      display: grid;
+      gap: 8px;
+      width: min(420px, calc(100vw - 28px));
+      pointer-events: none;
+    }
+    .toast {
+      pointer-events: auto;
+      border: 1px solid rgba(88, 117, 160, .5);
+      background: linear-gradient(180deg, rgba(12, 20, 36, .96), rgba(8, 14, 28, .96));
+      border-radius: 12px;
+      padding: 10px 10px 8px;
+      box-shadow: 0 12px 30px rgba(0, 0, 0, .45);
+    }
+    .toast.good { border-color: rgba(34, 197, 94, .6); }
+    .toast.warn { border-color: rgba(245, 158, 11, .7); }
+    .toast.bad { border-color: rgba(239, 68, 68, .75); }
+    .toast-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      margin-bottom: 6px;
+      font-size: 12px;
+      color: #d9e9ff;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: .45px;
+    }
+    .toast-body {
+      font-size: 12px;
+      color: #d8e7ff;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+    .toast-actions {
+      display: flex;
+      gap: 6px;
+      margin-top: 8px;
+    }
+    .toast-actions button {
+      padding: 5px 8px;
+      font-size: 11px;
+      border-radius: 8px;
+    }
+    .toast-progress {
+      margin-top: 8px;
+      height: 3px;
+      border-radius: 999px;
+      background: rgba(77, 109, 155, .45);
+      overflow: hidden;
+    }
+    .toast-progress > div {
+      height: 100%;
+      width: 100%;
+      background: linear-gradient(90deg, #67a8ff, #3b82f6);
+      transform-origin: left center;
+      animation: toast-progress 5s linear forwards;
+    }
+    .toast.pinned .toast-progress > div {
+      animation: none;
+      width: 100%;
+      background: linear-gradient(90deg, #f59e0b, #fbbf24);
+    }
+    @keyframes toast-progress {
+      from { transform: scaleX(1); }
+      to { transform: scaleX(0); }
+    }
     dialog.modal {
       border: 1px solid rgba(83, 111, 153, .55);
       border-radius: 16px;
@@ -1218,6 +1290,7 @@
       </section>
     </main>
   </div>
+  <div id="toastStack" class="toast-stack" aria-live="polite" aria-atomic="false"></div>
   <dialog id="vaultEditModal" class="modal">
     <div class="modal-head">
       <div class="modal-title" id="vaultEditTitle">Edit Vault Entry</div>
@@ -1284,6 +1357,60 @@
 
     const q = (id) => document.getElementById(id);
     const qa = (sel) => Array.from(document.querySelectorAll(sel));
+    let toastCounter = 0;
+
+    function showToast(message, type = 'info', title = 'Action') {
+      const host = q('toastStack');
+      if (!host) return;
+      const id = `toast-${Date.now()}-${toastCounter++}`;
+      const level = type === 'error' ? 'bad' : type === 'warn' ? 'warn' : type === 'success' ? 'good' : '';
+      const node = document.createElement('div');
+      node.className = `toast ${level}`;
+      node.id = id;
+      node.innerHTML = `
+        <div class="toast-head">
+          <span>${escapeHtml(title)}</span>
+          <span id="${id}-state">auto-close 5s</span>
+        </div>
+        <div class="toast-body">${escapeHtml(String(message || ''))}</div>
+        <div class="toast-actions">
+          <button type="button" id="${id}-pin">Pin</button>
+          <button type="button" id="${id}-dismiss">Dismiss</button>
+        </div>
+        <div class="toast-progress"><div></div></div>
+      `;
+      host.prepend(node);
+      let pinned = false;
+      const stateEl = q(`${id}-state`);
+      let timerId = null;
+      const cleanup = () => {
+        if (node?.parentNode) node.parentNode.removeChild(node);
+      };
+      const armAutoClose = () => {
+        if (timerId) clearTimeout(timerId);
+        timerId = setTimeout(() => {
+          if (!pinned) cleanup();
+        }, 5000);
+      };
+      armAutoClose();
+      q(`${id}-pin`)?.addEventListener('click', () => {
+        pinned = !pinned;
+        node.classList.toggle('pinned', pinned);
+        if (stateEl) stateEl.textContent = pinned ? 'pinned' : 'auto-close 5s';
+        if (!pinned) armAutoClose();
+      });
+      q(`${id}-dismiss`)?.addEventListener('click', () => {
+        if (timerId) clearTimeout(timerId);
+        cleanup();
+      });
+      while (host.children.length > 5) host.removeChild(host.lastChild);
+    }
+
+    function setStatus(id, message, { toast = true, type = 'info', title = 'Action' } = {}) {
+      const el = q(id);
+      if (el) el.textContent = String(message || '');
+      if (toast) showToast(message, type, title);
+    }
 
     const topStatus = q('topStatus');
     const chat = q('chat');
@@ -1804,10 +1931,8 @@
       if (!pendingState?.pending && toolCount > 0) return 'Finalizing response...';
       if (toolCount === 0) return 'Routing request...';
       if (typing.pollCount <= 1) return `Executing tools... (${toolCount})`;
-      if ((typing.lastToolCount || 0) === toolCount) {
-        return `Synthesizing answer from ${toolCount} tool result${toolCount === 1 ? '' : 's'}...`;
-      }
-      return `Executing tools... (${toolCount})`;
+      if ((typing.lastToolCount || 0) === toolCount) return 'Waiting for provider response...';
+      return `Processing tool results... (${toolCount})`;
     }
 
     async function resumePendingSessionIfNeeded(targetSessionId = sessionId) {
@@ -1839,7 +1964,7 @@
       updateComposerPendingState();
       try {
         while (Date.now() < deadline) {
-          await sleep(2000);
+          await sleep(2500);
           if (requestToken !== requestTokenSeq) return false;
           typing.pollCount = (typing.pollCount || 0) + 1;
           const act = await jget(`/api/sessions/${encodeURIComponent(requestSessionId)}/activity?since=${encodeURIComponent(startedAtIso)}`);
@@ -1847,8 +1972,6 @@
           if ((typing.lastToolCount || 0) !== tools.length) {
             addLiveEvent(typing, `tool count ${typing.lastToolCount || 0} -> ${tools.length}`);
             typing.lastToolCount = tools.length;
-          } else if (typing.pollCount % 3 === 0) {
-            addLiveEvent(typing, `pending poll #${typing.pollCount}`);
           }
           const p = await jget(`/api/chat/pending?sessionId=${encodeURIComponent(requestSessionId)}`);
           const statusText = buildPendingStatus(typing, act, p);
@@ -1865,16 +1988,20 @@
             return true;
           }
           if (p.pending) continue;
-          const out = await jget(`/api/sessions/${encodeURIComponent(requestSessionId)}`);
-          const msg = newestAssistantSince(out.messages || [], startedAtIso);
-          if (msg?.content) {
-            addLiveEvent(typing, 'assistant final response received');
-            typing.bubble.innerHTML = msg.html || `<pre>${escapeHtml(msg.content)}</pre>`;
-            await refreshSessionList();
-            return true;
+          for (let i = 0; i < 5; i += 1) {
+            const out = await jget(`/api/sessions/${encodeURIComponent(requestSessionId)}`);
+            const msg = newestAssistantSince(out.messages || [], startedAtIso);
+            if (msg?.content) {
+              addLiveEvent(typing, 'assistant final response received');
+              typing.bubble.innerHTML = msg.html || `<pre>${escapeHtml(msg.content)}</pre>`;
+              await refreshSessionList();
+              return true;
+            }
+            await sleep(1200);
           }
-          addLiveEvent(typing, 'pending ended but no assistant message found yet');
-          typing.bubble.textContent = 'Agent finished its tool work and is waiting on a final reply. Refreshing session state may recover it.';
+          addLiveEvent(typing, 'pending ended but no assistant message found yet; reloading session');
+          await loadSession(requestSessionId);
+          typing.bubble.textContent = 'Agent finished tool work. Waiting for final response persistence.';
           return false;
         }
         addLiveEvent(typing, 'pending deadline reached; run continues in background');
@@ -2236,31 +2363,35 @@ ${verificationSummary || preview}`)}</pre>`;
         runtimeConfigCache = await jget('/api/config');
         checks.push('config');
       } catch {
-        q('providerStatus').textContent = `wire validation failed (${action}): config`;
+        setStatus('providerStatus', `wire validation failed (${action}): config`, { type: 'error', title: 'Wire Validation' });
         return false;
       }
       try {
         await refreshModelCatalog();
         checks.push('model-catalog');
       } catch {
-        q('providerStatus').textContent = `wire validation failed (${action}): model-catalog`;
+        setStatus('providerStatus', `wire validation failed (${action}): model-catalog`, { type: 'error', title: 'Wire Validation' });
         return false;
       }
       try {
         await refreshAuthCatalog();
         checks.push('auth-catalog');
       } catch {
-        q('providerStatus').textContent = `wire validation failed (${action}): auth-catalog`;
+        setStatus('providerStatus', `wire validation failed (${action}): auth-catalog`, { type: 'error', title: 'Wire Validation' });
         return false;
       }
       try {
         await refreshRuntimeOverview();
         checks.push('runtime');
       } catch {
-        q('providerStatus').textContent = `wire validation failed (${action}): runtime`;
+        setStatus('providerStatus', `wire validation failed (${action}): runtime`, { type: 'error', title: 'Wire Validation' });
         return false;
       }
-      q('providerStatus').textContent = `wire validation ok (${action}) | ${checks.join(', ')}`;
+      setStatus('providerStatus', `wire validation ok (${action}) | ${checks.join(', ')}`, {
+        toast: false,
+        type: 'success',
+        title: 'Wire Validation'
+      });
       return true;
     }
 
@@ -2415,7 +2546,7 @@ ${verificationSummary || preview}`)}</pre>`;
           }
           await jpost('/api/config', { model: modelPatch });
           runtimeConfigCache = null;
-          q('providerStatus').textContent = `removed from routing ${provider}`;
+          setStatus('providerStatus', `removed from routing ${provider}`, { type: 'warn', title: 'Provider Vault' });
           await refreshRuntime();
           await refreshProviderConfig();
           await refreshModelCatalog();
@@ -2505,11 +2636,11 @@ ${verificationSummary || preview}`)}</pre>`;
           const service = String(btn.dataset.service || '').trim();
           const secretField = SERVICE_SECRET_FIELD[service];
           if (!secretField) {
-            q('providerStatus').textContent = `delete skipped ${service} (oauth/manual only)`;
+            setStatus('providerStatus', `delete skipped ${service} (oauth/manual only)`, { type: 'warn', title: 'Service Vault' });
             return;
           }
           await jpost('/api/auth/catalog', { clear: [secretField] });
-          q('providerStatus').textContent = `deleted ${service}`;
+          setStatus('providerStatus', `deleted ${service}`, { type: 'warn', title: 'Service Vault' });
           await refreshProviderConfig();
           await refreshRuntimeOverview();
           await runWebuiWireValidation(`service_delete:${service}`);
@@ -2647,11 +2778,15 @@ ${verificationSummary || preview}`)}</pre>`;
         const secretStoreBackend = authCatalog.secret_store?.backend || 'plaintext';
         const secretStoreLocked = authCatalog.secret_store?.locked ? 'locked' : 'ready';
         q('providerStatus').setAttribute('data-testid', 'provider-health');
-        q('providerStatus').textContent = `secure store=${authCatalog.secret_store_path || 'unknown'} (${secretStoreBackend}/${secretStoreLocked}) | scanned=${Number(authCatalog.scanned_files?.length || 0)} | github_oauth=${authById.github?.cli?.authenticated ? 'active' : 'inactive'}`;
+        setStatus(
+          'providerStatus',
+          `secure store=${authCatalog.secret_store_path || 'unknown'} (${secretStoreBackend}/${secretStoreLocked}) | scanned=${Number(authCatalog.scanned_files?.length || 0)} | github_oauth=${authById.github?.cli?.authenticated ? 'active' : 'inactive'}`,
+          { toast: false }
+        );
         return authCatalog;
       } catch (err) {
         console.error('refresh_auth_catalog_failed', err);
-        q('providerStatus').textContent = `catalog failed: ${err.message}`;
+        setStatus('providerStatus', `catalog failed: ${err.message}`, { type: 'error', title: 'Provider Vault' });
         return null;
       }
     }
@@ -2670,7 +2805,7 @@ ${verificationSummary || preview}`)}</pre>`;
           secrets: secretField && secretValue ? { [secretField]: secretValue } : {}
         };
         await jpost('/api/auth/catalog', payload);
-        q('providerStatus').textContent = `saved ${provider}`;
+        setStatus('providerStatus', `saved ${provider}`, { type: 'success', title: 'Provider Vault' });
         await refreshProviderConfig();
         await refreshModelCatalog();
         await refreshRuntimeOverview();
@@ -2697,7 +2832,7 @@ ${verificationSummary || preview}`)}</pre>`;
           const secret = q('vaultServiceSecret')?.value?.trim() || '';
           await jpost('/api/auth/catalog', secret ? { secrets: { [secretField]: secret } } : { clear: [secretField] });
         }
-        q('providerStatus').textContent = `saved ${service}`;
+        setStatus('providerStatus', `saved ${service}`, { type: 'success', title: 'Service Vault' });
         await refreshProviderConfig();
         await refreshRuntimeOverview();
         await runWebuiWireValidation(`service_save:${service}`);
@@ -2713,18 +2848,26 @@ ${verificationSummary || preview}`)}</pre>`;
         const baseUrl = q('vaultProviderBase')?.value?.trim() || row.base_url || '';
         const apiKey = q('vaultProviderSecret')?.value?.trim() || '';
         const out = await jpost('/api/provider/test', { provider, baseUrl, apiKey });
-        q('providerStatus').textContent = out.ok
-          ? `test ok ${provider} | models=${Number(out.modelCount || 0)} | top=${out.topModel || '-'}`
-          : `test failed ${provider} | ${out.error || 'unknown'}`;
+        setStatus(
+          'providerStatus',
+          out.ok
+            ? `test ok ${provider} | models=${Number(out.modelCount || 0)} | top=${out.topModel || '-'}`
+            : `test failed ${provider} | ${out.error || 'unknown'}`,
+          { type: out.ok ? 'success' : 'error', title: 'Provider Test' }
+        );
         return;
       }
       if (vaultModalState.kind === 'service') {
         const service = vaultModalState.id;
         const secret = q('vaultServiceSecret')?.value?.trim() || '';
         const out = await jpost('/api/service/test', { service, secret });
-        q('providerStatus').textContent = out.ok
-          ? `test ok ${service}${out.account ? ` | ${out.account}` : ''}${out.modelCount ? ` | models=${Number(out.modelCount)}` : ''}`
-          : `test failed ${service} | ${out.error || 'unknown'}`;
+        setStatus(
+          'providerStatus',
+          out.ok
+            ? `test ok ${service}${out.account ? ` | ${out.account}` : ''}${out.modelCount ? ` | models=${Number(out.modelCount)}` : ''}`
+            : `test failed ${service} | ${out.error || 'unknown'}`,
+          { type: out.ok ? 'success' : 'error', title: 'Service Test' }
+        );
       }
     }
 
@@ -2757,7 +2900,7 @@ ${verificationSummary || preview}`)}</pre>`;
         secrets: secretField && secretInput?.value?.trim() ? { [secretField]: secretInput.value.trim() } : {}
       };
       await jpost('/api/auth/catalog', payload);
-      q('providerStatus').textContent = `saved ${provider}`;
+      setStatus('providerStatus', `saved ${provider}`, { type: 'success', title: 'Provider Vault' });
       await refreshProviderConfig();
       await refreshModelCatalog();
       await refreshRuntimeOverview();
@@ -2774,9 +2917,13 @@ ${verificationSummary || preview}`)}</pre>`;
         baseUrl: baseInput?.value?.trim() || row.base_url || '',
         apiKey: secretInput?.value?.trim() || ''
       });
-      q('providerStatus').textContent = out.ok
-        ? `test ok ${provider} | models=${Number(out.modelCount || 0)} | top=${out.topModel || '-'}`
-        : `test failed ${provider} | ${out.error || 'unknown'}`;
+      setStatus(
+        'providerStatus',
+        out.ok
+          ? `test ok ${provider} | models=${Number(out.modelCount || 0)} | top=${out.topModel || '-'}`
+          : `test failed ${provider} | ${out.error || 'unknown'}`,
+        { type: out.ok ? 'success' : 'error', title: 'Provider Test' }
+      );
     }
 
     async function saveServiceRow(service) {
@@ -2797,7 +2944,7 @@ ${verificationSummary || preview}`)}</pre>`;
         };
         if (clientSecret) payload.oauthConfig.googleWorkspace.clientSecret = clientSecret;
         await jpost('/api/auth/catalog', payload);
-        q('providerStatus').textContent = `saved ${service}`;
+        setStatus('providerStatus', `saved ${service}`, { type: 'success', title: 'Service Vault' });
         await refreshAuthCatalog();
         await runWebuiWireValidation(`service_save:${service}`);
         return;
@@ -2806,7 +2953,7 @@ ${verificationSummary || preview}`)}</pre>`;
       const input = document.querySelector(`.service-secret-input[data-service="${service}"]`);
       const secret = input?.value?.trim() || '';
       await jpost('/api/auth/catalog', { secrets: { [secretField]: secret } });
-      q('providerStatus').textContent = `saved ${service}`;
+      setStatus('providerStatus', `saved ${service}`, { type: 'success', title: 'Service Vault' });
       await refreshProviderConfig();
       await refreshRuntimeOverview();
       await runWebuiWireValidation(`service_save:${service}`);
@@ -2815,9 +2962,13 @@ ${verificationSummary || preview}`)}</pre>`;
     async function testServiceRow(service) {
       const input = document.querySelector(`.service-secret-input[data-service="${service}"]`);
       const out = await jpost('/api/service/test', { service, secret: input?.value?.trim() || '' });
-      q('providerStatus').textContent = out.ok
-        ? `test ok ${service}${out.account ? ` | ${out.account}` : ''}${out.modelCount ? ` | models=${Number(out.modelCount)}` : ''}`
-        : `test failed ${service} | ${out.error || out.detail || 'unknown'}`;
+      setStatus(
+        'providerStatus',
+        out.ok
+          ? `test ok ${service}${out.account ? ` | ${out.account}` : ''}${out.modelCount ? ` | models=${Number(out.modelCount)}` : ''}`
+          : `test failed ${service} | ${out.error || out.detail || 'unknown'}`,
+        { type: out.ok ? 'success' : 'error', title: 'Service Test' }
+      );
     }
 
     async function connectServiceRow(service) {
@@ -2826,7 +2977,7 @@ ${verificationSummary || preview}`)}</pre>`;
       }
       const out = await jpost('/api/service/connect', { service });
       if (out.job?.id) {
-        q('providerStatus').textContent = `oauth started ${service} | waiting for browser sign-in`;
+        setStatus('providerStatus', `oauth started ${service} | waiting for browser sign-in`, { type: 'info', title: 'OAuth' });
         if (out.job.authUrl) {
           try {
             window.open(out.job.authUrl, '_blank', 'noopener');
@@ -2835,9 +2986,13 @@ ${verificationSummary || preview}`)}</pre>`;
         await pollAuthJob(out.job.id, service);
         return;
       }
-      q('providerStatus').textContent = out.started
-        ? `oauth started ${service} | launcher=${out.launcher || 'shell'} | command=${out.command}`
-        : `oauth unavailable ${service} | ${out.prerequisite || out.error || 'not_supported'}`;
+      setStatus(
+        'providerStatus',
+        out.started
+          ? `oauth started ${service} | launcher=${out.launcher || 'shell'} | command=${out.command}`
+          : `oauth unavailable ${service} | ${out.prerequisite || out.error || 'not_supported'}`,
+        { type: out.started ? 'info' : 'warn', title: 'OAuth' }
+      );
       await refreshAuthCatalog();
     }
 
@@ -2848,14 +3003,14 @@ ${verificationSummary || preview}`)}</pre>`;
         const out = await jget(`/api/auth/job?id=${encodeURIComponent(jobId)}`);
         const job = out.job || {};
         if (job.status === 'awaiting_browser') {
-          q('providerStatus').textContent = `oauth ${service}: waiting for browser completion`;
+          setStatus('providerStatus', `oauth ${service}: waiting for browser completion`, { toast: false });
           if (job.authUrl && !job.browserOpened) {
             try {
               window.open(job.authUrl, '_blank', 'noopener');
             } catch {}
           }
         } else if (job.status === 'awaiting_input') {
-          q('providerStatus').textContent = `oauth ${service}: manual code input required`;
+          setStatus('providerStatus', `oauth ${service}: manual code input required`, { type: 'warn', title: 'OAuth' });
           if (!authJobPrompted[jobId]) {
             authJobPrompted[jobId] = true;
             const input = window.prompt(job.promptMessage || 'Paste the authorization code or redirect URL');
@@ -2864,20 +3019,24 @@ ${verificationSummary || preview}`)}</pre>`;
             }
           }
         } else if (job.status === 'completed') {
-          q('providerStatus').textContent = `oauth complete ${service}${job.account ? ` | ${job.account}` : ''}`;
+          setStatus(
+            'providerStatus',
+            `oauth complete ${service}${job.account ? ` | ${job.account}` : ''}`,
+            { type: 'success', title: 'OAuth' }
+          );
           await refreshAuthCatalog();
           await refreshRuntimeOverview();
           return;
         } else if (job.status === 'failed') {
-          q('providerStatus').textContent = `oauth failed ${service} | ${job.error || 'unknown'}`;
+          setStatus('providerStatus', `oauth failed ${service} | ${job.error || 'unknown'}`, { type: 'error', title: 'OAuth' });
           await refreshAuthCatalog();
           return;
         } else {
-          q('providerStatus').textContent = `oauth ${service}: ${job.progress || job.status || 'starting'}`;
+          setStatus('providerStatus', `oauth ${service}: ${job.progress || job.status || 'starting'}`, { toast: false });
         }
         await new Promise((resolve) => setTimeout(resolve, 1500));
       }
-      q('providerStatus').textContent = `oauth ${service}: timeout waiting for completion`;
+      setStatus('providerStatus', `oauth ${service}: timeout waiting for completion`, { type: 'warn', title: 'OAuth' });
     }
 
     async function refreshRuntimeOverview() {
@@ -3173,10 +3332,10 @@ ${verificationSummary || preview}`)}</pre>`;
     q('vaultEditCloseTop').onclick = closeVaultModal;
     q('vaultEditClose').onclick = closeVaultModal;
     q('vaultEditSave').onclick = () => saveVaultModal().catch((err) => {
-      q('providerStatus').textContent = `vault save failed: ${String(err.message || err)}`;
+      setStatus('providerStatus', `vault save failed: ${String(err.message || err)}`, { type: 'error', title: 'Vault' });
     });
     q('vaultEditTest').onclick = () => testVaultModal().catch((err) => {
-      q('providerStatus').textContent = `vault test failed: ${String(err.message || err)}`;
+      setStatus('providerStatus', `vault test failed: ${String(err.message || err)}`, { type: 'error', title: 'Vault' });
     });
     q('vaultEditModal').addEventListener('cancel', (event) => {
       event.preventDefault();
@@ -3209,7 +3368,11 @@ ${verificationSummary || preview}`)}</pre>`;
       link.download = `openunum-session-${sessionId}.json`;
       link.click();
       setTimeout(() => URL.revokeObjectURL(link.href), 1500);
-      q('runtimeStatus').textContent = `session export ready | messages=${Number(out.messages?.length || 0)} tokens=${Number(out.estimatedTokens || 0)}`;
+      setStatus(
+        'runtimeStatus',
+        `session export ready | messages=${Number(out.messages?.length || 0)} tokens=${Number(out.estimatedTokens || 0)}`,
+        { type: 'success', title: 'Session Export' }
+      );
       await refreshTacticalLedger();
     };
     q('importSessionBtn').onclick = () => q('importSessionFile').click();
@@ -3230,7 +3393,11 @@ ${verificationSummary || preview}`)}</pre>`;
       await refreshSessionList();
       await refreshContextStatus();
       await refreshTacticalLedger();
-      q('runtimeStatus').textContent = `session imported | ${sessionId} | messages=${Number(out.session.messageCount || 0)}`;
+      setStatus(
+        'runtimeStatus',
+        `session imported | ${sessionId} | messages=${Number(out.session.messageCount || 0)}`,
+        { type: 'success', title: 'Session Import' }
+      );
       showView('chat');
       q('importSessionFile').value = '';
     };
@@ -3264,6 +3431,10 @@ ${verificationSummary || preview}`)}</pre>`;
       if (!model) return;
       const out = await jpost('/api/model/switch', { provider: q('provider').value, model });
       topStatus.textContent = `cfg=${formatProviderModel(out.provider, out.model)} active=${formatProviderModel(out.activeProvider, out.activeModel)}`;
+      setStatus('modelCatalogStatus', `model switched to ${formatProviderModel(out.provider, out.model)}`, {
+        type: 'success',
+        title: 'Model Routing'
+      });
       await refreshModelCatalog();
       await refreshRuntimeOverview();
     };
@@ -3303,7 +3474,11 @@ ${verificationSummary || preview}`)}</pre>`;
           maxToolIterations: Number(q('maxIters').value || 8)
         }
       });
-      q('modelCatalogStatus').textContent = `routing saved | primary=${formatProviderModel(provider, selectedModel || '')} | fallbacks=${onlineFallbackSequence.map((entry) => entry.provider).join(' -> ') || 'none'}`;
+      setStatus(
+        'modelCatalogStatus',
+        `routing saved | primary=${formatProviderModel(provider, selectedModel || '')} | fallbacks=${onlineFallbackSequence.map((entry) => entry.provider).join(' -> ') || 'none'}`,
+        { type: 'success', title: 'Model Routing' }
+      );
       await refreshModel();
       await refreshRuntimeOverview();
       await runWebuiWireValidation('routing_save');
@@ -3311,7 +3486,11 @@ ${verificationSummary || preview}`)}</pre>`;
 
     q('prefillLocalAuth').onclick = async () => {
       const out = await jpost('/api/auth/prefill-local', { overwriteBaseUrls: false });
-      q('providerStatus').textContent = `local auth scan saved | files=${Number(out.scannedFiles?.length || 0)} | github=${Boolean(out.imported?.githubToken)}`;
+      setStatus(
+        'providerStatus',
+        `local auth scan saved | files=${Number(out.scannedFiles?.length || 0)} | github=${Boolean(out.imported?.githubToken)}`,
+        { type: 'success', title: 'Provider Vault' }
+      );
       await refreshProviderConfig();
       await refreshModelCatalog();
       await refreshRuntimeOverview();
@@ -3342,26 +3521,28 @@ ${verificationSummary || preview}`)}</pre>`;
     q('addProviderRow').onclick = () => {
       const id = q('providerAddSelect').value;
       if (!id) {
-        q('providerStatus').textContent = 'no hidden/disabled provider rows to add';
+        setStatus('providerStatus', 'no hidden/disabled provider rows to add', { type: 'warn', title: 'Provider Vault' });
         return;
       }
       hiddenProviderRows = hiddenProviderRows.filter((row) => row !== id);
       normalizeHiddenRows();
       refreshAddRowSelectors();
       renderProviderMatrix(authCatalog?.providers || []);
+      setStatus('providerStatus', `added provider row ${id}`, { type: 'success', title: 'Provider Vault' });
       runWebuiWireValidation(`provider_add_row:${id}`).catch(() => {});
     };
 
     q('addServiceRow').onclick = () => {
       const id = q('serviceAddSelect').value;
       if (!id) {
-        q('providerStatus').textContent = 'no hidden service rows to add';
+        setStatus('providerStatus', 'no hidden service rows to add', { type: 'warn', title: 'Provider Vault' });
         return;
       }
       hiddenServiceRows = hiddenServiceRows.filter((row) => row !== id);
       normalizeHiddenRows();
       refreshAddRowSelectors();
       renderAuthMethodTable(authCatalog?.auth_methods || []);
+      setStatus('providerStatus', `added service row ${id}`, { type: 'success', title: 'Provider Vault' });
       runWebuiWireValidation(`service_add_row:${id}`).catch(() => {});
     };
 
@@ -3395,18 +3576,24 @@ ${verificationSummary || preview}`)}</pre>`;
           }
         }
       });
-      q('runtimeStatus').textContent =
-        `saved mode=${out.runtime.autonomyMode || q('autonomyMode').value} shell=${out.runtime.shellEnabled} maxIters=${out.runtime.maxToolIterations}`;
+      setStatus(
+        'runtimeStatus',
+        `saved mode=${out.runtime.autonomyMode || q('autonomyMode').value} shell=${out.runtime.shellEnabled} maxIters=${out.runtime.maxToolIterations}`,
+        { type: 'success', title: 'Runtime' }
+      );
       await refreshRuntimeOverview();
       await runWebuiWireValidation('runtime_save');
     };
 
     q('compactContextBtn').onclick = async () => {
       const out = await jpost('/api/context/compact', { sessionId, dryRun: false });
-      q('runtimeStatus').textContent =
+      setStatus(
+        'runtimeStatus',
         out.skipped
           ? `compact skipped: ${out.reason}`
-          : `compacted pre=${Number(out.preTokens || 0)} post=${Number(out.postTokens || 0)} artifacts=${Number(out.artifactsCount || 0)}`;
+          : `compacted pre=${Number(out.preTokens || 0)} post=${Number(out.postTokens || 0)} artifacts=${Number(out.artifactsCount || 0)}`,
+        { type: out.skipped ? 'warn' : 'success', title: 'Context' }
+      );
       await refreshContextStatus();
       await loadSession();
       await refreshSessionList();
@@ -3417,8 +3604,11 @@ ${verificationSummary || preview}`)}</pre>`;
 
     q('applyAutonomyMode').onclick = async () => {
       const out = await jpost('/api/autonomy/mode', { mode: q('autonomyMode').value });
-      q('runtimeStatus').textContent =
-        `applied mode=${out.mode} shell=${out.runtime?.shellEnabled} maxIters=${out.runtime?.maxToolIterations}`;
+      setStatus(
+        'runtimeStatus',
+        `applied mode=${out.mode} shell=${out.runtime?.shellEnabled} maxIters=${out.runtime?.maxToolIterations}`,
+        { type: 'success', title: 'Runtime' }
+      );
       await refreshRuntime();
       await refreshModel();
       await refreshRuntimeOverview();
@@ -3426,14 +3616,17 @@ ${verificationSummary || preview}`)}</pre>`;
 
     q('saveCdp').onclick = async () => {
       const out = await jpost('/api/browser/config', { cdpUrl: q('cdpPreset').value });
-      q('browserStatusLine').textContent = `saved ${out.cdpUrl}`;
+      setStatus('browserStatusLine', `saved ${out.cdpUrl}`, { type: 'success', title: 'Browser CDP' });
       await refreshBrowserConfig();
       await refreshRuntimeOverview();
     };
 
     q('launchBrowser').onclick = async () => {
       const out = await jpost('/api/browser/launch', {});
-      q('browserStatusLine').textContent = out.ok ? `launched pid=${out.pid} at ${out.cdpUrl}` : 'launch failed';
+      setStatus('browserStatusLine', out.ok ? `launched pid=${out.pid} at ${out.cdpUrl}` : 'launch failed', {
+        type: out.ok ? 'success' : 'error',
+        title: 'Browser'
+      });
       if (out.cdpUrl) setSelectByValueOrFirst('cdpPreset', out.cdpUrl);
       await refreshBrowserConfig();
       await refreshRuntimeOverview();
@@ -3502,7 +3695,7 @@ ${verificationSummary || preview}`)}</pre>`;
       });
       activeMissionId = out.id;
       localStorage.setItem('openunum_mission', activeMissionId);
-      q('missionStatus').textContent = `running id=${activeMissionId}`;
+      setStatus('missionStatus', `running id=${activeMissionId}`, { type: 'success', title: 'Mission' });
       await refreshMission();
       await refreshMissionTimeline();
       await runWebuiWireValidation('mission_start');
@@ -3511,6 +3704,7 @@ ${verificationSummary || preview}`)}</pre>`;
     q('stopMission').onclick = async () => {
       if (!activeMissionId) return;
       await jpost('/api/missions/stop', { id: activeMissionId });
+      setStatus('missionStatus', `stopping mission ${activeMissionId}`, { type: 'warn', title: 'Mission' });
       await refreshMission();
       await refreshMissionTimeline();
       await runWebuiWireValidation('mission_stop');
@@ -3563,7 +3757,10 @@ ${verificationSummary || preview}`)}</pre>`;
       await refreshSessionList();
       await refreshContextStatus();
       await refreshTacticalLedger();
-      q('runtimeStatus').textContent = `mission session cloned | ${sourceSessionId} -> ${sessionId}`;
+      setStatus('runtimeStatus', `mission session cloned | ${sourceSessionId} -> ${sessionId}`, {
+        type: 'success',
+        title: 'Mission'
+      });
       showView('chat');
     };
     q('missionTimelineFilter').onchange = () => renderMissionTimeline();

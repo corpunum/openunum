@@ -116,7 +116,11 @@ export async function handleSessionsRoute({ req, res, url, ctx }) {
       const since = String(url.searchParams.get('since') || '');
       const pending = ctx.pendingChats.get(sessionId);
       const toolRuns = ctx.memory.getToolRunsSince(sessionId, since, 80);
-      const messages = ctx.memory.getMessagesSince(sessionId, since, 80);
+      const messages = ctx.memory.getMessagesSince(sessionId, since, 80)
+        .map((m) => ({
+          ...m,
+          html: m.role === 'assistant' ? ctx.renderReplyHtml(m.content || '') : null
+        }));
       ctx.sendJson(res, 200, {
         sessionId,
         since: since || null,
