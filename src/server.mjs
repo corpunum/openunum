@@ -84,6 +84,8 @@ import { handleChatToolsRoute } from './server/routes/chat_tools.mjs';
 import { handleSkillsResearchRoute } from './server/routes/skills_research.mjs';
 import { handleProvidersRoute } from './server/routes/providers.mjs';
 import { handleStateRoute } from './server/routes/state.mjs';
+import { handleRolesRoute } from './server/routes/roles.mjs';
+import { handleApprovalsRoute } from './server/routes/approvals.mjs';
 import { handleVerifierRoute } from './server/routes/verifier.mjs';
 import { handleAuditRoute } from './server/routes/audit.mjs';
 import { handleMemoryFreshnessRoute } from './server/routes/memory-freshness.mjs';
@@ -932,6 +934,26 @@ const server = http.createServer(async (req, res) => {
     })) return;
 
     if (await handleStateRoute({
+      req,
+      res,
+      url,
+      ctx: {
+        parseBody: parseRequestBody,
+        sendJson
+      }
+    })) return;
+
+    if (await handleRolesRoute({
+      req,
+      res,
+      url,
+      ctx: {
+        parseBody: parseRequestBody,
+        sendJson
+      }
+    })) return;
+
+    if (await handleApprovalsRoute({
       req,
       res,
       url,

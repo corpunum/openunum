@@ -75,7 +75,8 @@ Quick health checks for API endpoints:
 | `smoke-check.mjs` | Basic server health |
 | `smoke-audit.mjs` | `/api/audit/stats`, `/api/audit/log` |
 | `smoke-verifier.mjs` | `/api/verifier/stats`, `/api/verifier/check` |
-| `smoke-memory.mjs` | `/api/memory/stats`, `/api/memory/stale`, `/api/memory/refresh` |
+| `smoke-memory.mjs` | `/api/memory/freshness`, `/api/memory/stale`, `/api/memory/refresh/:id` |
+| `smoke-roles-approvals.mjs` | `/api/roles`, `/api/approvals/*` lifecycle (`request`, `pending`, `approve`, `stats`) |
 
 **Location:** `scripts/*.mjs`  
 **Framework:** Custom Node.js scripts  

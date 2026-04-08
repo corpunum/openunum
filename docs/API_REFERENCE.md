@@ -20,6 +20,7 @@ Returns:
 - `GET /api/audit/log?limit=100&offset=0` — Retrieve audit log entries
 - `GET /api/audit/verify` — Verify HMAC chain integrity
 - `GET /api/audit/root` — Current Merkle root snapshot
+- `GET /api/audit/types` — Enumerate valid audit event types
 - `POST /api/audit/log` — Append audit event
 
 Returns:
@@ -106,6 +107,21 @@ The following surfaces are architectural targets and are not currently exposed b
 
 - `POST /api/state/diff` — Compute deterministic state diff for two payloads
 - `GET /api/state/root` — Return Merkle root snapshot (empty set baseline unless extended by caller path)
+
+## Roles
+
+- `GET /api/roles` — List role-to-model mappings from role model registry
+- `GET /api/roles/:role` — Get a single role mapping
+- `POST /api/roles/:role/override` — Apply runtime override (`recommended[]`, `blocked[]`, `minTier`)
+
+## Approvals
+
+- `POST /api/approvals/request` — Create pending approval request for blocked execution
+- `GET /api/approvals/pending` — List pending approval requests
+- `GET /api/approvals/:id` — Get approval request details
+- `POST /api/approvals/:id/approve` — Approve pending request
+- `POST /api/approvals/:id/deny` — Deny pending request
+- `GET /api/approvals/stats` — Aggregate approval request counts
 
 `GET /api/config` now also returns:
 - `capabilities`
