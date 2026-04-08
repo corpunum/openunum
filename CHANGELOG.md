@@ -4,6 +4,20 @@ All notable changes to OpenUnum are documented in this file.
 
 ---
 
+## [2.3.4] - 2026-04-08
+
+### Fixed
+- `web_search` no longer hard-fails when backend is `brave` and `BRAVE_API_KEY` is missing.
+  - Automatically falls back to DuckDuckGo with explicit fallback metadata.
+- Reduced search-turn fragility by allowing runtime `web_search` backend `auto` and `cdp`:
+  - `cdp`: use connected Chrome CDP browser session for search/extraction.
+  - `auto`: prefer CDP when available, otherwise fallback to DuckDuckGo.
+
+### Changed
+- Web-search tool schema now exposes `auto` and `cdp` backend options for framework-level browser-attached search routing.
+
+---
+
 ## [2.3.3] - 2026-04-08
 
 ### Fixed

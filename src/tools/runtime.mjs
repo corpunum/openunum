@@ -1134,9 +1134,47 @@ export class ToolRuntime {
     if (name === 'web_search') {
       const budgetError = ensureBudget();
       if (budgetError) return budgetError;
+      const requestedBackend = String(args.backend || 'auto').toLowerCase();
+      if (requestedBackend === 'cdp' || requestedBackend === 'auto') {
+        try {
+          const browserStatus = await this.browser.status();
+          if (browserStatus?.ok) {
+            const extracted = await this.browser.search(String(args.query || ''));
+            const snapshot = await this.browser.snapshot().catch(() => ({ active: null }));
+            const snippet = String(extracted?.text || '').replace(/\s+/g, ' ').trim().slice(0, 4000);
+            return {
+              ok: true,
+              results: [{
+                title: snapshot?.active?.title || `Browser search: ${String(args.query || '').slice(0, 80)}`,
+                url: snapshot?.active?.url || '',
+                snippet
+              }],
+              query: String(args.query || ''),
+              backend: 'cdp',
+              total: snippet ? 1 : 0,
+              source: 'browser_cdp'
+            };
+          }
+          if (requestedBackend === 'cdp') {
+            return {
+              ok: false,
+              error: 'cdp_unavailable',
+              hint: browserStatus?.error || 'CDP browser not reachable'
+            };
+          }
+        } catch (error) {
+          if (requestedBackend === 'cdp') {
+            return {
+              ok: false,
+              error: 'cdp_search_failed',
+              hint: String(error?.message || error)
+            };
+          }
+        }
+      }
       return web_search({
         query: args.query,
-        backend: args.backend || 'duckduckgo',
+        backend: requestedBackend === 'auto' ? 'duckduckgo' : requestedBackend,
         limit: Number(args.limit ?? 10),
         region: args.region || 'us-en'
       });

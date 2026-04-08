@@ -5,6 +5,7 @@ import { logInfo, logError } from '../logger.mjs';
  * 
  * Provides web search capabilities for the full-search routing strategy.
  * Supports multiple search backends: DuckDuckGo (default), Brave, SerpAPI.
+ * Note: CDP-backed browser search is handled by runtime (`backend: cdp|auto`).
  */
 
 const DEFAULT_BACKEND = 'duckduckgo';
@@ -21,21 +22,23 @@ const REQUEST_TIMEOUT = 15000;
  * @returns {Promise<{results: Array<{title, url, snippet}>, query, backend, total}>}
  */
 export async function web_search({ query, backend = DEFAULT_BACKEND, limit = MAX_RESULTS, region = 'us-en' }) {
-  logInfo('web_search_invoked', { query: query?.substring(0, 50), backend, limit });
+  const selectedBackend = String(backend || DEFAULT_BACKEND).toLowerCase();
+  logInfo('web_search_invoked', { query: query?.substring(0, 50), backend: selectedBackend, limit });
 
   try {
-    switch (backend) {
+    switch (selectedBackend) {
       case 'duckduckgo':
         return await searchDuckDuckGo(query, limit, region);
       case 'brave':
-        return await searchBrave(query, limit, region);
+        // Never hard-fail the turn on missing Brave key; degrade to DuckDuckGo.
+        return await searchBraveWithFallback(query, limit, region);
       case 'serpapi':
         return await searchSerpApi(query, limit, region);
       default:
-        throw new Error(`Unknown search backend: ${backend}`);
+        throw new Error(`Unknown search backend: ${selectedBackend}`);
     }
   } catch (error) {
-    logError('web_search_failed', { error: String(error.message || error), backend });
+    logError('web_search_failed', { error: String(error.message || error), backend: selectedBackend });
     throw error;
   }
 }
@@ -212,6 +215,31 @@ async function searchBrave(query, limit, region) {
   };
 }
 
+async function searchBraveWithFallback(query, limit, region) {
+  const apiKey = process.env.BRAVE_API_KEY;
+  if (!apiKey) {
+    const out = await searchDuckDuckGo(query, limit, region);
+    return {
+      ...out,
+      backend: 'duckduckgo',
+      fallbackFrom: 'brave',
+      warning: 'BRAVE_API_KEY not set; used duckduckgo fallback.'
+    };
+  }
+  try {
+    return await searchBrave(query, limit, region);
+  } catch (error) {
+    logError('brave_search_fallback_to_duckduckgo', { error: String(error.message || error) });
+    const out = await searchDuckDuckGo(query, limit, region);
+    return {
+      ...out,
+      backend: 'duckduckgo',
+      fallbackFrom: 'brave',
+      warning: `Brave search failed (${String(error.message || error)}); used duckduckgo fallback.`
+    };
+  }
+}
+
 /**
  * SerpAPI (requires API key)
  * @private
@@ -315,8 +343,8 @@ export const toolDefinitions = {
         },
         backend: {
           type: 'string',
-          enum: ['duckduckgo', 'brave', 'serpapi'],
-          description: 'Search backend (default: duckduckgo)'
+          enum: ['duckduckgo', 'brave', 'serpapi', 'auto', 'cdp'],
+          description: 'Search backend (runtime supports auto/cdp via Chrome CDP when available)'
         },
         limit: {
           type: 'number',
