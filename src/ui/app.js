@@ -3,6 +3,12 @@ import { jget, jpost, jrequest } from './modules/http.js';
 import { setStatus } from './modules/feedback.js';
 import { showView as showViewWithMeta } from './modules/navigation.js';
 import {
+  loadDetailPanelState,
+  detailPanelKey,
+  rememberDetailPanelState as rememberDetailPanelStateWithStorage,
+  bindPersistentDetailPanels
+} from './modules/detail-panels.js';
+import {
   pendingPollDelayMs,
   formatRelativeTime,
   newestAssistantSince,
@@ -83,12 +89,7 @@ const vaultModalState = { kind: '', id: '' };
 let hiddenProviderRows = [];
 let hiddenServiceRows = [];
 let authJobPrompted = {};
-let detailPanelState = {};
-try {
-  detailPanelState = JSON.parse(localStorage.getItem('openunum_detail_panels') || '{}') || {};
-} catch {
-  detailPanelState = {};
-}
+let detailPanelState = loadDetailPanelState(localStorage);
 q('chatMeta').textContent = sessionId;
 q('autoEscalateToggle').textContent = `Auto: ${autoEscalateEnabled ? 'On' : 'Off'}`;
 q('liveActivityToggle').textContent = `Live: ${liveActivityEnabled ? 'On' : 'Off'}`;
@@ -102,33 +103,8 @@ function updateComposerPendingState() {
     ? 'Session is still running. Switch sessions or wait for completion.'
     : 'Type a message. Enter sends, Shift+Enter adds a new line';
 }
-function detailPanelKey(scope, name) {
-  return `${scope || sessionId || 'global'}:${name}`;
-}
 function rememberDetailPanelState(key, patch) {
-  detailPanelState[key] = { ...(detailPanelState[key] || {}), ...patch };
-  localStorage.setItem('openunum_detail_panels', JSON.stringify(detailPanelState));
-}
-function bindPersistentDetailPanels(root) {
-  if (!root) return;
-  root.querySelectorAll('details[data-persist-key]').forEach((details) => {
-    const key = details.dataset.persistKey;
-    if (!key) return;
-    const saved = detailPanelState[key] || {};
-    if (typeof saved.open === 'boolean') details.open = saved.open;
-    const body = details.querySelector('.trace-body');
-    if (body && Number.isFinite(saved.scrollTop)) {
-      body.scrollTop = saved.scrollTop;
-    }
-    details.addEventListener('toggle', () => {
-      rememberDetailPanelState(key, { open: details.open });
-    });
-    if (body) {
-      body.addEventListener('scroll', () => {
-        rememberDetailPanelState(key, { scrollTop: body.scrollTop });
-      }, { passive: true });
-    }
-  });
+  rememberDetailPanelStateWithStorage(detailPanelState, key, patch, localStorage);
 }
 
 function showView(viewId) {
@@ -218,7 +194,7 @@ function pushMsg(role, text, html) {
   const bubble = document.createElement('div');
   bubble.className = `bubble ${role === 'user' ? 'user' : 'ai'}`;
   bubble.innerHTML = html || escapeHtml(text || '');
-  bindPersistentDetailPanels(bubble);
+  bindPersistentDetailPanels(bubble, detailPanelState, rememberDetailPanelState);
   wrap.appendChild(bubble);
   chat.appendChild(wrap);
   chat.scrollTop = chat.scrollHeight;
@@ -267,15 +243,15 @@ function renderLiveBubble(typing, statusText, tools = []) {
     </div>
     <div class="typing-status">${escapeHtml(statusText || 'Agent is working...')}</div>
   </div>
-    <details class="trace" open data-persist-key="${escapeHtml(detailPanelKey(scope, 'live-activity'))}">
+    <details class="trace" open data-persist-key="${escapeHtml(detailPanelKey(scope || sessionId || 'global', 'live-activity'))}">
       <summary>Live Activity (${tools.length} tool calls)</summary>
       <div class="trace-body">${lastTools || '<div class="trace-line">No tool call observed yet.</div>'}</div>
     </details>
-    <details class="trace" data-persist-key="${escapeHtml(detailPanelKey(scope, 'live-retries'))}">
+    <details class="trace" data-persist-key="${escapeHtml(detailPanelKey(scope || sessionId || 'global', 'live-retries'))}">
       <summary>Attempts & Retries (${(typing.liveEvents || []).length})</summary>
       <div class="trace-body">${events || '<div class="trace-line">No events yet.</div>'}</div>
     </details>`;
-  bindPersistentDetailPanels(typing.bubble);
+  bindPersistentDetailPanels(typing.bubble, detailPanelState, rememberDetailPanelState);
 }
 
 function renderTrace(trace) {

@@ -4,6 +4,18 @@ All notable changes to OpenUnum are documented in this file.
 
 ---
 
+## [2.3.14] - 2026-04-08
+
+### Changed
+- Continued WebUI modularization:
+  - extracted detail-panel persistence helpers to `src/ui/modules/detail-panels.js`
+  - `src/ui/app.js` now uses module-based detail state load/key/bind/persist helpers.
+
+### Added
+- New unit coverage for detail-panel persistence helpers in `tests/unit/ui-detail-panels.test.mjs`.
+
+---
+
 ## [2.3.13] - 2026-04-08
 
 ### Changed
