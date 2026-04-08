@@ -90,7 +90,6 @@ Returns:
 The following surfaces are architectural targets and are not currently exposed by the active runtime:
 - Replay API (`/api/replay/*`)
 - ODD API (`/api/odd/*`)
-- WebUI SSE streaming endpoints (`/api/ui/sse`, `/api/ui/trace/:sessionId`, `/api/ui/pending/:sessionId`)
 
 ## Config
 
@@ -744,6 +743,7 @@ Switch payload:
 
 - `POST /api/chat`
 - `GET /api/chat/pending?sessionId=...`
+- `GET /api/chat/stream?sessionId=...&since=<ISO8601>` (SSE pending/activity stream)
 
 Payload:
 ```json
@@ -892,6 +892,14 @@ Error responses now follow:
   "contract_version": "2026-04-02.api-errors.v1"
 }
 ```
+
+`GET /api/chat/stream` SSE payload includes:
+- `sessionId`
+- `pending`
+- `startedAt`
+- `toolRuns[]`
+- `messages[]` (assistant rows include `html`)
+- `done` (true when final assistant message has persisted and pending ended)
 
 ## Skills
 

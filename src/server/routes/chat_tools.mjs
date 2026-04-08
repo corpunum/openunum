@@ -182,6 +182,80 @@ export async function handleChatToolsRoute({ req, res, url, ctx }) {
     return true;
   }
 
+  if (req.method === 'GET' && url.pathname === '/api/chat/stream') {
+    const sessionId = String(url.searchParams.get('sessionId') || '').trim();
+    const since = String(url.searchParams.get('since') || '').trim();
+    if (!sessionId) {
+      ctx.sendJson(res, 400, { error: 'sessionId is required' });
+      return true;
+    }
+
+    res.writeHead(200, {
+      'Content-Type': 'text/event-stream',
+      'Cache-Control': 'no-cache, no-transform',
+      Connection: 'keep-alive',
+      'X-Accel-Buffering': 'no'
+    });
+
+    let closed = false;
+    const writeEvent = (payload) => {
+      if (closed) return;
+      try {
+        res.write(`data: ${JSON.stringify(payload)}\n\n`);
+      } catch {
+        closed = true;
+      }
+    };
+
+    let timer = null;
+    const finalize = () => {
+      if (closed) return;
+      closed = true;
+      if (timer) {
+        try { clearInterval(timer); } catch {}
+      }
+      try { res.end(); } catch {}
+    };
+
+    const readSnapshot = () => {
+      const pending = ctx.pendingChats.get(sessionId);
+      const startedAt = pending?.startedAt || null;
+      const toolRuns = typeof ctx.memory.getToolRunsSince === 'function'
+        ? ctx.memory.getToolRunsSince(sessionId, since, 80)
+        : [];
+      const messages = typeof ctx.memory.getMessagesSince === 'function'
+        ? ctx.memory.getMessagesSince(sessionId, since, 80).map((m) => ({
+          ...m,
+          html: m.role === 'assistant' ? ctx.renderReplyHtml(m.content || '') : null
+        }))
+        : [];
+      const done = !pending && messages.some((m) => m.role === 'assistant');
+      return {
+        ok: true,
+        sessionId,
+        pending: Boolean(pending),
+        startedAt,
+        toolRuns,
+        messages,
+        done,
+        ts: new Date().toISOString()
+      };
+    };
+
+    const pushSnapshot = () => {
+      const snapshot = readSnapshot();
+      writeEvent(snapshot);
+      if (snapshot.done) finalize();
+    };
+
+    req.on('close', () => finalize());
+    req.on('aborted', () => finalize());
+
+    pushSnapshot();
+    timer = setInterval(pushSnapshot, 900);
+    return true;
+  }
+
   if (req.method === 'POST' && url.pathname === '/api/tool/run') {
     const body = await ctx.parseBody(req);
     if (!isPlainObject(body)) {

@@ -52,7 +52,7 @@ This map is implementation-accurate as of 2026-04-08.
 ## Runtime Notes
 
 - Audit, verifier, and memory freshness APIs are handled through active route modules (`src/server/routes/audit.mjs`, `src/server/routes/verifier.mjs`, `src/server/routes/memory-freshness.mjs`) wired by `src/server.mjs`.
-- Web UI currently uses activity-first adaptive polling for pending/trace updates in `src/ui/index.html` (no SSE runtime endpoints).
+- Web UI now prefers SSE pending stream updates via `GET /api/chat/stream` with adaptive activity polling fallback in `src/ui/index.html`.
 - Agent runtime includes a feature-based short-turn fast path (length + intent signals) for low-intent conversational turns to avoid unnecessary provider/tool cycles.
 
 ## Request Flow (Chat)

@@ -1965,11 +1965,79 @@
       return true;
     }
 
+    async function resolvePendingReplyViaStream(typing, startedAtIso, requestSessionId, requestToken, deadline) {
+      if (typeof EventSource === 'undefined') return null;
+      const url = `/api/chat/stream?sessionId=${encodeURIComponent(requestSessionId)}&since=${encodeURIComponent(startedAtIso)}`;
+      return await new Promise((resolve) => {
+        let settled = false;
+        const source = new EventSource(url);
+        const cleanup = (result = null) => {
+          if (settled) return;
+          settled = true;
+          try { source.close(); } catch {}
+          clearTimeout(timeoutId);
+          resolve(result);
+        };
+        const timeoutMs = Math.max(1000, deadline - Date.now());
+        const timeoutId = setTimeout(() => cleanup(null), timeoutMs);
+
+        source.onmessage = (ev) => {
+          if (requestToken !== requestTokenSeq) {
+            cleanup(false);
+            return;
+          }
+          let payload = null;
+          try {
+            payload = JSON.parse(String(ev.data || '{}'));
+          } catch {
+            return;
+          }
+          typing.pollCount = (typing.pollCount || 0) + 1;
+          const tools = Array.isArray(payload?.toolRuns) ? payload.toolRuns : [];
+          if ((typing.lastToolCount || 0) !== tools.length) {
+            addLiveEvent(typing, `tool count ${typing.lastToolCount || 0} -> ${tools.length}`);
+            typing.lastToolCount = tools.length;
+          }
+          const statusText = buildPendingStatus(typing, payload, {
+            pending: Boolean(payload?.pending),
+            startedAt: payload?.startedAt || startedAtIso
+          });
+          const msgFromActivity = newestAssistantSince(payload?.messages || [], startedAtIso);
+          if (liveActivityEnabled) {
+            renderLiveBubble(typing, statusText, tools);
+          } else {
+            typing.bubble.textContent = statusText;
+          }
+          if (msgFromActivity?.content) {
+            addLiveEvent(typing, 'assistant final response received');
+            typing.bubble.innerHTML = msgFromActivity.html || `<pre>${escapeHtml(msgFromActivity.content)}</pre>`;
+            void refreshSessionList();
+            cleanup(true);
+            return;
+          }
+          if (payload?.done === true) {
+            cleanup(null);
+          }
+        };
+
+        source.onerror = () => cleanup(null);
+      });
+    }
+
     async function resolvePendingReply(typing, startedAtIso, requestSessionId, requestToken) {
       const deadline = Date.now() + 10 * 60 * 1000;
       pendingSessions.add(requestSessionId);
       updateComposerPendingState();
       try {
+        const streamResult = await resolvePendingReplyViaStream(
+          typing,
+          startedAtIso,
+          requestSessionId,
+          requestToken,
+          deadline
+        );
+        if (streamResult !== null) return streamResult;
+
         while (Date.now() < deadline) {
           await sleep(pendingPollDelayMs(typing.pollCount || 0));
           if (requestToken !== requestTokenSeq) return false;
