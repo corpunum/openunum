@@ -1,4 +1,9 @@
 export async function handleSessionsRoute({ req, res, url, ctx }) {
+  const getRuntimeState = ({ sessionId = '', goal = '', phase = 'phase0', nextAction = '' } = {}) => {
+    if (typeof ctx.buildRuntimeStateAttachment !== 'function') return null;
+    return ctx.buildRuntimeStateAttachment({ sessionId, goal, phase, nextAction });
+  };
+
   if (req.method === 'GET' && url.pathname === '/api/sessions') {
     const limit = Number(url.searchParams.get('limit') || 80);
     ctx.sendJson(res, 200, { sessions: ctx.memory.listSessions(limit) });
@@ -13,7 +18,15 @@ export async function handleSessionsRoute({ req, res, url, ctx }) {
       return true;
     }
     const session = ctx.memory.createSession(sessionId);
-    ctx.sendJson(res, 200, { ok: true, session });
+    ctx.sendJson(res, 200, {
+      ok: true,
+      session,
+      runtimeState: getRuntimeState({
+        sessionId,
+        goal: `session:${sessionId}`,
+        nextAction: 'Continue session workflow'
+      })
+    });
     return true;
   }
 
@@ -23,7 +36,15 @@ export async function handleSessionsRoute({ req, res, url, ctx }) {
       sessionId: String(body?.sessionId || '').trim(),
       messages: Array.isArray(body?.messages) ? body.messages : []
     });
-    ctx.sendJson(res, 200, { ok: true, session: imported });
+    ctx.sendJson(res, 200, {
+      ok: true,
+      session: imported,
+      runtimeState: getRuntimeState({
+        sessionId: String(imported?.sessionId || body?.sessionId || '').trim(),
+        goal: `session-import:${String(imported?.sessionId || body?.sessionId || '').trim()}`,
+        nextAction: 'Validate imported session and continue'
+      })
+    });
     return true;
   }
 
@@ -33,7 +54,15 @@ export async function handleSessionsRoute({ req, res, url, ctx }) {
       sourceSessionId: String(body?.sourceSessionId || '').trim(),
       targetSessionId: String(body?.targetSessionId || '').trim()
     });
-    ctx.sendJson(res, 200, { ok: true, session });
+    ctx.sendJson(res, 200, {
+      ok: true,
+      session,
+      runtimeState: getRuntimeState({
+        sessionId: String(session?.sessionId || body?.targetSessionId || '').trim(),
+        goal: `session-clone:${String(session?.sessionId || body?.targetSessionId || '').trim()}`,
+        nextAction: 'Use cloned session for continued execution'
+      })
+    });
     return true;
   }
 
@@ -94,7 +123,12 @@ export async function handleSessionsRoute({ req, res, url, ctx }) {
         pending: Boolean(pending),
         pendingStartedAt: pending?.startedAt || null,
         toolRuns,
-        messages
+        messages,
+        runtimeState: getRuntimeState({
+          sessionId,
+          goal: `session-activity:${sessionId}`,
+          nextAction: 'Inspect activity deltas'
+        })
       });
       return true;
     }
@@ -112,7 +146,12 @@ export async function handleSessionsRoute({ req, res, url, ctx }) {
         summary,
         exportedAt: new Date().toISOString(),
         estimatedTokens: ctx.estimateMessagesTokens(messages.map((m) => ({ role: m.role, content: m.content }))),
-        messages
+        messages,
+        runtimeState: getRuntimeState({
+          sessionId,
+          goal: summary.title || `session-export:${sessionId}`,
+          nextAction: 'Review exported session transcript'
+        })
       });
       return true;
     }
@@ -159,7 +198,12 @@ export async function handleSessionsRoute({ req, res, url, ctx }) {
             count: interventions.length,
             items: interventions.slice(-50)  // Last 50 interventions
           }
-        }
+        },
+        runtimeState: getRuntimeState({
+          sessionId,
+          goal: `session-trace:${sessionId}`,
+          nextAction: 'Review interventions and continue mission safely'
+        })
       });
       return true;
     }
@@ -170,7 +214,15 @@ export async function handleSessionsRoute({ req, res, url, ctx }) {
         ...m,
         html: (!skipHtml && m.role === 'assistant') ? ctx.renderReplyHtml(m.content || '') : null
       }));
-    ctx.sendJson(res, 200, { sessionId, messages: msgs });
+    ctx.sendJson(res, 200, {
+      sessionId,
+      messages: msgs,
+      runtimeState: getRuntimeState({
+        sessionId,
+        goal: `session:${sessionId}`,
+        nextAction: 'Continue chat execution'
+      })
+    });
     return true;
   }
 

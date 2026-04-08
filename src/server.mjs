@@ -435,6 +435,16 @@ function buildRuntimeStateContractReport({ sessionId = '', goal = '', phase = ''
   };
 }
 
+function buildRuntimeStateAttachment({ sessionId = '', goal = '', phase = '', nextAction = '' } = {}) {
+  const report = buildRuntimeStateContractReport({ sessionId, goal, phase, nextAction });
+  return {
+    contractVersion: report.contractVersion,
+    validationOk: Boolean(report.validation?.ok),
+    fingerprint: report.packet?.fingerprint || null,
+    state: report.packet?.state || null
+  };
+}
+
 function buildMissionTimeline(mission) {
   if (!mission) return null;
   const sessionId = mission.sessionId;
@@ -1042,7 +1052,8 @@ const server = http.createServer(async (req, res) => {
         sendApiError,
         prunePendingChats,
         estimateMessagesTokens,
-        renderReplyHtml
+        renderReplyHtml,
+        buildRuntimeStateAttachment
       }
     })) return;
 
@@ -1055,7 +1066,8 @@ const server = http.createServer(async (req, res) => {
         missions,
         parseBody,
         sendJson,
-        buildMissionTimeline
+        buildMissionTimeline,
+        buildRuntimeStateAttachment
       }
     })) return;
 

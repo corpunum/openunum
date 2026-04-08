@@ -16,8 +16,8 @@ Phase 0 creates strict foundations for all later remediation work:
 ### Epic A: Canonical Runtime State
 - [x] A1. Add runtime state contract module with normalization + validation.
 - [x] A2. Add deterministic state fingerprint generation.
-- [ ] A3. Wire runtime state packet into mission/session runtime responses.
-- [ ] A4. Add API exposure for packet + contract version.
+- [x] A3. Wire runtime state packet into mission/session runtime responses.
+- [x] A4. Add API exposure for packet + contract version.
 
 Acceptance
 - Contract version is explicit and stable.
@@ -28,7 +28,7 @@ Acceptance
 - [x] B1. Add config parity analyzer for active/fallback providers.
 - [x] B2. Add provider matrix in report (base URL present, key present, source).
 - [x] B3. Add script to run parity + runtime contract checks.
-- [ ] B4. Expose parity report via API endpoint for Web UI/runtime diagnostics.
+- [x] B4. Expose parity report via API endpoint for Web UI/runtime diagnostics.
 
 Acceptance
 - Missing provider-model mappings are surfaced as errors.
@@ -38,7 +38,7 @@ Acceptance
 ### Epic C: 4B Readiness Gate
 - [x] C1. Add explicit compact-profile checks (history/tool-iteration budgets).
 - [x] C2. Add context compaction gate check.
-- [ ] C3. Add CI/Deploy gate requiring 4B readiness for compact profile changes.
+- [x] C3. Add CI/Deploy gate requiring 4B readiness for compact profile changes.
 
 Acceptance
 - Compact profile violations show clear warning/error codes.
@@ -46,8 +46,8 @@ Acceptance
 
 ### Epic D: Rollout + Observability
 - [x] D1. Add `/api/runtime/state-contract` + `/api/runtime/config-parity` endpoints.
-- [ ] D2. Add UI diagnostics panel for Phase 0 checks.
-- [ ] D3. Add runbook entries for operator triage workflow.
+- [x] D2. Add UI diagnostics panel for Phase 0 checks.
+- [x] D3. Add runbook entries for operator triage workflow.
 
 Acceptance
 - Operators can run checks from CLI and UI.
@@ -57,8 +57,11 @@ Acceptance
 - `src/core/runtime-state-contract.mjs`
 - `src/core/config-parity-check.mjs`
 - `scripts/phase0-foundation-check.mjs`
+- `scripts/compact-profile-gate.mjs`
+- `.github/workflows/phase-gates.yml`
 - `tests/unit/runtime-state-contract.test.mjs`
 - `tests/unit/config-parity-check.test.mjs`
+- `tests/unit/runtime-wiring-routes.test.mjs`
 
 ## Immediate Commands
 ```bash
@@ -66,7 +69,5 @@ pnpm test:unit
 node scripts/phase0-foundation-check.mjs
 ```
 
-## Next Implementation Slice (recommended)
-1. Wire parity and state-contract reports to read-only API routes.
-2. Add one Web UI diagnostics section consuming those routes.
-3. Add deploy gate check in CI for compact-profile regressions.
+## Status
+Phase 0 core backlog is complete as of 2026-04-08.

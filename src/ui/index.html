@@ -967,6 +967,12 @@
               <div class="value" id="contextBudgetValue">-</div>
               <div class="meta" id="contextBudgetMeta">No context telemetry</div>
             </div>
+            <div class="card">
+              <h4>Phase 0 Diagnostics</h4>
+              <div class="value" id="phase0ContractValue">-</div>
+              <div class="meta" id="phase0ContractMeta">Runtime state contract not loaded</div>
+              <div class="meta" id="phase0ParityMeta">Config parity not loaded</div>
+            </div>
           </div>
           <div class="grid three">
             <div class="field">
@@ -1002,6 +1008,7 @@
             <button id="saveRuntime">Save Runtime</button>
             <button id="compactContextBtn">Compact Context</button>
             <button id="refreshLedgerBtn">Refresh Ledger</button>
+            <button id="refreshPhase0Diag">Refresh Phase 0</button>
           </div>
 
           <hr style="border:none;border-top:1px solid var(--line);margin:14px 0;" />
@@ -2585,7 +2592,22 @@ ${verificationSummary || preview}`)}</pre>`;
       q('browserCdpValue').textContent = browserInfo.cdpUrl || q('cdpPreset').value || '-';
       const tabCount = Array.isArray(browserInfo.targets) ? browserInfo.targets.length : 0;
       q('browserTabMeta').textContent = tabCount ? `${tabCount} visible targets` : 'No live target list';
+      await refreshPhase0Diagnostics();
       await refreshContextStatus();
+    }
+
+    async function refreshPhase0Diagnostics() {
+      const sid = String(sessionId || '').trim() || 'ui-runtime';
+      const [stateContract, parity] = await Promise.all([
+        jget(`/api/runtime/state-contract?sessionId=${encodeURIComponent(sid)}&phase=phase0&nextAction=${encodeURIComponent('Review operator diagnostics')}`),
+        jget('/api/runtime/config-parity')
+      ]);
+      const stateOk = stateContract?.validation?.ok === true;
+      q('phase0ContractValue').textContent = stateOk ? 'State OK' : 'State Warning';
+      q('phase0ContractMeta').textContent =
+        `contract=${stateContract?.contractVersion || '-'} | valid=${stateOk} | fp=${String(stateContract?.packet?.fingerprint || '').slice(0, 12) || '-'}`;
+      q('phase0ParityMeta').textContent =
+        `parity=${parity?.severity || 'unknown'} | errors=${Number(parity?.summary?.errorCount || 0)} warnings=${Number(parity?.summary?.warningCount || 0)}`;
     }
 
     async function refreshContextStatus() {
@@ -3015,6 +3037,7 @@ ${verificationSummary || preview}`)}</pre>`;
       await refreshTacticalLedger();
     };
     q('refreshLedgerBtn').onclick = refreshTacticalLedger;
+    q('refreshPhase0Diag').onclick = refreshPhase0Diagnostics;
 
     q('applyAutonomyMode').onclick = async () => {
       const out = await jpost('/api/autonomy/mode', { mode: q('autonomyMode').value });
@@ -3357,6 +3380,7 @@ ${verificationSummary || preview}`)}</pre>`;
           { name: 'providers', fn: refreshProviderConfig },
           //{ name: 'browser', fn: refreshBrowserConfig }, // Temporarily disabled due to CDP endpoint issues
           { name: 'overview', fn: refreshRuntimeOverview },
+          { name: 'phase0-diag', fn: refreshPhase0Diagnostics },
           { name: 'telegram', fn: refreshTelegram },
           { name: 'sessions', fn: refreshSessionList },
           { name: 'load', fn: loadSession },

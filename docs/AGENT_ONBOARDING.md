@@ -52,6 +52,7 @@ This guide will help you understand:
 - `pnpm phase0:check` — Validates canonical runtime state contract and config parity report
 - `pnpm docs:gate` — Enforces docs-as-completion for recent code changes
 - `pnpm docs:index` — Rebuilds curated self-reading file index
+- `pnpm gate:compact-profile` — Enforces `phase0:check` when compact/4B-sensitive surfaces changed
 - `pnpm test:smoke` — Isolated smoke suite (self-starting temp server/home)
 - `pnpm test:smoke:live` — Smoke against current running service (deployment verification)
 - `pnpm test:imitation` — Session-imitation regression replay from real chat patterns

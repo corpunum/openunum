@@ -2,6 +2,44 @@
 
 Date: 2026-04-07
 
+## Phase 0 Closure Slice: Runtime Wiring + Gates + UI Diagnostics (2026-04-08)
+
+**Status:** ✅ Implemented and test-gated
+
+### Runtime Wiring
+
+- Added canonical `runtimeState` attachment to mission/session runtime endpoints:
+  - `POST /api/sessions`
+  - `POST /api/sessions/import`
+  - `POST /api/sessions/clone`
+  - `GET /api/sessions/:sessionId`
+  - `GET /api/sessions/:sessionId/activity`
+  - `GET /api/sessions/:sessionId/export`
+  - `GET /api/sessions/:sessionId/trace`
+  - `POST /api/missions/start`
+  - `GET /api/missions/status`
+  - `GET /api/missions/timeline`
+
+### Phase 0 Gate Hardening
+
+- Added `scripts/compact-profile-gate.mjs`.
+- Added npm command: `pnpm gate:compact-profile`.
+- Updated `deploy:gate` to include compact-profile gate.
+- Added CI workflow: `.github/workflows/phase-gates.yml` (docs/unit/phase0/compact checks).
+
+### UI / Ops
+
+- Added `Phase 0 Diagnostics` card in Operator Runtime view with:
+  - state contract validity + fingerprint preview
+  - config parity severity + issue counts
+  - manual `Refresh Phase 0` control
+- Added operator triage section to `docs/OPERATIONS_RUNBOOK.md`.
+- Marked `docs/PHASE0_EXECUTION_PLAN.md` backlog complete.
+
+### Tests
+
+- Added `tests/unit/runtime-wiring-routes.test.mjs` for mission/session runtime-state contract wiring.
+
 ## AutonomyMaster Recovery Contract Fix + Audit Closure (2026-04-08)
 
 **Status:** ✅ Implemented and test-gated

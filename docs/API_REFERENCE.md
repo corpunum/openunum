@@ -517,6 +517,7 @@ Returns a WebUI-oriented flagship summary:
 - `compactions[]`
 - `artifacts[]`
 - `recentStrategies[]`
+- `runtimeState`
 
 ## Provider Config + Discovery
 
@@ -824,6 +825,13 @@ or
 - `providerMatrix`
 - `issues[]`
 
+Mission/session runtime wiring:
+- Mission and session detail endpoints include `runtimeState`:
+  - `contractVersion`
+  - `validationOk`
+  - `fingerprint`
+  - `state` (canonical packet state scoped to endpoint context)
+
 ## Direct Tool Run
 
 - `POST /api/tool/run`
@@ -867,6 +875,7 @@ Payload:
 - `exportedAt`
 - `estimatedTokens`
 - `messages[]`
+- `runtimeState`
 
 `POST /api/sessions/import` accepts:
 - `sessionId`
@@ -938,6 +947,7 @@ Activity response includes:
 - `pending` (whether session currently has an active chat run)
 - `toolRuns` (tool call stream with args/results since timestamp)
 - `messages` (messages since timestamp)
+- `runtimeState` (canonical runtime contract snapshot for this session read)
 
 ## Missions
 
@@ -954,6 +964,7 @@ Mission runtime persistence:
 - mission records are now stored in SQLite and remain visible after server restart
 - in-progress missions interrupted by restart are marked `interrupted`
 - `GET /api/missions` and `GET /api/missions/status` read active in-memory missions first, then persisted mission records
+- `GET /api/missions/status`, `GET /api/missions/timeline`, and `POST /api/missions/start` include `runtimeState`
 
 Start payload (partial):
 ```json

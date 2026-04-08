@@ -4,6 +4,26 @@ All notable changes to OpenUnum are documented in this file.
 
 ---
 
+## [2.2.6] - 2026-04-08
+
+### Added
+- Compact-profile enforcement gate script (`scripts/compact-profile-gate.mjs`) and npm command (`pnpm gate:compact-profile`) to require `phase0:check` on compact/4B-sensitive changes.
+- CI workflow gate `.github/workflows/phase-gates.yml` (docs gate, unit tests, phase0 check, compact gate).
+- Unit coverage for session/mission runtime-state response wiring:
+  - `tests/unit/runtime-wiring-routes.test.mjs`
+
+### Changed
+- Mission/session API runtime responses now include canonical `runtimeState` attachment (`contractVersion`, `validationOk`, `fingerprint`, `state`).
+- WebUI `Operator Runtime & Tools` now includes a `Phase 0 Diagnostics` panel with live state-contract + config-parity status and manual refresh control.
+- `deploy:gate` now includes compact-profile gate enforcement.
+
+### Documentation
+- Marked Phase 0 backlog complete in `docs/PHASE0_EXECUTION_PLAN.md`.
+- Added Phase 0 triage workflow to `docs/OPERATIONS_RUNBOOK.md`.
+- Updated `docs/API_REFERENCE.md` and `docs/TESTING.md` for runtime-state wiring and compact gate.
+
+---
+
 ## [2.2.5] - 2026-04-08
 
 ### Fixed

@@ -259,6 +259,38 @@ curl -sS http://127.0.0.1:18880/api/browser/status
 curl -sS -X POST http://127.0.0.1:18880/api/browser/launch -H 'Content-Type: application/json' -d '{}'
 ```
 
+## 10. Phase 0 Diagnostics Triage
+
+Use this when runtime behavior drifts or compact-profile changes are deployed.
+
+### CLI Triage Sequence
+```bash
+cd /home/corp-unum/openunum
+pnpm phase0:check
+pnpm gate:compact-profile
+```
+
+### API Triage Sequence
+```bash
+curl -sS "http://127.0.0.1:18880/api/runtime/state-contract?sessionId=ops-triage&phase=phase0&nextAction=triage"
+curl -sS "http://127.0.0.1:18880/api/runtime/config-parity"
+```
+
+### Interpret Results
+- `state-contract.validation.ok=false`:
+  - contract packet invalid for current runtime; stop rollout and fix packet publisher path before deploy.
+- `config-parity.severity=error`:
+  - provider matrix or mapping has hard blockers; fix config before continuing.
+- `config-parity.severity=warning`:
+  - deployment can proceed with caution, but missing fallback/provider keys should be remediated.
+
+### UI Triage Sequence
+- Open WebUI `Operator Runtime & Tools`.
+- Check `Phase 0 Diagnostics` card:
+  - `State OK` must be true for packet validation.
+  - parity should be `ok` or `warning` without hard errors.
+- Use `Refresh Phase 0` after config/provider changes to confirm recovery.
+
 ## 10. Telegram Checklist
 
 1. Save token via API/UI.

@@ -1,4 +1,9 @@
 export async function handleMissionsRoute({ req, res, url, ctx }) {
+  const getRuntimeState = ({ sessionId = '', goal = '', phase = 'phase0', nextAction = '' } = {}) => {
+    if (typeof ctx.buildRuntimeStateAttachment !== 'function') return null;
+    return ctx.buildRuntimeStateAttachment({ sessionId, goal, phase, nextAction });
+  };
+
   if (req.method === 'GET' && url.pathname === '/api/missions') {
     const list = ctx.missions.list();
     const schedules = ctx.missions.listSchedules();
@@ -21,7 +26,14 @@ export async function handleMissionsRoute({ req, res, url, ctx }) {
       ctx.sendJson(res, 404, { error: 'mission_not_found' });
       return true;
     }
-    ctx.sendJson(res, 200, { mission });
+    ctx.sendJson(res, 200, {
+      mission,
+      runtimeState: getRuntimeState({
+        sessionId: mission.sessionId,
+        goal: mission.goal,
+        nextAction: 'Monitor mission progress and evidence'
+      })
+    });
     return true;
   }
 
@@ -32,7 +44,14 @@ export async function handleMissionsRoute({ req, res, url, ctx }) {
       ctx.sendJson(res, 404, { error: 'mission_not_found' });
       return true;
     }
-    ctx.sendJson(res, 200, ctx.buildMissionTimeline(mission));
+    ctx.sendJson(res, 200, {
+      ...ctx.buildMissionTimeline(mission),
+      runtimeState: getRuntimeState({
+        sessionId: mission.sessionId,
+        goal: mission.goal,
+        nextAction: 'Inspect timeline and continue mission'
+      })
+    });
     return true;
   }
 
@@ -46,7 +65,14 @@ export async function handleMissionsRoute({ req, res, url, ctx }) {
       continueUntilDone: body.continueUntilDone ?? ctx.config.runtime.missionDefaultContinueUntilDone,
       hardStepCap: body.hardStepCap ?? ctx.config.runtime.missionDefaultHardStepCap
     });
-    ctx.sendJson(res, 200, out);
+    ctx.sendJson(res, 200, {
+      ...out,
+      runtimeState: getRuntimeState({
+        sessionId: out.sessionId,
+        goal: body.goal,
+        nextAction: 'Mission started; track until proof-complete'
+      })
+    });
     return true;
   }
 

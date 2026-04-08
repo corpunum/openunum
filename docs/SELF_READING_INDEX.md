@@ -1,6 +1,6 @@
 # Self Reading Index
 
-Generated: 2026-04-08T08:47:03.944Z
+Generated: 2026-04-08T09:08:39.151Z
 
 Purpose: curated file map for autonomous code/docs self-reading and update workflows.
 
@@ -14,7 +14,7 @@ Purpose: curated file map for autonomous code/docs self-reading and update workf
 
 ## Server Surface
 
-- ✅ `src/server.mjs` (1129 lines)
+- ✅ `src/server.mjs` (1141 lines)
 - ✅ `src/server/routes/health.mjs` (73 lines)
 - ✅ `src/server/services/auth_service.mjs` (397 lines)
 
@@ -22,11 +22,11 @@ Purpose: curated file map for autonomous code/docs self-reading and update workf
 
 - ✅ `src/secrets/store.mjs` (801 lines)
 - ✅ `docs/CONFIG_SCHEMA.md` (123 lines)
-- ✅ `docs/API_REFERENCE.md` (1019 lines)
+- ✅ `docs/API_REFERENCE.md` (1030 lines)
 
 ## Testing and Gates
 
-- ✅ `docs/TESTING.md` (267 lines)
+- ✅ `docs/TESTING.md` (270 lines)
 - ✅ `scripts/docs-completion-gate.mjs` (50 lines)
 - ✅ `scripts/smoke-isolated.mjs` (89 lines)
 - ✅ `scripts/session-imitation-regression.mjs` (84 lines)
