@@ -67,6 +67,7 @@ This map is implementation-accurate as of 2026-04-08.
 8. UI renders message + expandable trace.
 9. When the run is pending, UI uses `/api/sessions/:sessionId/activity?since=...` as primary polling source with adaptive intervals; final message hydration does one direct session refresh.
 10. When the message starts with `/auto`, chat launches a planner-backed generic task and writes the task summary back into the same session.
+11. `trace.latency` includes stage timings (`awarenessMs`, `providerMs`, `continuationMs`, `persistenceMs`, `totalMs`) for runtime profiling.
 
 ## Planner-Backed Task Flow
 

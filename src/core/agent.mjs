@@ -1834,6 +1834,14 @@ export class OpenUnumAgent {
     
     // Start timing for telemetry
     const startTime = Date.now();
+    const latency = {
+      path: 'normal',
+      awarenessMs: 0,
+      providerMs: 0,
+      continuationMs: 0,
+      persistenceMs: 0,
+      totalMs: 0
+    };
 
     // Start self-monitoring for automatic continuation
     this.selfMonitor.startMonitoring(sessionId, message);
@@ -1990,7 +1998,9 @@ export class OpenUnumAgent {
     const roleModeInstruction = modeDirective(roleMode);
 
     // FastAwarenessRouter: classify message and potentially short-circuit
+    const awarenessStartedAt = Date.now();
     const fastAwarenessResult = fastAwarenessRouter.classify(message);
+    latency.awarenessMs = Date.now() - awarenessStartedAt;
 
     // Deterministic ultra-fast greeting path: skip provider call entirely.
     if (fastAwarenessResult?.category === 'greeting' || fastAwarenessResult?.category === 'light-chat') {
@@ -2025,6 +2035,7 @@ export class OpenUnumAgent {
             answerScore: 100
           }
         };
+        latency.path = 'deterministic-fast';
         fastAwarenessRouter.writeTelemetry({
           category: fastAwarenessResult.category,
           strategy: fastAwarenessResult.strategy,
@@ -2067,6 +2078,7 @@ export class OpenUnumAgent {
       ];
 
       try {
+        const providerStartedAt = Date.now();
         const shortcutRun = await this.runOneProviderTurn({
           provider: attempts[0].provider,
           model: attempts[0].model,
@@ -2076,6 +2088,7 @@ export class OpenUnumAgent {
           contextPackInputs,
           workingMemory
         });
+        latency.providerMs += (Date.now() - providerStartedAt);
 
         if (shortcutRun.finalText) {
           finalText = shortcutRun.finalText;
@@ -2088,6 +2101,7 @@ export class OpenUnumAgent {
             fastPathCategory: fastAwarenessResult.category,
             fastPathLatency: Date.now() - startTime
           };
+          latency.path = 'router-fast';
           fastAwarenessRouter.recordOutcome(fastAwarenessResult.category, true);
         }
       } catch (e) {
@@ -2109,6 +2123,7 @@ export class OpenUnumAgent {
         while (attemptNo < 2) {
           attemptNo += 1;
           try {
+            const providerStartedAt = Date.now();
             const run = await this.runOneProviderTurn({
               provider: attempt.provider,
               model: attempt.model,
@@ -2118,6 +2133,7 @@ export class OpenUnumAgent {
               contextPackInputs,
               workingMemory
             });
+            latency.providerMs += (Date.now() - providerStartedAt);
             this.clearProviderFailure(attempt.provider);
             finalText = run.finalText;
             trace = {
@@ -2206,6 +2222,7 @@ export class OpenUnumAgent {
       
       // Retry with continuation
       try {
+        const continuationStartedAt = Date.now();
         const retryRun = await this.runOneProviderTurn({
           provider: this.config.model.provider,
           model: this.config.model.model,
@@ -2215,6 +2232,9 @@ export class OpenUnumAgent {
           contextPackInputs,
           workingMemory
         });
+        const continuationElapsedMs = Date.now() - continuationStartedAt;
+        latency.continuationMs += continuationElapsedMs;
+        latency.providerMs += continuationElapsedMs;
         if (retryRun.finalText) {
           finalText = retryRun.finalText;
           trace = retryRun.trace;
@@ -2234,6 +2254,7 @@ export class OpenUnumAgent {
       finalText = finalText + '\n\n✅ Task complete!';
     }
     
+    const persistenceStartedAt = Date.now();
     this.memoryStore.addMessage(sessionId, 'assistant', finalText);
     for (const fact of extractAutomaticFacts({
       message,
@@ -2250,6 +2271,12 @@ export class OpenUnumAgent {
       if (key && rest.length > 0) {
         this.memoryStore.rememberFact(key.trim(), rest.join(':').trim());
       }
+    }
+
+    latency.persistenceMs = Date.now() - persistenceStartedAt;
+    latency.totalMs = Date.now() - startTime;
+    if (trace && typeof trace === 'object') {
+      trace.latency = latency;
     }
 
     return { sessionId, reply: finalText, model: this.getCurrentModel(), trace, context: { budget: triggerInfo, compaction: compactionMeta } };
