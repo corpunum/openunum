@@ -17,8 +17,10 @@ Comprehensive testing documentation for the OpenUnum project.
 | **Packet Budget Gate** | `npm run gate:packet-budget` | Fails when runtime/context packet budgets exceed configured limits |
 | **Runtime Surface Contract Gate** | `npm run gate:runtime-surface-contract` | Fails when new server API literals are missing from `docs/API_REFERENCE.md` |
 | **Route Wiring Gate** | `npm run gate:route-wiring` | Fails when any `src/server/routes/*.mjs` module is not both imported and invoked by `src/server.mjs` |
+| **UI Surface Gate** | `npm run gate:ui-surface` | Fails when additional active UI files appear under `src/ui/` beyond canonical `index.html` |
 | **WebUI Browser E2E** | `npm run phase39:e2e` | Real browser interaction checks for Provider Vault modal/actions and Missions create/load/stop wiring |
 | **Origin Guard E2E** | `npm run phase40:e2e` | Verifies same-origin loopback + request-marker protection on browser mutating control-plane requests |
+| **CLI Operator E2E** | `npm run phase41:e2e` | Verifies CLI runtime/providers/auth/missions/sessions API-bridge commands against a live test server |
 | **All** | `npm run test:all` | Run complete test battery |
 
 ## Quick Start
@@ -139,6 +141,7 @@ npm run test:unit
 npm run test:e2e
 npm run phase39:e2e
 npm run phase40:e2e
+npm run phase41:e2e
 npm run test:smoke
 npm run test:smoke:live
 npm run test:imitation
@@ -147,6 +150,7 @@ npm run gate:compact-profile
 npm run gate:packet-budget
 npm run gate:runtime-surface-contract
 npm run gate:route-wiring
+npm run gate:ui-surface
 
 # Individual E2E test file
 node --test tests/e2e/verifier.e2e.mjs

@@ -31,7 +31,7 @@
     "phase15:e2e": "node tests/phase15.session-delete.e2e.mjs",
     "phase36:e2e": "node tests/phase36.self-monitoring.e2e.mjs",
     "phase37:e2e": "node tests/phase37.predictive-failure-task-orchestrator.e2e.mjs",
-    "e2e": "pnpm phase0:e2e && pnpm phase1:e2e && pnpm phase2:e2e && pnpm phase3:e2e && pnpm phase4:e2e && pnpm phase5:e2e && pnpm phase6:e2e && pnpm phase7:e2e && pnpm phase8:e2e && pnpm phase9:e2e && pnpm phase10:e2e && pnpm phase11:e2e && pnpm phase12:e2e && pnpm phase13:e2e && pnpm phase14:e2e && pnpm phase15:e2e && pnpm phase36:e2e && pnpm phase37:e2e && pnpm phase39:e2e && pnpm phase40:e2e",
+    "e2e": "pnpm phase0:e2e && pnpm phase1:e2e && pnpm phase2:e2e && pnpm phase3:e2e && pnpm phase4:e2e && pnpm phase5:e2e && pnpm phase6:e2e && pnpm phase7:e2e && pnpm phase8:e2e && pnpm phase9:e2e && pnpm phase10:e2e && pnpm phase11:e2e && pnpm phase12:e2e && pnpm phase13:e2e && pnpm phase14:e2e && pnpm phase15:e2e && pnpm phase36:e2e && pnpm phase37:e2e && pnpm phase39:e2e && pnpm phase40:e2e && pnpm phase41:e2e",
     "test:all": "npm run test:unit && npm run test:e2e && npm run test:smoke",
     "research:daily": "node src/scripts/research-daily.mjs",
     "hf:explore": "node scripts/hf-dataset-explore.mjs",
@@ -52,7 +52,9 @@
     "gate:runtime-surface-contract": "node scripts/runtime-surface-contract-gate.mjs",
     "gate:route-wiring": "node scripts/route-wiring-gate.mjs",
     "phase39:e2e": "node tests/phase39.webui-interactions.e2e.mjs",
-    "phase40:e2e": "node tests/phase40.origin-guard.e2e.mjs"
+    "phase40:e2e": "node tests/phase40.origin-guard.e2e.mjs",
+    "phase41:e2e": "node tests/phase41.cli-operator-surface.e2e.mjs",
+    "gate:ui-surface": "node scripts/ui-surface-gate.mjs"
   },
   "dependencies": {
     "@mariozechner/pi-ai": "0.64.0",

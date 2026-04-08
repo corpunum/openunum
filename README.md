@@ -91,11 +91,18 @@ pnpm test:smoke:live
 pnpm smoke:ui:noauth
 node src/cli.mjs health
 node src/cli.mjs status
+node src/cli.mjs runtime status
 node src/cli.mjs chat --message "hello"
 node src/cli.mjs model switch --provider ollama-cloud --model ollama-cloud/minimax-m2.7:cloud
 node src/cli.mjs providers list
+node src/cli.mjs providers catalog
 node src/cli.mjs auth status
+node src/cli.mjs auth catalog
+node src/cli.mjs missions list
+node src/cli.mjs sessions list
 ```
+
+CLI remote API bridge commands use `OPENUNUM_BASE_URL` (default `http://127.0.0.1:18880`).
 
 ## Deployment
 

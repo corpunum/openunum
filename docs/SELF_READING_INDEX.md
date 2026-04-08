@@ -24,16 +24,16 @@ Purpose: curated file map for autonomous code/docs self-reading and update workf
 
 ## Testing and Gates
 
-- ✅ `docs/TESTING.md` (293 lines)
+- ✅ `docs/TESTING.md` (297 lines)
 - ✅ `scripts/docs-completion-gate.mjs` (50 lines)
 - ✅ `scripts/smoke-isolated.mjs` (91 lines)
 - ✅ `scripts/session-imitation-regression.mjs` (84 lines)
 
 ## Operations and Roadmap
 
-- ✅ `README.md` (121 lines)
+- ✅ `README.md` (128 lines)
 - ✅ `BRAIN.MD` (192 lines)
-- ✅ `docs/AGENT_ONBOARDING.md` (410 lines)
+- ✅ `docs/AGENT_ONBOARDING.md` (413 lines)
 - ✅ `docs/ROADMAP.md` (165 lines)
-- ✅ `CHANGELOG.md` (438 lines)
+- ✅ `CHANGELOG.md` (457 lines)
 

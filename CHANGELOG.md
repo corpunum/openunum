@@ -4,6 +4,25 @@ All notable changes to OpenUnum are documented in this file.
 
 ---
 
+## [2.3.8] - 2026-04-08
+
+### Added
+- CLI operator API-bridge commands in `src/cli.mjs`:
+  - `runtime status`
+  - `providers catalog`
+  - `auth catalog`
+  - `missions list|status|start|stop`
+  - `sessions list|delete`
+  - all remote API bridge commands use `OPENUNUM_BASE_URL` (default `http://127.0.0.1:18880`)
+- New phase test: `phase41.cli-operator-surface.e2e.mjs` validating CLI operator surfaces against a live test server.
+- New gate script: `scripts/ui-surface-gate.mjs` to enforce a single canonical active UI file under `src/ui/`.
+
+### Changed
+- CI `phase-gates` now includes `phase41:e2e` and `gate:ui-surface`.
+- `pnpm e2e` chain now includes `pnpm phase41:e2e`.
+
+---
+
 ## [2.3.7] - 2026-04-08
 
 ### Fixed

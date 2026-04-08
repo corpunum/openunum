@@ -11,15 +11,56 @@ import { PROVIDER_ORDER, normalizeProviderId } from './models/catalog.mjs';
 const args = process.argv.slice(2);
 const cmd = args[0] || 'help';
 const config = loadConfig();
-const memory = new MemoryStore();
-const agent = new OpenUnumAgent({ config, memoryStore: memory });
-loadBuiltinCommands();
-const registry = getRegistry();
+let memory = null;
+let agent = null;
+let registry = null;
+
+function getAgentContext() {
+  if (agent && memory && registry) {
+    return { memory, agent, registry };
+  }
+  memory = new MemoryStore();
+  agent = new OpenUnumAgent({ config, memoryStore: memory });
+  loadBuiltinCommands();
+  registry = getRegistry();
+  return { memory, agent, registry };
+}
 
 function getArg(name, fallback = '') {
   const i = args.indexOf(name);
   if (i === -1) return fallback;
   return args[i + 1] ?? fallback;
+}
+
+function getArgNumber(name, fallback = null) {
+  const raw = getArg(name, '');
+  if (raw === '' || raw == null) return fallback;
+  const value = Number(raw);
+  return Number.isFinite(value) ? value : fallback;
+}
+
+const API_BASE_URL = String(process.env.OPENUNUM_BASE_URL || 'http://127.0.0.1:18880').replace(/\/+$/, '');
+
+async function apiRequest(method, pathname, body = undefined) {
+  const url = `${API_BASE_URL}${pathname.startsWith('/') ? pathname : `/${pathname}`}`;
+  const init = { method: String(method || 'GET').toUpperCase(), headers: {} };
+  if (body !== undefined) {
+    init.headers['Content-Type'] = 'application/json';
+    init.body = JSON.stringify(body);
+  }
+  const res = await fetch(url, init);
+  const raw = await res.text();
+  let parsed = {};
+  try {
+    parsed = raw ? JSON.parse(raw) : {};
+  } catch {
+    parsed = { ok: false, error: 'invalid_json_response', raw };
+  }
+  if (!res.ok) {
+    const msg = parsed?.message || parsed?.error || `${res.status} ${res.statusText}`;
+    throw new Error(`api_error ${init.method} ${pathname}: ${msg}`);
+  }
+  return parsed;
 }
 
 async function main() {
@@ -34,6 +75,7 @@ async function main() {
   }
 
   if (cmd === 'chat') {
+    const { agent } = getAgentContext();
     const message = getArg('--message', 'hello');
     const sessionId = getArg('--session', 'cli');
     const out = await agent.chat({ message, sessionId });
@@ -42,6 +84,7 @@ async function main() {
   }
 
   if (cmd === 'context' && args[1] === 'status') {
+    const { agent } = getAgentContext();
     const sessionId = getArg('--session', 'cli');
     const out = agent.getContextStatus(sessionId);
     console.log(JSON.stringify(out, null, 2));
@@ -49,6 +92,7 @@ async function main() {
   }
 
   if (cmd === 'context' && args[1] === 'compact') {
+    const { agent } = getAgentContext();
     const sessionId = getArg('--session', 'cli');
     const dryRun = args.includes('--dry-run');
     const out = agent.compactSessionContext({ sessionId, dryRun });
@@ -57,6 +101,7 @@ async function main() {
   }
 
   if (cmd === 'context' && args[1] === 'artifacts') {
+    const { agent } = getAgentContext();
     const sessionId = getArg('--session', 'cli');
     const limit = Number(getArg('--limit', '40'));
     const out = agent.listContextArtifacts(sessionId, limit);
@@ -65,6 +110,7 @@ async function main() {
   }
 
   if (cmd === 'model' && args[1] === 'switch') {
+    const { agent } = getAgentContext();
     const provider = normalizeProviderId(getArg('--provider', config.model.provider));
     const model = getArg('--model', config.model.model);
     const out = agent.switchModel(provider, model);
@@ -74,6 +120,7 @@ async function main() {
   }
 
   if (cmd === 'status') {
+    const { agent } = getAgentContext();
     const current = agent.getCurrentModel();
     console.log(JSON.stringify({
       ok: true,
@@ -87,7 +134,23 @@ async function main() {
     return;
   }
 
+  if (cmd === 'runtime' && args[1] === 'status') {
+    const out = await apiRequest('GET', '/api/runtime/overview');
+    console.log(JSON.stringify({
+      ok: true,
+      runtime: {
+        autonomyMode: out.autonomyMode,
+        workspaceRoot: out.workspaceRoot
+      },
+      selectedModel: out.selectedModel || null,
+      fallbackModel: out.fallbackModel || null,
+      providers: out.providers || []
+    }, null, 2));
+    return;
+  }
+
   if (cmd === 'providers' && args[1] === 'list') {
+    const { agent } = getAgentContext();
     const selectedProvider = normalizeProviderId(config.model?.provider);
     const rows = PROVIDER_ORDER.map((provider) => {
       const configured = String(config.model?.providerModels?.[provider] || '').trim();
@@ -98,6 +161,12 @@ async function main() {
       };
     });
     console.log(JSON.stringify({ ok: true, providers: rows }, null, 2));
+    return;
+  }
+
+  if (cmd === 'providers' && args[1] === 'catalog') {
+    const out = await apiRequest('GET', '/api/model-catalog');
+    console.log(JSON.stringify(out, null, 2));
     return;
   }
 
@@ -119,6 +188,64 @@ async function main() {
     return;
   }
 
+  if (cmd === 'auth' && args[1] === 'catalog') {
+    const out = await apiRequest('GET', '/api/auth/catalog');
+    console.log(JSON.stringify(out, null, 2));
+    return;
+  }
+
+  if (cmd === 'missions' && args[1] === 'list') {
+    const out = await apiRequest('GET', '/api/missions');
+    console.log(JSON.stringify(out, null, 2));
+    return;
+  }
+
+  if (cmd === 'missions' && args[1] === 'status') {
+    const id = String(getArg('--id', '')).trim();
+    if (!id) throw new Error('missions status requires --id <missionId>');
+    const out = await apiRequest('GET', `/api/missions/status?id=${encodeURIComponent(id)}`);
+    console.log(JSON.stringify(out, null, 2));
+    return;
+  }
+
+  if (cmd === 'missions' && args[1] === 'start') {
+    const goal = String(getArg('--goal', '')).trim();
+    if (!goal) throw new Error('missions start requires --goal <text>');
+    const maxSteps = getArgNumber('--max-steps', null);
+    const intervalMs = getArgNumber('--interval-ms', null);
+    const payload = {
+      goal,
+      ...(Number.isFinite(maxSteps) ? { maxSteps } : {}),
+      ...(Number.isFinite(intervalMs) ? { intervalMs } : {})
+    };
+    const out = await apiRequest('POST', '/api/missions/start', payload);
+    console.log(JSON.stringify(out, null, 2));
+    return;
+  }
+
+  if (cmd === 'missions' && args[1] === 'stop') {
+    const id = String(getArg('--id', '')).trim();
+    if (!id) throw new Error('missions stop requires --id <missionId>');
+    const out = await apiRequest('POST', '/api/missions/stop', { id });
+    console.log(JSON.stringify(out, null, 2));
+    return;
+  }
+
+  if (cmd === 'sessions' && args[1] === 'list') {
+    const limit = getArgNumber('--limit', 120);
+    const out = await apiRequest('GET', `/api/sessions?limit=${encodeURIComponent(String(limit))}`);
+    console.log(JSON.stringify(out, null, 2));
+    return;
+  }
+
+  if (cmd === 'sessions' && args[1] === 'delete') {
+    const id = String(getArg('--id', '')).trim();
+    if (!id) throw new Error('sessions delete requires --id <sessionId>');
+    const out = await apiRequest('DELETE', `/api/sessions/${encodeURIComponent(id)}`);
+    console.log(JSON.stringify(out, null, 2));
+    return;
+  }
+
   if (cmd === 'browser' && args[1] === 'status') {
     const browser = new CDPBrowser(config.browser?.cdpUrl);
     const out = await browser.status();
@@ -127,6 +254,7 @@ async function main() {
   }
 
   if (cmd === 'telegram' && args[1] === 'poll-once') {
+    const { agent } = getAgentContext();
     if (!config.channels.telegram?.botToken) throw new Error('Missing Telegram bot token');
     const tg = new TelegramChannel(config.channels.telegram, async (text, sessionId) => {
       const out = await agent.chat({ message: text, sessionId });
@@ -138,6 +266,7 @@ async function main() {
   }
 
   if (cmd === 'telegram' && args[1] === 'run') {
+    const { agent } = getAgentContext();
     if (!config.channels.telegram?.botToken) throw new Error('Missing Telegram bot token');
     const tg = new TelegramChannel(config.channels.telegram, async (text, sessionId) => {
       const out = await agent.chat({ message: text, sessionId });
@@ -155,6 +284,7 @@ async function main() {
   }
 
   if (cmd === 'ollama' && args[1] === 'use') {
+    const { agent } = getAgentContext();
     const model = getArg('--model', 'minimax-m2.7:cloud');
     const out = agent.switchModel('ollama-cloud', `ollama-cloud/${model}`);
     saveConfig(config);
@@ -163,6 +293,7 @@ async function main() {
   }
 
   if (cmd === 'command') {
+    const { agent, memory, registry } = getAgentContext();
     const commandText = args.slice(1).join(' ');
     if (!commandText) {
       console.error('Usage: openunum command <slash-command>\nExample: openunum command /help');
@@ -186,7 +317,7 @@ async function main() {
     return;
   }
 
-  console.log(`openunum commands:\n  health\n  status\n  serve\n  chat --message <text> [--session <id>]\n  context status --session <id>\n  context compact --session <id> [--dry-run]\n  context artifacts --session <id> [--limit <n>]\n  model switch --provider <p> --model <m>\n  providers list\n  auth status\n  ollama use --model <id>  # compatibility alias for ollama-cloud\n  browser status\n  telegram poll-once\n  telegram run\n  command <slash-command>`);
+  console.log(`openunum commands:\n  health\n  status\n  runtime status\n  serve\n  chat --message <text> [--session <id>]\n  context status --session <id>\n  context compact --session <id> [--dry-run]\n  context artifacts --session <id> [--limit <n>]\n  model switch --provider <p> --model <m>\n  providers list\n  providers catalog\n  auth status\n  auth catalog\n  missions list\n  missions status --id <missionId>\n  missions start --goal <text> [--max-steps <n>] [--interval-ms <n>]\n  missions stop --id <missionId>\n  sessions list [--limit <n>]\n  sessions delete --id <sessionId>\n  ollama use --model <id>  # compatibility alias for ollama-cloud\n  browser status\n  telegram poll-once\n  telegram run\n  command <slash-command>\n\n  remote API base: ${API_BASE_URL}`);
 }
 
 main().catch((error) => {

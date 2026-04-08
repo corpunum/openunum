@@ -44,7 +44,7 @@ jobs:
         run: pnpm test:imitation
 
       - name: Core E2E Contracts
-        run: pnpm phase0:e2e && pnpm phase6:e2e && pnpm phase10:e2e && pnpm phase11:e2e && pnpm phase40:e2e
+        run: pnpm phase0:e2e && pnpm phase6:e2e && pnpm phase10:e2e && pnpm phase11:e2e && pnpm phase40:e2e && pnpm phase41:e2e
 
       - name: Install Playwright Chromium
         run: pnpm exec playwright install --with-deps chromium
@@ -66,3 +66,6 @@ jobs:
 
       - name: Route Wiring Gate
         run: pnpm gate:route-wiring
+
+      - name: UI Surface Gate
+        run: pnpm gate:ui-surface
