@@ -38,6 +38,7 @@ This folder is optimized for fast machine onboarding (fresh agent session, no pr
 31. [REPO_HARVEST_CONSOLIDATED_PLAN_2026-04-08.md](REPO_HARVEST_CONSOLIDATED_PLAN_2026-04-08.md) — Consolidated external pattern harvest mapped to OpenUnum
 32. [SESSION_IMITATION_REVIEW_2026-04-08.md](SESSION_IMITATION_REVIEW_2026-04-08.md) — Chat-session pattern review + imitation test outcomes
 33. [SELF_READING_INDEX.md](SELF_READING_INDEX.md) — Curated machine-readable self-reading file map
+34. [OPENUNUM_AUDIT_STATUS_2026-04-08.md](OPENUNUM_AUDIT_STATUS_2026-04-08.md) — Verified consolidated audit checklist + cleanup/test phased plan
 
 ## Legacy Planning Docs
 

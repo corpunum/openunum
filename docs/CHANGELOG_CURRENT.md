@@ -2,6 +2,37 @@
 
 Date: 2026-04-07
 
+## AutonomyMaster Recovery Contract Fix + Audit Closure (2026-04-08)
+
+**Status:** ✅ Implemented and test-gated
+
+### Runtime Reliability
+
+- Rewired `src/core/autonomy-master.mjs` to the canonical recovery path:
+  - health checks and self-heal through `SelfHealOrchestrator`
+  - predictive remediation through `AutoRecover.recover(...)` canonical issue types
+- Removed contract mismatches where `AutonomyMaster` invoked legacy self-heal methods with incompatible payloads.
+- Updated predictive signal parsing for orchestrator check keys (`disk`, `browser`, `provider`).
+
+### Tests
+
+- Added unit coverage:
+  - `tests/unit/autonomy-master-recovery.test.mjs`
+  - verifies predictive action → canonical recovery issue mapping
+  - verifies disk-pressure detection from orchestrator health payload
+
+### Audit/Docs
+
+- Added `docs/OPENUNUM_AUDIT_STATUS_2026-04-08.md` with:
+  - verified checklist against consolidated audit doc
+  - stale/unlinked docs findings
+  - dead/unlinked code surface notes
+  - phased cleanup + test recommendations
+- Added/maintained self-reading map workflow:
+  - `scripts/build-self-reading-index.mjs`
+  - `pnpm docs:index`
+  - `docs/SELF_READING_INDEX.md`
+
 ## Fast Awareness Routing + Deterministic Smoke Runner (2026-04-08)
 
 **Status:** ✅ Implemented and test-gated

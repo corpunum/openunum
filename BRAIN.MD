@@ -114,7 +114,10 @@ After every change, update:
 - **Runtime contract/parity checks** for deterministic operational readiness (`pnpm phase0:check`)
 - **Smoke gate mode selection**: default isolated smoke (`pnpm test:smoke`) and explicit live-service smoke (`pnpm test:smoke:live`)
 - **Docs-as-completion gate** (`pnpm docs:gate`) for recent code changes
+- **Self-reading index refresh** (`pnpm docs:index`) after major architecture/doc movement
+- **Session-imitation regression replay** (`pnpm test:imitation`) to guard continuation/memory behavior
 - **Secrets-at-rest hardening**: prefer encrypted passphrase backend for production deployments
+- **Canonical self-heal path**: keep runtime + autonomy surfaces on `src/core/self-heal-orchestrator.mjs` and avoid reintroducing overlapping recovery flows
 
 **Phase 1-3 Implemented Systems (Document These):**
 - **Verifier** (`src/core/verifier.mjs`) — Independent state validation

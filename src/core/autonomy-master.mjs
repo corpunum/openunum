@@ -14,10 +14,10 @@
 
 import fs from 'node:fs';
 import path from 'node:path';
-import { spawn } from 'node:child_process';
-import { loadConfig, saveConfig, getHomeDir } from '../config.mjs';
+import { loadConfig, getHomeDir } from '../config.mjs';
 import { logInfo, logWarn, logError } from '../logger.mjs';
-import { SelfHealSystem } from './self-heal.mjs';
+import { SelfHealOrchestrator } from './self-heal-orchestrator.mjs';
+import { AutoRecover } from './auto-recover.mjs';
 import { AutoImprovementEngine } from './auto-improve.mjs';
 import { SkillLearner } from './skill-learner.mjs';
 
@@ -35,7 +35,8 @@ export class AutonomyMaster {
     this.homeDir = getHomeDir();
     
     // Subsystems
-    this.selfHeal = new SelfHealSystem({ config, agent, memoryStore, browser });
+    this.selfHeal = new SelfHealOrchestrator({ config, agent, browser, memory: memoryStore });
+    this.autoRecover = new AutoRecover({ config, agent });
     this.autoImprove = new AutoImprovementEngine({ config, agent, memory: memoryStore });
     this.skillLearner = new SkillLearner({ memoryStore });
     
@@ -184,10 +185,10 @@ export class AutonomyMaster {
         results.issues.push(...results.health.issues);
         
         // Attempt auto-recovery
-        const recovery = await this.selfHeal.attemptRecovery(results.health);
-        if (recovery.success) {
-          this.metrics.issuesResolved += recovery.actions.filter(a => a.success).length;
-        }
+        const recovery = await this.selfHeal.runSelfHeal(false);
+        const successful = (recovery.results || []).filter((item) => item.success !== false).length;
+        this.metrics.issuesResolved += successful;
+        results.recovery = recovery;
       }
       
       // Phase 2: Self-Test (every 5 cycles)
@@ -330,18 +331,18 @@ export class AutonomyMaster {
     const predictions = [];
     
     // Check disk space trend
-    const diskIssue = health.issues?.find(i => i.check === 'disk_space');
-    if (diskIssue?.details?.usagePercent > this.thresholds.diskUsagePercent) {
+    const diskIssue = health.issues?.find(i => i.check === 'disk');
+    if (diskIssue?.details?.usedPercent > this.thresholds.diskUsagePercent) {
       predictions.push({
         type: 'disk_space_critical',
-        severity: diskIssue.details.usagePercent > 90 ? 'critical' : 'warning',
-        currentValue: diskIssue.details.usagePercent,
+        severity: diskIssue.details.usedPercent > 90 ? 'critical' : 'warning',
+        currentValue: diskIssue.details.usedPercent,
         action: 'cleanup_logs'
       });
     }
     
     // Check for repeated browser failures
-    const browserIssue = health.issues?.find(i => i.check === 'browser_cdp');
+    const browserIssue = health.issues?.find(i => i.check === 'browser');
     if (browserIssue) {
       predictions.push({
         type: 'browser_unstable',
@@ -370,15 +371,30 @@ export class AutonomyMaster {
     logInfo('predictive_action', { type: prediction.type, action: prediction.action });
     
     switch (prediction.action) {
-      case 'cleanup_logs':
-        return await this.selfHeal.cleanupOldLogs(7);
-        
-      case 'restart_browser':
-        return await this.selfHeal.restartBrowser();
-        
-      case 'switch_fallback':
-        return await this.selfHeal.switchToFallbackProvider();
-        
+      case 'cleanup_logs': {
+        const out = await this.autoRecover.recover({
+          type: 'disk_space_low',
+          severity: prediction.severity || 'warning',
+          details: prediction
+        });
+        return { success: Boolean(out.success), action: out.action || 'disk_space_low' };
+      }
+      case 'restart_browser': {
+        const out = await this.autoRecover.recover({
+          type: 'browser_cdp_unreachable',
+          severity: prediction.severity || 'warning',
+          details: prediction
+        });
+        return { success: Boolean(out.success), action: out.action || 'browser_cdp_unreachable' };
+      }
+      case 'switch_fallback': {
+        const out = await this.autoRecover.recover({
+          type: 'model_provider_timeout',
+          severity: prediction.severity || 'warning',
+          details: { ...prediction, currentProvider: this.config.model.provider }
+        });
+        return { success: Boolean(out.success), action: out.action || 'model_provider_timeout' };
+      }
       default:
         return { success: false, reason: 'no_handler' };
     }
@@ -427,7 +443,10 @@ export class AutonomyMaster {
       },
       thresholds: this.thresholds,
       subsystems: {
-        selfHeal: this.selfHeal.getHealthState(),
+        selfHeal: this.selfHeal.getStatus({
+          pendingChatsCount: this.pendingChats?.size || 0,
+          telegramRunning: false
+        }),
         autoImprove: this.autoImprove.getMetrics(),
         skillLearner: this.skillLearner.getStats()
       }

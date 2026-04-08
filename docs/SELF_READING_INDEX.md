@@ -1,6 +1,6 @@
 # Self Reading Index
 
-Generated: 2026-04-08T08:41:39.472Z
+Generated: 2026-04-08T08:47:03.944Z
 
 Purpose: curated file map for autonomous code/docs self-reading and update workflows.
 
@@ -34,8 +34,8 @@ Purpose: curated file map for autonomous code/docs self-reading and update workf
 ## Operations and Roadmap
 
 - ✅ `README.md` (119 lines)
-- ✅ `BRAIN.MD` (187 lines)
-- ✅ `docs/AGENT_ONBOARDING.md` (397 lines)
+- ✅ `BRAIN.MD` (190 lines)
+- ✅ `docs/AGENT_ONBOARDING.md` (400 lines)
 - ✅ `docs/ROADMAP.md` (165 lines)
-- ✅ `CHANGELOG.md` (212 lines)
+- ✅ `CHANGELOG.md` (228 lines)
 

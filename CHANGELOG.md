@@ -4,6 +4,22 @@ All notable changes to OpenUnum are documented in this file.
 
 ---
 
+## [2.2.5] - 2026-04-08
+
+### Fixed
+- Rewired `AutonomyMaster` self-heal/recovery flow to use canonical `SelfHealOrchestrator` + `AutoRecover` contracts, replacing mismatched legacy calls that could silently skip recovery outcomes.
+- Updated predictive-failure signal parsing in `AutonomyMaster` to align with orchestrator check keys (`disk`, `browser`, `provider`).
+
+### Added
+- Unit coverage for predictive recovery mapping and orchestrator-compatible disk signal parsing (`tests/unit/autonomy-master-recovery.test.mjs`).
+- Curated self-reading index generation command `pnpm docs:index` with generated `docs/SELF_READING_INDEX.md`.
+- Consolidated audit status report with verified checklist, stale/unlinked docs findings, and phased cleanup plan (`docs/OPENUNUM_AUDIT_STATUS_2026-04-08.md`).
+
+### Documentation
+- Updated onboarding and brain docs with self-reading index and session-imitation gate workflow.
+
+---
+
 ## [2.2.4] - 2026-04-08
 
 ### Added

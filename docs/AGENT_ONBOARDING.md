@@ -32,6 +32,7 @@ This guide will help you understand:
 6. [CODEBASE_MAP.md](CODEBASE_MAP.md) — File/folder structure
 7. [API_REFERENCE.md](API_REFERENCE.md) — All API endpoints
 8. [TESTING.md](TESTING.md) — Test suites and how to run them
+9. [SELF_READING_INDEX.md](SELF_READING_INDEX.md) — Curated machine-readable self-reading map
 
 **Phase 1-3 Deliverables Overview:**
 - ✅ Working memory anchor system with drift detection
@@ -50,8 +51,10 @@ This guide will help you understand:
 **Phase 0 Foundation Checks (new):**
 - `pnpm phase0:check` — Validates canonical runtime state contract and config parity report
 - `pnpm docs:gate` — Enforces docs-as-completion for recent code changes
+- `pnpm docs:index` — Rebuilds curated self-reading file index
 - `pnpm test:smoke` — Isolated smoke suite (self-starting temp server/home)
 - `pnpm test:smoke:live` — Smoke against current running service (deployment verification)
+- `pnpm test:imitation` — Session-imitation regression replay from real chat patterns
 - `GET /api/runtime/state-contract` — Returns canonical runtime packet + validation status
 - `GET /api/runtime/config-parity` — Returns provider matrix + warnings/errors
 
