@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import { spawn } from 'node:child_process';
 
 function resolveChromeBin() {
-  const candidates = ['/snap/bin/chromium', '/usr/bin/chromium', '/usr/bin/google-chrome', '/usr/bin/chromium-browser'];
+  const candidates = ['/usr/bin/chromium', '/usr/bin/google-chrome', '/usr/bin/chromium-browser', '/snap/bin/chromium'];
   for (const c of candidates) {
     if (fs.existsSync(c)) return c;
   }
@@ -32,6 +32,10 @@ export function createBrowserRuntimeService({
       '--no-first-run',
       '--no-default-browser-check',
       '--disable-gpu',
+      '--disable-software-rasterizer',
+      '--disable-dev-shm-usage',
+      '--disable-features=Vulkan,UseSkiaRenderer',
+      '--use-gl=swiftshader',
       '--new-window',
       'about:blank'
     ];
@@ -70,4 +74,3 @@ export function createBrowserRuntimeService({
 
   return { launchDebugBrowser };
 }
-

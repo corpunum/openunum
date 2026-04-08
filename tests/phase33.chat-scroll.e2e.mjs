@@ -10,7 +10,7 @@ const DEFAULT_DYNAMIC_PORT = 18000 + (process.pid % 2000);
 const TEST_PORT = Number(process.env.OPENUNUM_TEST_PORT || DEFAULT_DYNAMIC_PORT);
 
 function resolveChromeBin() {
-  const candidates = ['/snap/bin/chromium', '/usr/bin/chromium', '/usr/bin/google-chrome', '/usr/bin/chromium-browser'];
+  const candidates = ['/usr/bin/chromium', '/usr/bin/google-chrome', '/usr/bin/chromium-browser', '/snap/bin/chromium'];
   for (const candidate of candidates) {
     if (fs.existsSync(candidate)) return candidate;
   }
@@ -41,6 +41,10 @@ async function launchHeadlessBrowser() {
   const child = spawn(chromeBin, [
     '--headless=new',
     '--disable-gpu',
+    '--disable-software-rasterizer',
+    '--disable-dev-shm-usage',
+    '--disable-features=Vulkan,UseSkiaRenderer',
+    '--use-gl=swiftshader',
     '--no-sandbox',
     '--no-first-run',
     '--no-default-browser-check',

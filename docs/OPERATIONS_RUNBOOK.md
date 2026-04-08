@@ -116,6 +116,10 @@ Notes:
   - `journalctl -k -b --since "30 min ago" | rg -n "amdgpu|GPU reset|MES failed|device wedged|failed to halt cp gfx"`
   - `journalctl -b --since "30 min ago" | rg -n "GNOME Shell crashed|Connection reset by peer|Broken pipe|ollama\\["`
   - OpenUnum now forces CPU mode (`num_gpu=0`) for `ollama-local/*` requests.
+- If the machine powers off around a stability incident window, confirm whether shutdown was manually triggered:
+  - `journalctl -b -1 --since "15 min before incident" --until "5 min after incident" | rg -n "Power key pressed short|The system will power off now|System is powering down"`
+  - A burst of `Power key pressed short` means logind initiated shutdown, even if `amdgpu` errors were present before it.
+- Browser/CDP recovery paths now prefer non-snap Chromium binaries and launch with GPU-minimizing flags (`--disable-gpu`, `--disable-software-rasterizer`, `--disable-features=Vulkan,UseSkiaRenderer`, `--use-gl=swiftshader`).
 
 ## 6. Deployment Gate Instructions
 

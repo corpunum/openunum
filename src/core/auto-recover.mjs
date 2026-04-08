@@ -136,6 +136,10 @@ export class AutoRecover {
       '--no-first-run',
       '--no-default-browser-check',
       '--disable-gpu',
+      '--disable-software-rasterizer',
+      '--disable-dev-shm-usage',
+      '--disable-features=Vulkan,UseSkiaRenderer',
+      '--use-gl=swiftshader',
       '--new-window',
       'about:blank'
     ];
@@ -547,11 +551,11 @@ export class AutoRecover {
 
   findChromeBinary() {
     const candidates = [
-      '/snap/bin/chromium',
       '/usr/bin/chromium',
       '/usr/bin/chromium-browser',
       '/usr/bin/google-chrome',
-      '/usr/bin/google-chrome-stable'
+      '/usr/bin/google-chrome-stable',
+      '/snap/bin/chromium'
     ];
     for (const bin of candidates) {
       if (fs.existsSync(bin)) return bin;

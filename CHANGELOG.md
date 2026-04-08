@@ -4,6 +4,19 @@ All notable changes to OpenUnum are documented in this file.
 
 ---
 
+## [2.3.17] - 2026-04-08
+
+### Changed
+- Hardened browser/CDP launch stability paths:
+  - browser runtime recovery now prefers non-snap Chromium binaries before snap fallback.
+  - added GPU-minimizing launch flags for debug browser recovery paths (`--disable-software-rasterizer`, `--disable-dev-shm-usage`, `--disable-features=Vulkan,UseSkiaRenderer`, `--use-gl=swiftshader`).
+  - aligned phase32/phase33 CDP browser tests to the same binary preference and launch profile.
+
+### Docs
+- Expanded operations runbook incident triage with explicit power-key shutdown evidence checks and updated browser-recovery guidance.
+
+---
+
 ## [2.3.16] - 2026-04-08
 
 ### Changed
