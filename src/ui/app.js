@@ -37,6 +37,15 @@ import {
   buildSessionImportStatus,
   buildMissionCloneStatus
 } from './modules/session-io.js';
+import {
+  normalizeFallbackSequence,
+  buildFallbackModelOptions as buildFallbackModelOptionsFromCatalog,
+  providerChoicesForFallbackRow,
+  canAddFallbackProvider,
+  autoFillFallbackSequence,
+  computeOnlineFallbackSequence,
+  buildProviderModelsPatch
+} from './modules/model-routing.js';
 import { buildRuntimeOverviewView } from './modules/runtime-overview.js';
 import { buildMissionTimelineView } from './modules/missions.js';
 import {
@@ -735,20 +744,11 @@ function preferredModelForProvider(provider) {
 
 function ensureFallbackSequence(primaryProvider) {
   const normalizedPrimary = String(primaryProvider || q('provider')?.value || 'ollama-cloud');
-  fallbackSequence = (fallbackSequence || [])
-    .map((item) => ({
-      provider: item.provider,
-      model: item.model || preferredModelForProvider(item.provider)
-    }))
-    .filter((item, index, arr) => item.provider && item.provider !== normalizedPrimary && arr.findIndex((entry) => entry.provider === item.provider) === index);
+  fallbackSequence = normalizeFallbackSequence(fallbackSequence, normalizedPrimary, preferredModelForProvider);
 }
 
 function buildFallbackModelOptions(provider, selectedModel = '') {
-  const models = catalogModelsForProvider(provider);
-  return models.map((model) => {
-    const modelId = model.model_id || model.id || '';
-    return `<option value="${escapeHtml(modelId)}" ${modelId === selectedModel ? 'selected' : ''}>#${Number(model.rank || 0)} ${escapeHtml(modelId)}</option>`;
-  }).join('');
+  return buildFallbackModelOptionsFromCatalog(catalogModelsForProvider(provider), selectedModel, escapeHtml);
 }
 
 function renderFallbackSequence() {
@@ -760,7 +760,7 @@ function renderFallbackSequence() {
       <td>${index + 1}</td>
       <td>
         <select class="fallback-provider" data-index="${index}">
-          ${MODEL_PROVIDER_IDS.filter((provider) => provider === entry.provider || !fallbackSequence.some((item, itemIndex) => item.provider === provider && itemIndex !== index) && provider !== q('provider').value)
+          ${providerChoicesForFallbackRow(MODEL_PROVIDER_IDS, fallbackSequence, q('provider').value, index)
             .map((provider) => `<option value="${provider}" ${provider === entry.provider ? 'selected' : ''}>${provider}</option>`).join('')}
         </select>
       </td>
@@ -1866,21 +1866,8 @@ q('saveRouting').onclick = async () => {
   const provider = q('provider').value;
   const selectedModel = q('modelList').value;
   ensureFallbackSequence(provider);
-  
-  // Filter offline models from fallback sequence
-  const onlineFallbackSequence = fallbackSequence.filter(entry => {
-    const p = modelCatalog.providers.find(cp => cp.provider === entry.provider);
-    if (!p) return true;
-    const m = p.models.find(cm => cm.model_id === entry.model);
-    return m && m.status !== 'offline' && m.status !== 'quarantined';
-  });
-
-  const providerModels = {
-    [provider]: `${provider}/${selectedModel}`
-  };
-  for (const entry of onlineFallbackSequence) {
-    if (entry.provider && entry.model) providerModels[entry.provider] = `${entry.provider}/${entry.model}`;
-  }
+  const onlineFallbackSequence = computeOnlineFallbackSequence(fallbackSequence, modelCatalog);
+  const providerModels = buildProviderModelsPatch(provider, selectedModel, onlineFallbackSequence);
   const out = await jpost('/api/config', {
     model: {
       provider,
@@ -1970,7 +1957,7 @@ q('addServiceRow').onclick = () => {
 
 q('addFallbackRow').onclick = () => {
   const provider = q('fallbackProviderPicker').value;
-  if (!provider || provider === q('provider').value || fallbackSequence.some((entry) => entry.provider === provider)) return;
+  if (!canAddFallbackProvider(provider, q('provider').value, fallbackSequence)) return;
   fallbackSequence.push({ provider, model: preferredModelForProvider(provider) });
   q('fallbackProviderPicker').value = '';
   renderFallbackSequence();
@@ -1978,9 +1965,7 @@ q('addFallbackRow').onclick = () => {
 
 q('autoFillFallbacks').onclick = () => {
   const primary = q('provider').value;
-  fallbackSequence = MODEL_PROVIDER_IDS
-    .filter((provider) => provider !== primary)
-    .map((provider) => ({ provider, model: preferredModelForProvider(provider) }));
+  fallbackSequence = autoFillFallbackSequence(MODEL_PROVIDER_IDS, primary, preferredModelForProvider);
   renderFallbackSequence();
 };
 

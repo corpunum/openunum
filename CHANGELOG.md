@@ -4,6 +4,18 @@ All notable changes to OpenUnum are documented in this file.
 
 ---
 
+## [2.3.31] - 2026-04-08
+
+### Changed
+- Continued WebUI modularization for model-routing/fallback logic:
+  - extracted fallback sequence normalization, provider choice computation, online-model filtering, and provider-model patch builders into `src/ui/modules/model-routing.js`
+  - `src/ui/app.js` now uses module helpers for fallback add/auto-fill/save routing behavior.
+
+### Added
+- Unit coverage for model-routing helpers in `tests/unit/ui-model-routing.test.mjs`.
+
+---
+
 ## [2.3.30] - 2026-04-08
 
 ### Changed
