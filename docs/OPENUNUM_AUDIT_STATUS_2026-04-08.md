@@ -101,6 +101,10 @@ Source baseline: `/home/corp-unum/Downloads/OPENUNUM_CONSOLIDATED_AUDIT_KNOWLEDG
   - `MODULAR_AGENT_ARCHITECTURE_NICE_TO_HAVE.md`
 - ✅ Added archive index:
   - `docs/archive/README.md`
+- ✅ Archived legacy preview-only WebUI surface:
+  - moved `src/ui/new_ui.html` -> `maintenance/ui-legacy/new_ui.html`
+  - moved `src/ui/serve_new_ui.mjs` -> `maintenance/ui-legacy/serve_new_ui.mjs`
+  - canonical runtime UI remains `src/ui/index.html` via `src/server/routes/ui.mjs`
 
 ## Post-Audit Phases Completion
 

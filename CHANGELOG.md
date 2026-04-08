@@ -4,6 +4,16 @@ All notable changes to OpenUnum are documented in this file.
 
 ---
 
+## [2.3.6] - 2026-04-08
+
+### Changed
+- Archived duplicate preview WebUI surface to keep one active frontend runtime path:
+  - `src/ui/new_ui.html` -> `maintenance/ui-legacy/new_ui.html`
+  - `src/ui/serve_new_ui.mjs` -> `maintenance/ui-legacy/serve_new_ui.mjs`
+- Updated current-state/audit/master-plan docs to reflect archived UI surface and completed cleanup checklist.
+
+---
+
 ## [2.3.5] - 2026-04-08
 
 ### Added

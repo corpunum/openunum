@@ -21,7 +21,7 @@ Tasks:
 - [x] Move stale/unlinked docs to `docs/archive/`.
 - [x] Add archive index (`docs/archive/README.md`).
 - [x] Move unlinked `src/core/autonomy-coordinator.mjs` to maintenance legacy surface.
-- [ ] Update docs index + audit status to reflect archived surfaces.
+- [x] Update docs index + audit status to reflect archived surfaces.
 
 Exit criteria:
 - no stale duplicate onboarding docs in `docs/` root

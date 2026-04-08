@@ -35,7 +35,6 @@ node src/server.mjs
 
 3. Open Web UI:
 - http://127.0.0.1:18880 (Primary Web UI)
-- http://127.0.0.1:19928 (legacy standalone preview shell in `src/ui/new_ui.html`)
 
 4. Optional full test gate:
 ```bash

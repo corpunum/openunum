@@ -6,11 +6,11 @@ This matrix is the quick trust checkpoint for code, tests, docs, and CI.
 |---|---|---|
 | Runtime server/API behavior | `src/server.mjs` + `src/server/routes/*` | Active |
 | Web UI behavior | `src/ui/index.html` | Active |
-| Legacy/preview UI | `src/ui/new_ui.html` | Legacy preview only |
+| Legacy/preview UI | `maintenance/ui-legacy/*` | Archived (inactive runtime surface) |
 | Model/provider defaults | `src/config.mjs` + `/api/config` | Active |
 | API contract docs | `docs/API_REFERENCE.md` | Updated to implemented endpoints + planned section |
 | Onboarding docs | `README.md`, `docs/INDEX.md`, `docs/AGENT_ONBOARDING.md` | Updated for council-size/phase status consistency |
-| CI baseline gates | `.github/workflows/phase-gates.yml` | Expanded (unit, smoke, UI smoke, imitation, core e2e, phase0 gates, runtime-surface gate, route-wiring gate) |
+| CI baseline gates | `.github/workflows/phase-gates.yml` | Expanded (unit, smoke, UI smoke, imitation, core e2e + browser phase39, phase0 gates, runtime-surface gate, route-wiring gate) |
 | Known architectural debt | polling-first UI + oversized `index.html` | Open |
 
 ## Minimum Local Trust Gate
