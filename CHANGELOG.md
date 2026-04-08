@@ -4,6 +4,22 @@ All notable changes to OpenUnum are documented in this file.
 
 ---
 
+## [2.3.10] - 2026-04-08
+
+### Changed
+- Started WebUI modularization:
+  - moved inline CSS from `src/ui/index.html` to `src/ui/styles.css`
+  - moved inline JS from `src/ui/index.html` to `src/ui/app.js`
+  - `src/server/routes/ui.mjs` now serves modular UI assets from `/ui/*`
+
+### Added
+- `phase43.ui-static-assets.e2e.mjs` regression:
+  - verifies `/ui/styles.css` and `/ui/app.js` are served with correct content types
+  - verifies unknown `/ui/*` assets return `404`
+- CI core E2E contract set now includes `pnpm phase43:e2e`.
+
+---
+
 ## [2.3.9] - 2026-04-08
 
 ### Added

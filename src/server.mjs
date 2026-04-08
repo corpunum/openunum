@@ -1130,7 +1130,7 @@ const server = http.createServer(async (req, res) => {
       req,
       res,
       url,
-      ctx: { noCacheHeaders }
+      ctx: { noCacheHeaders, sendJson }
     })) return;
 
     return sendApiError(res, 404, 'not_found', 'Unknown API route');

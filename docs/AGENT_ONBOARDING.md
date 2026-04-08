@@ -55,7 +55,7 @@ This guide will help you understand:
 - `pnpm gate:compact-profile` — Enforces `phase0:check` when compact/4B-sensitive surfaces changed
 - `pnpm gate:packet-budget` — Enforces runtime/context packet budget envelope limits
 - `pnpm gate:runtime-surface-contract` — Enforces API docs coverage for newly introduced server surfaces
-- `pnpm gate:ui-surface` — Enforces a single canonical active WebUI surface (`src/ui/index.html`)
+- `pnpm gate:ui-surface` — Enforces canonical modular WebUI surface file set (`src/ui/index.html`, `src/ui/styles.css`, `src/ui/app.js`)
 - `pnpm test:smoke` — Isolated smoke suite (self-starting temp server/home)
 - `pnpm test:smoke:live` — Smoke against current running service (deployment verification)
 - `pnpm test:imitation` — Session-imitation regression replay from real chat patterns
@@ -64,6 +64,7 @@ This guide will help you understand:
 - `pnpm phase40:e2e` — Origin/request-marker guard regression for browser mutating control-plane requests
 - `pnpm phase41:e2e` — CLI operator API-surface regression (runtime/providers/auth/missions/sessions)
 - `pnpm phase42:e2e` — Browser regression for model-routing save + service-vault modal/save flow wiring
+- `pnpm phase43:e2e` — UI static-asset serving regression (`/ui/styles.css`, `/ui/app.js`, missing-asset 404)
 - `GET /api/runtime/state-contract` — Returns canonical runtime packet + validation status
 - `GET /api/runtime/config-parity` — Returns provider matrix + warnings/errors
 

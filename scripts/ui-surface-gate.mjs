@@ -5,7 +5,7 @@ const repoRoot = process.cwd();
 const uiDir = path.join(repoRoot, 'src', 'ui');
 const uiRoutePath = path.join(repoRoot, 'src', 'server', 'routes', 'ui.mjs');
 
-const allowedUiFiles = new Set(['index.html']);
+const allowedUiFiles = new Set(['index.html', 'styles.css', 'app.js']);
 
 function fail(message) {
   console.error(`[ui-surface-gate] FAIL: ${message}`);
@@ -30,11 +30,14 @@ for (const required of allowedUiFiles) {
 }
 
 const uiRoute = fs.readFileSync(uiRoutePath, 'utf8');
-if (!uiRoute.includes("src/ui/index.html")) {
-  fail('ui route is not serving src/ui/index.html as canonical UI surface');
+if (!uiRoute.includes("UI_ROOT") || !uiRoute.includes("'index.html'")) {
+  fail('ui route is not serving index.html from canonical UI root');
+}
+if (!uiRoute.includes("url.pathname.startsWith('/ui/')")) {
+  fail('ui route is not serving modular static assets from /ui/*');
 }
 if (uiRoute.includes('new_ui.html')) {
   fail('ui route still references legacy new_ui.html surface');
 }
 
-console.log('[ui-surface-gate] PASS (single canonical active UI surface: src/ui/index.html)');
+console.log('[ui-surface-gate] PASS (canonical modular UI surface: src/ui/index.html + styles.css + app.js)');
