@@ -61,6 +61,13 @@ Date: 2026-04-07
   - `OPENUNUM_SECRETS_PASSPHRASE=<passphrase>`
 - Added auth catalog secret-store status fields (`backend`, `locked`) and WebUI status display updates.
 
+## Session-Imitation Regression Gate (2026-04-08)
+
+**Status:** ✅ Implemented (non-blocking)
+
+- Added `scripts/session-imitation-regression.mjs` to replay real working-memory recovery patterns (`tool_circuit_open`) against self-monitor continuation logic.
+- Added npm command: `pnpm test:imitation`.
+
 ## Phase 1-3 Completion + Council Validation (2026-04-07)
 
 **Status:** ✅ Phase 1-3 Complete | 🟡 Phase 4 Planned

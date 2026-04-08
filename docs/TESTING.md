@@ -10,6 +10,7 @@ Comprehensive testing documentation for the OpenUnum project.
 | **E2E** | `npm run test:e2e` | End-to-end tests for core systems |
 | **Smoke (Isolated)** | `npm run test:smoke` | Quick API health checks on a temporary local server |
 | **Smoke (Live Service)** | `npm run test:smoke:live` | Quick API health checks against the currently running service |
+| **Session Imitation** | `npm run test:imitation` | Replays chat-session recovery patterns against self-monitor continuation logic |
 | **Docs Gate** | `npm run docs:gate` | Fails when code changed without documentation updates |
 | **All** | `npm run test:all` | Run complete test battery |
 
@@ -127,6 +128,7 @@ npm run test:unit
 npm run test:e2e
 npm run test:smoke
 npm run test:smoke:live
+npm run test:imitation
 
 # Individual E2E test file
 node --test tests/e2e/verifier.e2e.mjs

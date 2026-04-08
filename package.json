@@ -43,7 +43,8 @@
     "test:e2e": "node --test tests/e2e/*.e2e.mjs",
     "test:smoke": "node scripts/smoke-isolated.mjs",
     "test:smoke:live": "node scripts/smoke-check.mjs && node scripts/smoke-audit.mjs && node scripts/smoke-verifier.mjs && node scripts/smoke-memory.mjs",
-    "phase0:check": "node scripts/phase0-foundation-check.mjs"
+    "phase0:check": "node scripts/phase0-foundation-check.mjs",
+    "test:imitation": "node scripts/session-imitation-regression.mjs"
   },
   "dependencies": {
     "@mariozechner/pi-ai": "0.64.0",

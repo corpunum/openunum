@@ -16,6 +16,7 @@ Observed recurring pattern in sampled sessions:
 
 Executed script:
 - `node scripts/test-self-monitoring.mjs`
+- `node scripts/session-imitation-regression.mjs`
 
 What it validates:
 - Simulated multi-step continuation behavior for a prior chat pattern
@@ -24,6 +25,7 @@ What it validates:
 
 Result:
 - Script passed and completed full simulation flow.
+- Regression script passed against sampled `tool_circuit_open` goals from `data/working-memory/*.json` with continuation directives emitted for all sampled cases.
 
 ## Risks found from session-pattern review
 
@@ -35,5 +37,4 @@ Result:
 
 1. Add compact-profile tool-failure dedup/summarization guard in context packet assembly.
 2. Add explicit recovery subplan synthesis when `tool_circuit_open` repeats.
-3. Add session-imitation regression script to CI smoke profile (non-blocking initially).
-
+3. ✅ Added session-imitation regression script (`scripts/session-imitation-regression.mjs`) and command (`pnpm test:imitation`) as non-blocking gate.

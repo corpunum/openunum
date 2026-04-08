@@ -18,6 +18,9 @@ All notable changes to OpenUnum are documented in this file.
 - Secret store upgraded to `2026-04-08.secret-store.v2`.
 - Encrypted backend writes `secrets.enc.json` using AES-256-GCM + scrypt and removes plaintext file after encrypted save by default.
 
+### Testing
+- Added session-imitation regression command (`pnpm test:imitation`) using real working-memory recovery patterns as non-blocking drift checks.
+
 ---
 
 ## [2.2.3] - 2026-04-08
