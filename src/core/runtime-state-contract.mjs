@@ -127,7 +127,13 @@ export function validateCanonicalRuntimeState(state) {
 }
 
 export function computeRuntimeStateFingerprint(state) {
-  const canonical = sortedClone(createCanonicalRuntimeState(state));
+  const stableUpdatedAt = toCleanString(state?.updatedAt) || '1970-01-01T00:00:00.000Z';
+  const canonical = sortedClone(
+    createCanonicalRuntimeState({
+      ...state,
+      updatedAt: stableUpdatedAt
+    })
+  );
   const payload = JSON.stringify(canonical);
   return crypto.createHash('sha256').update(payload).digest('hex');
 }

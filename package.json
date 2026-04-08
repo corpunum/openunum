@@ -36,7 +36,7 @@
     "research:daily": "node src/scripts/research-daily.mjs",
     "hf:explore": "node scripts/hf-dataset-explore.mjs",
     "hf:pilot": "node scripts/hf-pilot-ingest.mjs",
-    "deploy:gate": "npm run test:all && npm run gate:compact-profile && echo '✅ Deployment gate passed'",
+    "deploy:gate": "npm run test:all && npm run gate:compact-profile && npm run gate:packet-budget && npm run gate:runtime-surface-contract && echo '✅ Deployment gate passed'",
     "smoke:check": "node scripts/smoke-check.mjs",
     "docs:gate": "node scripts/docs-completion-gate.mjs",
     "docs:index": "node scripts/build-self-reading-index.mjs",
@@ -47,7 +47,9 @@
     "test:smoke:live": "node scripts/smoke-check.mjs && node scripts/smoke-audit.mjs && node scripts/smoke-verifier.mjs && node scripts/smoke-memory.mjs",
     "phase0:check": "node scripts/phase0-foundation-check.mjs",
     "test:imitation": "node scripts/session-imitation-regression.mjs",
-    "gate:compact-profile": "node scripts/compact-profile-gate.mjs"
+    "gate:compact-profile": "node scripts/compact-profile-gate.mjs",
+    "gate:packet-budget": "node scripts/packet-budget-check.mjs",
+    "gate:runtime-surface-contract": "node scripts/runtime-surface-contract-gate.mjs"
   },
   "dependencies": {
     "@mariozechner/pi-ai": "0.64.0",

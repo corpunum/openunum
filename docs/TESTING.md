@@ -14,6 +14,8 @@ Comprehensive testing documentation for the OpenUnum project.
 | **Docs Gate** | `npm run docs:gate` | Fails when code changed without documentation updates |
 | **Docs Index Freshness** | `npm run docs:index:check` | Fails when `docs/SELF_READING_INDEX.md` is stale vs generator output |
 | **Compact Profile Gate** | `npm run gate:compact-profile` | Enforces `phase0:check` when compact-profile/4B-sensitive surfaces changed |
+| **Packet Budget Gate** | `npm run gate:packet-budget` | Fails when runtime/context packet budgets exceed configured limits |
+| **Runtime Surface Contract Gate** | `npm run gate:runtime-surface-contract` | Fails when new server API literals are missing from `docs/API_REFERENCE.md` |
 | **All** | `npm run test:all` | Run complete test battery |
 
 ## Quick Start
@@ -135,6 +137,8 @@ npm run test:smoke:live
 npm run test:imitation
 npm run docs:index:check
 npm run gate:compact-profile
+npm run gate:packet-budget
+npm run gate:runtime-surface-contract
 
 # Individual E2E test file
 node --test tests/e2e/verifier.e2e.mjs

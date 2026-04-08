@@ -40,20 +40,21 @@ This folder is optimized for fast machine onboarding (fresh agent session, no pr
 33. [SELF_READING_INDEX.md](SELF_READING_INDEX.md) — Curated machine-readable self-reading file map
 34. [OPENUNUM_AUDIT_STATUS_2026-04-08.md](OPENUNUM_AUDIT_STATUS_2026-04-08.md) — Verified consolidated audit checklist + cleanup/test phased plan
 35. [PHASES_MASTER_PLAN_2026-04-08.md](PHASES_MASTER_PLAN_2026-04-08.md) — Canonical remaining phases plan and execution status
+36. [PHASES_COMPLETION_REPORT_2026-04-08.md](PHASES_COMPLETION_REPORT_2026-04-08.md) — Final closure evidence for all post-audit phases
 
 ## Legacy Planning Docs
 
 These files describe original planning context and early phase structure:
-- [MASTER_PLAN.md](/home/corp-unum/openunum/docs/MASTER_PLAN.md)
-- [ARCHITECTURE.md](/home/corp-unum/openunum/docs/ARCHITECTURE.md)
-- [IMPLEMENTATION_SEQUENCE.md](/home/corp-unum/openunum/docs/IMPLEMENTATION_SEQUENCE.md)
-- [E2E_GATES.md](/home/corp-unum/openunum/docs/E2E_GATES.md)
-- [archive/README.md](/home/corp-unum/openunum/docs/archive/README.md)
+- [MASTER_PLAN.md](MASTER_PLAN.md)
+- [ARCHITECTURE.md](ARCHITECTURE.md)
+- [IMPLEMENTATION_SEQUENCE.md](IMPLEMENTATION_SEQUENCE.md)
+- [E2E_GATES.md](E2E_GATES.md)
+- [archive/README.md](archive/README.md)
 
 ## Single-File Orientation
 
 If an agent can only read one doc first, read:
-- [AGENT_ONBOARDING.md](/home/corp-unum/openunum/docs/AGENT_ONBOARDING.md)
+- [AGENT_ONBOARDING.md](AGENT_ONBOARDING.md)
 
 ## Current Focus
 

@@ -5,10 +5,10 @@ This is the canonical execution plan for the remaining multi-phase work after Ph
 ## Status Snapshot
 
 - Phase 0: ✅ Complete (runtime contract/parity foundations + gates + UI diagnostics)
-- Phase 1: 🟡 In Progress (cleanup/archive + stale-surface removal)
-- Phase 2: ⏳ Planned (stability + targeted autonomy coverage)
-- Phase 3: ⏳ Planned (hardening + enforcement)
-- Phase 4: ⏳ Planned (consolidation and polish)
+- Phase 1: ✅ Complete (cleanup/archive + stale-surface removal)
+- Phase 2: ✅ Complete (stability + targeted autonomy coverage)
+- Phase 3: ✅ Complete (hardening + enforcement)
+- Phase 4: ✅ Complete (consolidation and final audit sweep)
 
 ## Phase 1 — Cleanup and Canonicalization
 
@@ -50,8 +50,8 @@ Goals:
 
 Tasks:
 - [x] Compact-profile gate script + deploy/CI wiring.
-- [ ] Add packet-size lint/check for context packet budget regressions.
-- [ ] Add guardrails for adding new runtime surfaces without docs/API contracts.
+- [x] Add packet-size lint/check for context packet budget regressions.
+- [x] Add guardrails for adding new runtime surfaces without docs/API contracts.
 
 Exit criteria:
 - compact-sensitive changes cannot bypass readiness gates
@@ -64,9 +64,9 @@ Goals:
 2. Close audit follow-ups with explicit completion evidence.
 
 Tasks:
-- [ ] Refresh and verify all top-level docs links after archive moves.
-- [ ] Re-run full gates and produce final closure report.
-- [ ] Mark post-audit phases complete in `docs/OPENUNUM_AUDIT_STATUS_2026-04-08.md`.
+- [x] Refresh and verify all top-level docs links after archive moves.
+- [x] Re-run full gates and produce final closure report.
+- [x] Mark post-audit phases complete in `docs/OPENUNUM_AUDIT_STATUS_2026-04-08.md`.
 
 Exit criteria:
 - docs + code + tests + gates are aligned

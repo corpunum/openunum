@@ -39,3 +39,9 @@ jobs:
 
       - name: Compact Profile Gate
         run: pnpm gate:compact-profile
+
+      - name: Packet Budget Gate
+        run: pnpm gate:packet-budget
+
+      - name: Runtime Surface Contract Gate
+        run: pnpm gate:runtime-surface-contract

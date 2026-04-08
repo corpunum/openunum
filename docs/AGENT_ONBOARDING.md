@@ -53,6 +53,8 @@ This guide will help you understand:
 - `pnpm docs:gate` — Enforces docs-as-completion for recent code changes
 - `pnpm docs:index` — Rebuilds curated self-reading file index
 - `pnpm gate:compact-profile` — Enforces `phase0:check` when compact/4B-sensitive surfaces changed
+- `pnpm gate:packet-budget` — Enforces runtime/context packet budget envelope limits
+- `pnpm gate:runtime-surface-contract` — Enforces API docs coverage for newly introduced server surfaces
 - `pnpm test:smoke` — Isolated smoke suite (self-starting temp server/home)
 - `pnpm test:smoke:live` — Smoke against current running service (deployment verification)
 - `pnpm test:imitation` — Session-imitation regression replay from real chat patterns

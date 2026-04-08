@@ -24,6 +24,30 @@ Date: 2026-04-07
   - `scripts/docs-index-freshness-check.mjs`
 - Added CI gate step in `.github/workflows/phase-gates.yml` to enforce docs index freshness.
 
+## Phase 3 Hardening Gates (2026-04-08)
+
+**Status:** ✅ Implemented and test-gated
+
+- Added packet budget guardrail:
+  - `scripts/packet-budget-check.mjs`
+  - `pnpm gate:packet-budget`
+- Added runtime surface docs-contract guardrail:
+  - `scripts/runtime-surface-contract-gate.mjs`
+  - `pnpm gate:runtime-surface-contract`
+- Wired both gates into:
+  - `deploy:gate`
+  - `.github/workflows/phase-gates.yml`
+
+## Phase 4 Consolidation + Final Closure (2026-04-08)
+
+**Status:** ✅ Implemented and validated
+
+- Normalized docs index legacy links and restored missing `NEXT_TASKS.md` pointer target.
+- Marked all phases complete in `docs/PHASES_MASTER_PLAN_2026-04-08.md`.
+- Added final closure report:
+  - `docs/PHASES_COMPLETION_REPORT_2026-04-08.md`
+- Updated audit status with explicit phase completion block and closure evidence link.
+
 ## Phase 0 Closure Slice: Runtime Wiring + Gates + UI Diagnostics (2026-04-08)
 
 **Status:** ✅ Implemented and test-gated

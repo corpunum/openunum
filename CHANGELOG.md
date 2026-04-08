@@ -4,6 +4,41 @@ All notable changes to OpenUnum are documented in this file.
 
 ---
 
+## [2.3.0] - 2026-04-08
+
+### Added
+- Final phases closure report:
+  - `docs/PHASES_COMPLETION_REPORT_2026-04-08.md`
+- `NEXT_TASKS.md` pointer file restored for docs index continuity.
+
+### Changed
+- Completed all post-audit phases (0-4) and marked completion in:
+  - `docs/PHASES_MASTER_PLAN_2026-04-08.md`
+  - `docs/OPENUNUM_AUDIT_STATUS_2026-04-08.md`
+- Consolidated docs index link consistency after archive moves.
+
+---
+
+## [2.2.9] - 2026-04-08
+
+### Added
+- Packet budget gate for runtime/context packet envelopes:
+  - `scripts/packet-budget-check.mjs`
+  - `pnpm gate:packet-budget`
+- Runtime surface docs-contract gate:
+  - `scripts/runtime-surface-contract-gate.mjs`
+  - `pnpm gate:runtime-surface-contract`
+
+### Changed
+- `deploy:gate` now includes:
+  - compact-profile gate
+  - packet-budget gate
+  - runtime-surface-contract gate
+- CI phase-gates workflow now runs packet-budget and runtime-surface-contract checks.
+- Master phases plan updated with Phase 3 hardening tasks completed.
+
+---
+
 ## [2.2.8] - 2026-04-08
 
 ### Added
