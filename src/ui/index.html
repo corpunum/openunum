@@ -1481,6 +1481,13 @@
     }
 
     const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+    const pendingPollDelayMs = (pollCount = 0) => {
+      const n = Number(pollCount) || 0;
+      if (n <= 1) return 700;
+      if (n <= 3) return 1000;
+      if (n <= 7) return 1400;
+      return 1800;
+    };
     function isTransientFetchError(error) {
       const msg = String(error?.message || error || '').toLowerCase();
       return msg.includes('failed to fetch') || msg.includes('networkerror') || msg.includes('network request failed');
@@ -1964,7 +1971,7 @@
       updateComposerPendingState();
       try {
         while (Date.now() < deadline) {
-          await sleep(2500);
+          await sleep(pendingPollDelayMs(typing.pollCount || 0));
           if (requestToken !== requestTokenSeq) return false;
           typing.pollCount = (typing.pollCount || 0) + 1;
           const act = await jget(`/api/sessions/${encodeURIComponent(requestSessionId)}/activity?since=${encodeURIComponent(startedAtIso)}`);
@@ -1973,8 +1980,11 @@
             addLiveEvent(typing, `tool count ${typing.lastToolCount || 0} -> ${tools.length}`);
             typing.lastToolCount = tools.length;
           }
-          const p = await jget(`/api/chat/pending?sessionId=${encodeURIComponent(requestSessionId)}`);
-          const statusText = buildPendingStatus(typing, act, p);
+          const pendingState = {
+            pending: Boolean(act?.pending),
+            startedAt: act?.pendingStartedAt || startedAtIso
+          };
+          const statusText = buildPendingStatus(typing, act, pendingState);
           const msgFromActivity = newestAssistantSince(act.messages || [], startedAtIso);
           if (liveActivityEnabled) {
             renderLiveBubble(typing, statusText, tools);
@@ -1987,17 +1997,14 @@
             await refreshSessionList();
             return true;
           }
-          if (p.pending) continue;
-          for (let i = 0; i < 5; i += 1) {
-            const out = await jget(`/api/sessions/${encodeURIComponent(requestSessionId)}`);
-            const msg = newestAssistantSince(out.messages || [], startedAtIso);
-            if (msg?.content) {
-              addLiveEvent(typing, 'assistant final response received');
-              typing.bubble.innerHTML = msg.html || `<pre>${escapeHtml(msg.content)}</pre>`;
-              await refreshSessionList();
-              return true;
-            }
-            await sleep(1200);
+          if (pendingState.pending) continue;
+          const out = await jget(`/api/sessions/${encodeURIComponent(requestSessionId)}`);
+          const msg = newestAssistantSince(out.messages || [], startedAtIso);
+          if (msg?.content) {
+            addLiveEvent(typing, 'assistant final response received');
+            typing.bubble.innerHTML = msg.html || `<pre>${escapeHtml(msg.content)}</pre>`;
+            await refreshSessionList();
+            return true;
           }
           addLiveEvent(typing, 'pending ended but no assistant message found yet; reloading session');
           await loadSession(requestSessionId);

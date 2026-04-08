@@ -52,7 +52,7 @@ This map is implementation-accurate as of 2026-04-08.
 ## Runtime Notes
 
 - Audit, verifier, and memory freshness APIs are handled through active route modules (`src/server/routes/audit.mjs`, `src/server/routes/verifier.mjs`, `src/server/routes/memory-freshness.mjs`) wired by `src/server.mjs`.
-- Web UI currently uses polling-based pending/trace updates in `src/ui/index.html` (no SSE runtime endpoints).
+- Web UI currently uses activity-first adaptive polling for pending/trace updates in `src/ui/index.html` (no SSE runtime endpoints).
 
 ## Request Flow (Chat)
 
@@ -64,7 +64,7 @@ This map is implementation-accurate as of 2026-04-08.
 6. Tool results persist in `tool_runs` table.
 7. Agent returns final response + structured execution trace.
 8. UI renders message + expandable trace.
-9. When the run is pending, UI polls `/api/chat/pending` and session activity per originating session id (session-safe pending loop).
+9. When the run is pending, UI uses `/api/sessions/:sessionId/activity?since=...` as primary polling source with adaptive intervals; final message hydration does one direct session refresh.
 10. When the message starts with `/auto`, chat launches a planner-backed generic task and writes the task summary back into the same session.
 
 ## Planner-Backed Task Flow
