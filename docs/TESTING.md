@@ -10,6 +10,7 @@ Comprehensive testing documentation for the OpenUnum project.
 | **E2E** | `npm run test:e2e` | End-to-end tests for core systems |
 | **Smoke (Isolated)** | `npm run test:smoke` | Quick API health checks on a temporary local server |
 | **Smoke (Live Service)** | `npm run test:smoke:live` | Quick API health checks against the currently running service |
+| **Docs Gate** | `npm run docs:gate` | Fails when code changed without documentation updates |
 | **All** | `npm run test:all` | Run complete test battery |
 
 ## Quick Start

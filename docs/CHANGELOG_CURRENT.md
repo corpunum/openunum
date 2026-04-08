@@ -42,6 +42,14 @@ Date: 2026-04-07
 - Unified `/api/health`, `/api/self-heal`, `/api/self-heal/fix`, and `/api/selfheal/status` flow through the orchestrator.
 - Kept legacy modules in place for compatibility while reducing overlap in the active server path.
 
+## Docs-As-Completion Enforcement (2026-04-08)
+
+**Status:** ✅ Initial gate implemented
+
+- Added `scripts/docs-completion-gate.mjs`.
+- Added `pnpm docs:gate`.
+- Gate fails when code paths (`src/*`, `scripts/*`) changed between refs but no docs paths were updated.
+
 ## Phase 1-3 Completion + Council Validation (2026-04-07)
 
 **Status:** ✅ Phase 1-3 Complete | 🟡 Phase 4 Planned

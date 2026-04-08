@@ -38,6 +38,7 @@
     "hf:pilot": "node scripts/hf-pilot-ingest.mjs",
     "deploy:gate": "npm run test:all && echo '✅ Deployment gate passed'",
     "smoke:check": "node scripts/smoke-check.mjs",
+    "docs:gate": "node scripts/docs-completion-gate.mjs",
     "smoke:ui:noauth": "node scripts/ui-smoke-noauth.mjs",
     "test:e2e": "node --test tests/e2e/*.e2e.mjs",
     "test:smoke": "node scripts/smoke-isolated.mjs",

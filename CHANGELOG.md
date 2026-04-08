@@ -23,6 +23,9 @@ All notable changes to OpenUnum are documented in this file.
 - Fixed `file_grep` line matching reliability by removing regex global state drift.
 - Fixed Brave backend request construction in `web_search` (proper query params + timeout-aware fetch).
 
+### Governance
+- Added docs-as-completion gate script (`pnpm docs:gate`) to fail code-only changes that skip documentation updates.
+
 ---
 
 ## [2.2.2] - 2026-04-08
