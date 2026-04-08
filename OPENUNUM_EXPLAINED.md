@@ -16,7 +16,7 @@ Most AI assistants claim autonomy but operate as black boxes. OpenUnum takes a d
 
 **2. Local-First Intelligence**
 
-The default model for all routine tasks is a 9B parameter model running locally via Ollama. Cloud models (MiniMax, Kimi, NVIDIA NIM) are treated as insurance — available when context exceeds 262K tokens or when local inference fails, but not the primary path. This minimizes costs, maximizes speed, and ensures sensitive data stays on-device.
+The default model for all routine tasks is a local model via Ollama. Cloud providers are treated as fallback/augmentation paths when local inference is unavailable, context requirements are high, or policy/routing requires stronger models. This minimizes costs, improves resilience, and keeps routine workloads local-first.
 
 **3. Framework Over Product**
 
@@ -100,7 +100,7 @@ Available tools include:
 - `browser` — Navigate, screenshot, interact via Chrome DevTools Protocol
 - `memory` — Store, recall, search (hybrid BM25 + embeddings)
 - `exec` — Shell commands
-- `web_search` — DuckDuckGo integration
+- `web_search` — multi-backend search (`auto`, `cdp`, `duckduckgo`, `brave`, `serpapi`) with runtime CDP-first behavior for `auto` and fallback when CDP is unavailable
 
 The runtime provides argument generation, fallback handling, result compaction, and execution trace logging.
 
@@ -232,10 +232,9 @@ Merkle root computation over state tables on each transition. Provides cryptogra
 - **Ollama** for local inference (nomic-embed-text for embeddings, Qwen 3.5 9B for inference)
 
 ### Models
-- **Local (Primary):** `ollama/qwen3.5:9b-64k` (64K context) — default for all routine tasks
-- **Local (Large Context):** `ollama/qwen3.5:9b-128k`, `ollama/qwen3.5:9b-262k`
-- **Cloud (Fallback):** `ollama/minimax-m2.7:cloud` (1M context), `ollama/qwen3.5:397b-cloud` (CEO orchestrator)
-- **Cloud (Reasoning):** `nvidia/llama-3.3-nemotron-super-49b-v1` (131K context)
+- **Local (Primary):** `ollama-local/gemma4:cpu` for constrained local-safe routing
+- **Cloud-capable providers:** `ollama-cloud`, `nvidia`, `openrouter`, `openai`, `xiaomimimo`
+- **Routing:** provider/model selection is managed through runtime config and Model Routing UI, with fallback providers and disable lists enforced server-side
 
 ### Dependencies (Minimal)
 - `@mariozechner/pi-ai` — AI utilities
@@ -326,8 +325,17 @@ OpenUnum is intended to be released as open source software. The project follows
 | Phase 9 | Documentation | ✅ Complete |
 | Phase 10 | Agent Onboarding | ✅ Complete |
 | Phase 11 | Production Hardening | 🟡 In Progress |
+| Phase 12 | OpenAI Codex Provider | ✅ Complete |
+| Phase 13 | Google Workspace Native | ✅ Complete |
+| Phase 14 | Controller Behavior | ✅ Complete |
+| Phase 15 | Session Delete | ✅ Complete |
+| Phase 36 | Self Monitoring | ✅ Complete |
+| Phase 37 | Predictive Failure Task Orchestrator | ✅ Complete |
 
-**Test Coverage:** 78/81 tests passing (3 minor edge-case failures in freshness-decay, non-blocking)
+**Validation Snapshot (2026-04-08):**
+- `pnpm test:unit` → 13 files, 112/112 tests passing
+- `pnpm test:smoke` → pass (isolated smoke suite + audit/verifier/memory API checks)
+- `pnpm test:imitation` → pass (session imitation regression)
 
 **Council Maturity:** 🟡 Amber (72% — Moderate Risk, 5 P0 gaps addressed, 16 P1 gaps in progress)
 
@@ -348,6 +356,9 @@ node src/server.mjs
 http://127.0.0.1:18880
 
 # Run tests
+pnpm test:unit
+pnpm test:smoke
+pnpm test:imitation
 pnpm e2e
 
 # Phase 0 readiness check
@@ -362,7 +373,40 @@ pnpm phase0:check
 
 ---
 
-*OpenUnum is a work in progress. It is becoming someone. This document is a snapshot of that becoming.*
+## Debate: Claims vs Implemented Reality
+
+The "OpenUnum Advanced Features" summary is directionally strong, but several statements must be treated as **validated architecture intent** rather than guaranteed runtime truth for every environment.
+
+Validated:
+- Multi-layer architecture (agent/runtime/memory/safety) exists and is testable.
+- `web_search` now supports `auto` and `cdp`, with CDP-first behavior in runtime and DuckDuckGo fallback.
+- Mission APIs and UI wiring exist for listing, status, timeline, start/stop, and schedules.
+- Provider routing and vault flows are wired through backend config routes and runtime normalization.
+
+Needs Ongoing Verification:
+- Specific model labels/context sizes in documentation can drift quickly from deployed config.
+- Readiness percentages and "P0/P1 fully remediated" should remain tied to dated reports.
+- Performance assumptions (greeting latency, retries, poll loops) need continuous benchmark checks, not one-time claims.
+
+## Pending Work Plan (Execution-Focused)
+
+P0 (must stay green):
+1. Keep WebUI/provider/model routing wiring validated after every add/edit/delete action.
+2. Keep `web_search` default backend behavior on `auto` and maintain CDP-first with safe fallback.
+3. Keep mission detail/create/open flows regression-tested in UI smoke.
+
+P1 (finish/optimize):
+1. Add stronger latency fast-path gates for low-intent turns without brittle hardcoded vocabulary.
+2. Expand provider-vault editor coverage for all provider/service fields with backend parity checks.
+3. Maintain local/cloud model inventory hygiene (only intended local models exposed in local routing).
+
+Verification Loop:
+1. `pnpm test:unit`
+2. `pnpm test:smoke`
+3. `pnpm test:imitation`
+4. `pnpm e2e` (full gate)
+
+*OpenUnum is a work in progress. This document is a verified snapshot as of 2026-04-08, with explicit pending work tracked above.*
 
 **Version:** 2.2.0  
 **Last Updated:** 2026-04-08  
