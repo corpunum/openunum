@@ -60,12 +60,16 @@ This guide will help you understand:
 - `pnpm test:smoke:live` — Smoke against current running service (deployment verification)
 - `pnpm test:imitation` — Session-imitation regression replay from real chat patterns
 - `pnpm phase10:e2e && pnpm phase11:e2e` — WebUI/provider-contract checks (provider matrix + required UI markers)
-- `pnpm phase39:e2e` — Browser-level WebUI interaction checks (Provider Vault modal/actions + Missions create/load/stop wiring)
+- `pnpm phase39:e2e` — Browser-level WebUI interaction checks (core chat/session interactions)
 - `pnpm phase40:e2e` — Origin/request-marker guard regression for browser mutating control-plane requests
 - `pnpm phase41:e2e` — CLI operator API-surface regression (runtime/providers/auth/missions/sessions + provider health)
+  - includes provider health summary contract + mission timeline CLI diagnostics (`missions status --with-timeline`, `missions timeline`)
 - `pnpm phase42:e2e` — Browser regression for model-routing save + service-vault modal/save flow wiring
 - `pnpm phase43:e2e` — UI static-asset serving regression (`/ui/styles.css`, `/ui/app.js`, missing-asset 404)
 - `pnpm phase44:e2e` — Browser regression for provider-vault modal test/save and mission timeline filter/search details
+- `pnpm phase45:e2e` — Browser regression for provider/service hide-row + add-row recovery flows
+- `pnpm phase46:e2e` — Browser regression for mission create/load/open-session/stop lifecycle
+- `pnpm phase47:e2e` — Runtime contract regression for `/api/chat` latency-budget telemetry surface
 - `GET /api/runtime/state-contract` — Returns canonical runtime packet + validation status
 - `GET /api/runtime/config-parity` — Returns provider matrix + warnings/errors
 

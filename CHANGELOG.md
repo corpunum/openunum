@@ -4,6 +4,23 @@ All notable changes to OpenUnum are documented in this file.
 
 ---
 
+## [2.3.34] - 2026-04-08
+
+### Changed
+- Phase 8 docs/onboarding canonicalization:
+  - rewrote `docs/INDEX.md` to a canonical onboarding/runtime path + explicit archive section.
+  - archived historical planning snapshots under `docs/archive/2026-04-08-historical-plans/`.
+  - updated onboarding references for phase45/46/47 coverage.
+- Phase 9 CLI/operator parity:
+  - `providers health` now includes diagnostic summary counts (`healthy/degraded/blocked` + details).
+  - `missions list` now includes summary counts by status.
+  - added mission timeline diagnostics via `missions timeline --id` and `missions status --with-timeline`.
+
+### Added
+- Expanded CLI regression in `phase41.cli-operator-surface.e2e.mjs` to validate new mission/provider diagnostic fields and timeline commands.
+
+---
+
 ## [2.3.33] - 2026-04-08
 
 ### Changed

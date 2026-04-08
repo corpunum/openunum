@@ -100,6 +100,8 @@ node src/cli.mjs providers health
 node src/cli.mjs auth status
 node src/cli.mjs auth catalog
 node src/cli.mjs missions list
+node src/cli.mjs missions timeline --id <missionId>
+node src/cli.mjs missions status --id <missionId> --with-timeline
 node src/cli.mjs sessions list
 ```
 

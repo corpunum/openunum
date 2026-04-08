@@ -63,6 +63,34 @@ async function apiRequest(method, pathname, body = undefined) {
   return parsed;
 }
 
+function summarizeProviderHealth(out = {}) {
+  const providers = Array.isArray(out.providers) ? out.providers : [];
+  const availability = Array.isArray(out.providerAvailability) ? out.providerAvailability : [];
+  const degraded = providers.filter((p) => p.status !== 'healthy');
+  const blocked = availability.filter((p) => p.blocked);
+  return {
+    totalProviders: providers.length,
+    healthyProviders: providers.length - degraded.length,
+    degradedProviders: degraded.length,
+    blockedProviders: blocked.length,
+    degraded: degraded.map((p) => ({ provider: p.provider, status: p.status, reason: p.degraded_reason || null })),
+    blocked: blocked.map((p) => ({ provider: p.provider, lastFailureKind: p.lastFailureKind || null }))
+  };
+}
+
+function summarizeMissionsList(out = {}) {
+  const missions = Array.isArray(out.missions) ? out.missions : [];
+  const statuses = missions.reduce((acc, row) => {
+    const status = String(row?.status || 'unknown');
+    acc[status] = (acc[status] || 0) + 1;
+    return acc;
+  }, {});
+  return {
+    total: missions.length,
+    statuses
+  };
+}
+
 async function main() {
   if (cmd === 'health') {
     console.log(JSON.stringify({ ok: true, service: 'openunum' }));
@@ -175,7 +203,8 @@ async function main() {
     console.log(JSON.stringify({
       ok: true,
       providers: out.providers || [],
-      availability: out.providerAvailability || []
+      availability: out.providerAvailability || [],
+      summary: summarizeProviderHealth(out)
     }, null, 2));
     return;
   }
@@ -206,7 +235,10 @@ async function main() {
 
   if (cmd === 'missions' && args[1] === 'list') {
     const out = await apiRequest('GET', '/api/missions');
-    console.log(JSON.stringify(out, null, 2));
+    console.log(JSON.stringify({
+      ...out,
+      summary: summarizeMissionsList(out)
+    }, null, 2));
     return;
   }
 
@@ -214,6 +246,19 @@ async function main() {
     const id = String(getArg('--id', '')).trim();
     if (!id) throw new Error('missions status requires --id <missionId>');
     const out = await apiRequest('GET', `/api/missions/status?id=${encodeURIComponent(id)}`);
+    if (args.includes('--with-timeline')) {
+      const timeline = await apiRequest('GET', `/api/missions/timeline?id=${encodeURIComponent(id)}`);
+      console.log(JSON.stringify({ ...out, timeline }, null, 2));
+      return;
+    }
+    console.log(JSON.stringify(out, null, 2));
+    return;
+  }
+
+  if (cmd === 'missions' && args[1] === 'timeline') {
+    const id = String(getArg('--id', '')).trim();
+    if (!id) throw new Error('missions timeline requires --id <missionId>');
+    const out = await apiRequest('GET', `/api/missions/timeline?id=${encodeURIComponent(id)}`);
     console.log(JSON.stringify(out, null, 2));
     return;
   }

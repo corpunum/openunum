@@ -31,9 +31,9 @@ Purpose: curated file map for autonomous code/docs self-reading and update workf
 
 ## Operations and Roadmap
 
-- ✅ `README.md` (129 lines)
+- ✅ `README.md` (131 lines)
 - ✅ `BRAIN.MD` (192 lines)
-- ✅ `docs/AGENT_ONBOARDING.md` (416 lines)
+- ✅ `docs/AGENT_ONBOARDING.md` (420 lines)
 - ✅ `docs/ROADMAP.md` (165 lines)
-- ✅ `CHANGELOG.md` (770 lines)
+- ✅ `CHANGELOG.md` (787 lines)
 

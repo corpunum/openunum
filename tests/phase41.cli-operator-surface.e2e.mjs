@@ -47,12 +47,30 @@ try {
   const providerHealth = runCli(['providers', 'health']);
   assert.equal(providerHealth.ok, true);
   assert.equal(Array.isArray(providerHealth.providers), true);
+  assert.equal(typeof providerHealth.summary?.totalProviders, 'number');
 
   const auth = runCli(['auth', 'catalog']);
   assert.equal(typeof auth.contract_version, 'string');
 
   const missions = runCli(['missions', 'list']);
   assert.equal(Array.isArray(missions.missions), true);
+  assert.equal(typeof missions.summary?.total, 'number');
+
+  const startedMission = await jpost('/api/missions/start', {
+    goal: 'phase41 cli mission diagnostics',
+    maxSteps: 1,
+    intervalMs: 50
+  });
+  assert.equal(startedMission.status, 200);
+  const missionId = String(startedMission.json.id || '').trim();
+  assert.equal(Boolean(missionId), true);
+
+  const missionStatus = runCli(['missions', 'status', '--id', missionId, '--with-timeline']);
+  assert.equal(typeof missionStatus.mission?.id, 'string');
+  assert.equal(typeof missionStatus.timeline?.mission?.id, 'string');
+
+  const missionTimeline = runCli(['missions', 'timeline', '--id', missionId]);
+  assert.equal(typeof missionTimeline.mission?.id, 'string');
 
   const sessionId = `phase41-cli-${Date.now()}`;
   const created = await jpost('/api/sessions', { sessionId });

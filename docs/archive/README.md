@@ -4,6 +4,9 @@ This folder contains legacy/stale docs removed from the active onboarding/read-o
 
 ## Archived on 2026-04-08
 
+- `2026-04-08-historical-plans/*`
+  - superseded planning/snapshot docs archived out of canonical onboarding flow
+  - includes: `MASTER_PLAN.md`, `IMPLEMENTATION_SEQUENCE.md`, `PHASE0_EXECUTION_PLAN.md`, `PHASE4_PLAN.md`, `IMPROVEMENT_SUMMARY.md`, `PROJECT_STATE_SNAPSHOT.md`
 - `agent-onboarding.md`
   - superseded by `docs/AGENT_ONBOARDING.md`
 - `session-stuck-patterns.md`

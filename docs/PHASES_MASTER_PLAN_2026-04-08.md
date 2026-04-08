@@ -8,12 +8,12 @@ This is the canonical execution roadmap for the current stabilization/hardening 
 - Phase 1: ✅ Complete (control-plane origin hardening for browser mutation paths)
 - Phase 2: ✅ Complete (route/module wiring cleanup + archived duplicate UI surface)
 - Phase 3: ✅ Complete (config/provider/auth contract tightening and API alignment)
-- Phase 4: 🟡 In progress (WebUI modularization of `src/ui/app.js`)
-- Phase 5: 🟡 In progress (SSE-first pending delivery + polling fallback tuning)
-- Phase 6: 🟡 In progress (agent fast-path de-overfit and latency routing)
-- Phase 7: 🟡 In progress (browser-level WebUI regression and CI promotion)
-- Phase 8: 🟡 In progress (docs/onboarding canonicalization and stale-surface archive)
-- Phase 9: 🟡 In progress (operator CLI parity with runtime/provider/auth/mission APIs)
+- Phase 4: ✅ Complete (WebUI modularization of `src/ui/app.js` into domain modules)
+- Phase 5: ✅ Complete (SSE-first pending delivery + fallback tail timing instrumentation)
+- Phase 6: ✅ Complete (feature-scored fast-awareness + latency budget telemetry)
+- Phase 7: ✅ Complete (browser-level WebUI regression and CI promotion through phase47)
+- Phase 8: ✅ Complete (docs/onboarding canonicalization + historical plan archive)
+- Phase 9: ✅ Complete (operator CLI parity + richer mission/provider diagnostics)
 
 ## Phase 0 — Trust Restoration
 
@@ -68,10 +68,10 @@ Completed so far:
 - extracted `dom.js`, `http.js`, `feedback.js`, `navigation.js`, `logic.js`
 - `index.html` now loads module runtime (`type="module"`)
 
-Next:
-1. extract chat/session view domain module
-2. extract provider-vault and missions view domain modules
-3. reduce `src/ui/app.js` to orchestration-only shell
+Completed:
+1. extracted session/provider-vault/missions/model-routing/control-plane/runtime/session-io modules
+2. added modular helper unit tests for each extracted domain
+3. reduced `src/ui/app.js` to orchestration-focused surface with domain modules
 
 ## Phase 5 — Real-Time Delivery
 
@@ -83,9 +83,9 @@ Completed so far:
 - `/api/chat/stream` + EventSource hydration path is active
 - fallback polling kept for non-SSE/error environments
 
-Next:
-1. reduce tail-loop delay after provider completion
-2. add timing instrumentation around pending-to-final transition
+Completed:
+1. reduced tail-loop delay after provider completion via short recheck window
+2. added pending timing instrumentation (`total`, `firstActivity`, `tail`) in live trace events
 
 ## Phase 6 — Agent Fast-Path Refinement
 
@@ -96,9 +96,9 @@ Goals:
 Completed so far:
 - fast-awareness routing expanded and guarded by unit tests
 
-Next:
-1. replace residual keyword-only branches with feature-driven checks
-2. enforce per-stage latency budgets with telemetry
+Completed:
+1. replaced residual low-intent keyword-only checks with feature-scored heuristics and penalties
+2. added per-stage/path latency budget telemetry in chat trace (`trace.latencyBudget`)
 
 ## Phase 7 — Protective Testing
 
@@ -110,9 +110,10 @@ Completed so far:
 - Playwright-backed UI interactions (`phase39`, `phase42`, `phase43`)
 - CI includes unit/smoke/imitation + browser e2e gates
 
-Next:
-1. add provider-vault modal edit/save/delete matrix assertions
-2. add mission detail create/open/stop lifecycle assertions
+Completed:
+1. provider-vault modal and hide/add row browser regressions (`phase44`, `phase45`)
+2. mission create/load/open/stop lifecycle browser regression (`phase46`)
+3. chat latency-budget trace contract regression (`phase47`)
 
 ## Phase 8 — Docs and Onboarding Cleanup
 
@@ -124,9 +125,10 @@ Completed so far:
 - docs index freshness gate + generated self-reading index
 - onboarding and API references aligned with active surfaces
 
-Next:
-1. finish pruning stale root docs and archive leftovers
-2. keep `NEXT_TASKS.md` pinned to exactly one active roadmap
+Completed:
+1. archived stale historical plan/snapshot docs under `docs/archive/2026-04-08-historical-plans/`
+2. reduced `docs/INDEX.md` to canonical onboarding/runtime docs + explicit archive section
+3. kept `NEXT_TASKS.md` pinned to this roadmap as canonical tracker
 
 ## Phase 9 — Operator Surfaces
 
@@ -138,9 +140,9 @@ Completed so far:
 - CLI operator API bridge: runtime/providers/auth/missions/sessions
 - regression `phase41.cli-operator-surface.e2e.mjs`
 
-Next:
-1. add richer CLI mission/provider diagnostics output
-2. align README examples with current provider local/cloud split
+Completed:
+1. added richer CLI provider-health and mission summaries/timeline diagnostics
+2. aligned README CLI examples with current mission timeline/status commands and provider split
 
 ## Execution Order
 
@@ -151,4 +153,3 @@ Continue in this order until closure:
 4. Phase 7
 5. Phase 8
 6. Phase 9
-
