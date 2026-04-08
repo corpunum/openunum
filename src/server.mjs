@@ -14,6 +14,22 @@ import { SelfHealMonitor } from './core/selfheal.mjs';
 import { getAutonomyMaster } from './core/autonomy-master.mjs';
 import { estimateMessagesTokens } from './core/context-budget.mjs';
 import { resolveExecutionEnvelope } from './core/model-execution-envelope.mjs';
+import {
+  EVENT_TYPES as AUDIT_EVENT_TYPES,
+  getAuditStats,
+  getLog as getAuditLog,
+  getMerkleRoot as getAuditRoot,
+  logEvent as logAuditEvent,
+  verifyChain as verifyAuditChain
+} from './core/audit-log.mjs';
+import {
+  RUNTIME_STATE_CONTRACT_VERSION,
+  buildRuntimeStatePacket,
+  validateCanonicalRuntimeState
+} from './core/runtime-state-contract.mjs';
+import { buildConfigParityReport } from './core/config-parity-check.mjs';
+import { IndependentVerifier } from './core/verifier.mjs';
+import { getHalfLifeConfig } from './memory/freshness-decay.mjs';
 import { CDPBrowser } from './browser/cdp.mjs';
 import { logInfo, logError } from './logger.mjs';
 import {
@@ -134,6 +150,7 @@ const prunePendingChats = chatRuntime.prunePendingChats;
 
 const autonomyMaster = getAutonomyMaster({ config, agent, memoryStore: memory, browser, pendingChats });
 const selfHealMonitor = new SelfHealMonitor({ config, agent, browser, memory });
+const verifier = new IndependentVerifier();
 const API_ERROR_CONTRACT_VERSION = '2026-04-02.api-errors.v1';
 const TOOL_CATALOG_CONTRACT_VERSION = '2026-04-02.tool-catalog.v1';
 
@@ -374,6 +391,48 @@ function buildAutonomyInsights({ sessionId = '', goal = '' } = {}) {
     toolReliability: memory.getToolReliability ? memory.getToolReliability(10) : [],
     recentToolRuns: sid ? memory.getRecentToolRuns(sid, 10) : [],
     recentCompactions: sid ? memory.listSessionCompactions(sid, 5) : []
+  };
+}
+
+function buildRuntimeStateContractReport({ sessionId = '', goal = '', phase = '', nextAction = '' } = {}) {
+  const sid = String(sessionId || '').trim() || `runtime:${process.pid}`;
+  const effectiveGoal = String(goal || '').trim() || 'Maintain stable OpenUnum runtime operation';
+  const effectivePhase = String(phase || '').trim() || 'phase0';
+  const effectiveNextAction = String(nextAction || '').trim() || 'Review diagnostics and proceed with planned work';
+  const parity = buildConfigParityReport(config, process.env);
+  const blockers = (parity.issues || [])
+    .filter((issue) => issue?.level === 'error')
+    .map((issue) => String(issue?.code || '').trim())
+    .filter(Boolean);
+
+  const packet = buildRuntimeStatePacket({
+    sessionId: sid,
+    goal: effectiveGoal,
+    phase: effectivePhase,
+    nextAction: effectiveNextAction,
+    verifiedObservations: [
+      `active_provider:${String(config.model?.provider || 'unknown')}`,
+      `fallback_count:${Array.isArray(config.model?.routing?.fallbackProviders) ? config.model.routing.fallbackProviders.length : 0}`,
+      `parity_severity:${String(parity.severity || 'unknown')}`
+    ],
+    permissions: {
+      shell: Boolean(config.runtime?.shellEnabled),
+      network: true,
+      browser: Boolean(config.browser),
+      fileWrite: true
+    },
+    blockers,
+    activeArtifacts: [
+      'src/core/runtime-state-contract.mjs',
+      'src/core/config-parity-check.mjs',
+      'scripts/phase0-foundation-check.mjs'
+    ]
+  });
+  const validation = validateCanonicalRuntimeState(packet.state);
+  return {
+    contractVersion: RUNTIME_STATE_CONTRACT_VERSION,
+    validation,
+    packet
   };
 }
 
@@ -627,6 +686,110 @@ const server = http.createServer(async (req, res) => {
       });
     }
 
+    if (req.method === 'GET' && url.pathname === '/api/verifier/stats') {
+      return sendJson(res, 200, verifier.getStats());
+    }
+
+    if (req.method === 'POST' && url.pathname === '/api/verifier/check') {
+      const body = await parseBody(req);
+      const type = String(body?.type || 'state').trim().toLowerCase();
+      if (type === 'tool') {
+        const out = await verifier.verifyToolResult(String(body?.toolName || ''), body?.args || {}, body?.after || body?.result || {});
+        return sendJson(res, 200, out);
+      }
+      const out = await verifier.verifyStateChange(body?.before || {}, body?.after || {});
+      return sendJson(res, 200, out);
+    }
+
+    if (req.method === 'GET' && url.pathname === '/api/audit/stats') {
+      const stats = getAuditStats();
+      const sessionCount = new Set((getAuditLog() || []).map((entry) => String(entry?.correlationId || '').trim()).filter(Boolean)).size;
+      return sendJson(res, 200, {
+        ...stats,
+        totalLogs: stats.totalEntries || 0,
+        sessionsCount: sessionCount
+      });
+    }
+
+    if (req.method === 'GET' && url.pathname === '/api/audit/log') {
+      const since = String(url.searchParams.get('since') || '').trim() || null;
+      const type = String(url.searchParams.get('type') || '').trim() || null;
+      const limitRaw = Number(url.searchParams.get('limit') || 100);
+      const limit = Number.isFinite(limitRaw) && limitRaw > 0 ? Math.min(limitRaw, 1000) : 100;
+      const entries = getAuditLog({ since, type, limit });
+      return sendJson(res, 200, { entries, count: entries.length });
+    }
+
+    if (req.method === 'POST' && url.pathname === '/api/audit/log') {
+      const body = await parseBody(req);
+      const requested = String(body?.eventType || '').trim();
+      const eventType = AUDIT_EVENT_TYPES.includes(requested)
+        ? requested
+        : 'verification';
+      const payload = {
+        action: String(body?.action || '').trim() || null,
+        actor: String(body?.actor || '').trim() || null,
+        details: body?.details && typeof body.details === 'object' ? body.details : {}
+      };
+      const entry = logAuditEvent(eventType, payload, String(body?.correlationId || '').trim() || undefined);
+      return sendJson(res, 200, {
+        ok: true,
+        logId: entry.entryId,
+        entry
+      });
+    }
+
+    if (req.method === 'GET' && url.pathname === '/api/audit/verify') {
+      return sendJson(res, 200, verifyAuditChain());
+    }
+
+    if (req.method === 'GET' && url.pathname === '/api/audit/root') {
+      return sendJson(res, 200, { merkleRoot: getAuditRoot() });
+    }
+
+    if (req.method === 'GET' && url.pathname === '/api/memory/freshness') {
+      const stale = typeof memory.getStaleMemories === 'function'
+        ? memory.getStaleMemories({ threshold: 0.125, limit: 200 })
+        : [];
+      return sendJson(res, 200, {
+        ok: true,
+        halfLifeConfig: getHalfLifeConfig(),
+        staleCount: stale.length,
+        timestamp: new Date().toISOString()
+      });
+    }
+
+    if (req.method === 'GET' && url.pathname === '/api/memory/stale') {
+      const thresholdRaw = Number(url.searchParams.get('threshold') || 0.125);
+      const limitRaw = Number(url.searchParams.get('limit') || 50);
+      const threshold = Number.isFinite(thresholdRaw) ? Math.max(0, thresholdRaw) : 0.125;
+      const limit = Number.isFinite(limitRaw) ? Math.max(1, Math.min(limitRaw, 500)) : 50;
+      const category = String(url.searchParams.get('category') || '').trim() || null;
+      const staleMemories = typeof memory.getStaleMemories === 'function'
+        ? memory.getStaleMemories({ threshold, limit, category })
+        : [];
+      return sendJson(res, 200, {
+        ok: true,
+        staleMemories,
+        count: staleMemories.length,
+        threshold,
+        timestamp: new Date().toISOString()
+      });
+    }
+
+    if (req.method === 'POST' && url.pathname.startsWith('/api/memory/refresh/')) {
+      const memoryId = Number(url.pathname.split('/').pop() || 0);
+      if (!Number.isFinite(memoryId) || memoryId <= 0) {
+        return sendJson(res, 400, { ok: false, error: 'memory_id_required' });
+      }
+      if (typeof memory.refreshMemory !== 'function') {
+        return sendJson(res, 503, { ok: false, error: 'store_not_available' });
+      }
+      const out = memory.refreshMemory(memoryId);
+      if (!out?.ok) return sendJson(res, 404, { ok: false, error: 'memory_not_found' });
+      return sendJson(res, 200, { ok: true, ...out, timestamp: new Date().toISOString() });
+    }
+
     if (req.method === 'GET' && url.pathname === '/api/runtime/overview') {
       return sendJson(res, 200, await buildRuntimeOverview());
     }
@@ -634,6 +797,23 @@ const server = http.createServer(async (req, res) => {
     if (req.method === 'GET' && url.pathname === '/api/runtime/inventory') {
       const limit = Number(url.searchParams.get('limit') || 300);
       return sendJson(res, 200, buildRuntimeInventory(limit));
+    }
+
+    if (req.method === 'GET' && url.pathname === '/api/runtime/state-contract') {
+      const sessionId = String(url.searchParams.get('sessionId') || '').trim();
+      const goal = String(url.searchParams.get('goal') || '').trim();
+      const phase = String(url.searchParams.get('phase') || '').trim();
+      const nextAction = String(url.searchParams.get('nextAction') || '').trim();
+      return sendJson(res, 200, buildRuntimeStateContractReport({
+        sessionId,
+        goal,
+        phase,
+        nextAction
+      }));
+    }
+
+    if (req.method === 'GET' && url.pathname === '/api/runtime/config-parity') {
+      return sendJson(res, 200, buildConfigParityReport(config, process.env));
     }
 
     if (req.method === 'GET' && url.pathname === '/api/autonomy/insights') {
@@ -778,6 +958,7 @@ const server = http.createServer(async (req, res) => {
       ctx: {
         config,
         agent,
+        memoryStore: memory,
         parseBody,
         sendJson,
         saveConfig,
@@ -796,6 +977,7 @@ const server = http.createServer(async (req, res) => {
       ctx: {
         config,
         agent,
+        memoryStore: memory,
         parseBody,
         sendJson,
         noCacheHeaders,
@@ -828,6 +1010,7 @@ const server = http.createServer(async (req, res) => {
       ctx: {
         config,
         agent,
+        memoryStore: memory,
         parseBody,
         sendJson,
         saveConfig,

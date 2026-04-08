@@ -1,8 +1,8 @@
 # Agent Onboarding Guide
 
 **For:** New OpenUnum agents joining the system  
-**Version:** 2.3.0  
-**Last Updated:** 2026-04-07
+**Version:** 2.3.1  
+**Last Updated:** 2026-04-08
 
 **Core Principles:** See [BRAIN.MD](../BRAIN.MD) for essential operating principles
 
@@ -45,6 +45,12 @@ This guide will help you understand:
 - ✅ SQLite persistence for sessions, tasks, strategies
 - ✅ WebUI with live trace state and pending rehydration
 - ✅ Council validation framework (6 domain experts)
+- ✅ Runtime contract + config parity diagnostics endpoints (`/api/runtime/state-contract`, `/api/runtime/config-parity`)
+
+**Phase 0 Foundation Checks (new):**
+- `pnpm phase0:check` — Validates canonical runtime state contract and config parity report
+- `GET /api/runtime/state-contract` — Returns canonical runtime packet + validation status
+- `GET /api/runtime/config-parity` — Returns provider matrix + warnings/errors
 
 ---
 

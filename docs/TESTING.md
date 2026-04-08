@@ -48,13 +48,13 @@ End-to-end tests validating complete system workflows:
 |-----------|----------|
 | `freshness-decay.e2e.mjs` | Memory half-life, staleness detection, freshness scoring, refresh endpoint |
 | `hippocampal-replay.e2e.mjs` | Replay triggers, consolidation states, retrieval boosts, loop prevention, auto-consolidation |
-| `verifier.e2e.mjs` | Verification contracts, tool approval/rejection, quality scoring, safety compliance, cross-model validation, escalation, caching |
+| `verifier.e2e.mjs` | Verifier API contract, state-change verification, tool-result verification |
 | `audit-logging.e2e.mjs` | Chain integrity, trace reconstruction, tamper detection, export formats, privacy hashing |
 | `odd-enforcement.e2e.mjs` | ODD definitions, mode enforcement, confidence thresholds, escalation paths, mode transitions |
 
 **Location:** `tests/e2e/`  
 **Framework:** Node.js native test runner (`node --test`)  
-**Requirements:** Running API server on `localhost:3000` (or set `OPENUNUM_API_URL`)  
+**Requirements:** Tests self-start a local OpenUnum server via `tests/_helpers.mjs`  
 **Expected Duration:** 2-5 minutes
 
 ### Smoke Tests (`npm run test:smoke`)
@@ -96,14 +96,14 @@ npm run phase1:e2e    # Phase 1 tests
    npm install
    ```
 
-2. **Start the API server** (for E2E and smoke tests):
+2. **Start the API server** (for smoke tests):
    ```bash
    npm start
    ```
 
 3. **Set environment variables** (optional):
    ```bash
-   export OPENUNUM_API_URL=http://localhost:3000
+   export OPENUNUM_API_URL=http://127.0.0.1:18880
    export NODE_ENV=test
    ```
 
@@ -156,7 +156,7 @@ describe('Feature Name', () => {
 
   describe('Sub-feature', () => {
     it('should do something', async () => {
-      const response = await fetch('http://localhost:3000/api/endpoint', {
+      const response = await fetch('http://127.0.0.1:18880/api/endpoint', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ test: true })
@@ -174,7 +174,7 @@ describe('Feature Name', () => {
 ```javascript
 #!/usr/bin/env node
 
-const API_BASE = process.env.OPENUNUM_API_URL || 'http://localhost:3000';
+const API_BASE = process.env.OPENUNUM_API_URL || 'http://127.0.0.1:18880';
 
 async function smokeTest() {
   console.log('🔍 Feature API Smoke Test');
@@ -203,7 +203,7 @@ smokeTest();
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `OPENUNUM_API_URL` | `http://localhost:3000` | API server URL |
+| `OPENUNUM_API_URL` | `http://127.0.0.1:18880` | API server URL |
 | `NODE_ENV` | `development` | Environment mode |
 | `TEST_VERBOSE` | `false` | Enable verbose output |
 
@@ -250,5 +250,5 @@ npm run test:unit -- --coverage
 
 ---
 
-**Last Updated:** 2026-04-07  
+**Last Updated:** 2026-04-08  
 **Maintainer:** OpenUnum Team

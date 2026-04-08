@@ -34,6 +34,9 @@ This folder is optimized for fast machine onboarding (fresh agent session, no pr
 27. [SELF_MONITORING.md](SELF_MONITORING.md)
 28. [IMPROVEMENT_SUMMARY.md](IMPROVEMENT_SUMMARY.md)
 29. [../NEXT_TASKS.md](../NEXT_TASKS.md)
+30. [PHASE0_EXECUTION_PLAN.md](PHASE0_EXECUTION_PLAN.md) — Runtime contract/parity execution status
+31. [REPO_HARVEST_CONSOLIDATED_PLAN_2026-04-08.md](REPO_HARVEST_CONSOLIDATED_PLAN_2026-04-08.md) — Consolidated external pattern harvest mapped to OpenUnum
+32. [SESSION_IMITATION_REVIEW_2026-04-08.md](SESSION_IMITATION_REVIEW_2026-04-08.md) — Chat-session pattern review + imitation test outcomes
 
 ## Legacy Planning Docs
 
@@ -55,3 +58,4 @@ The current autonomy surface is centered on:
 - bounded workers, self-edit, and model-scout workflows
 - restart-safe task persistence in SQLite
 - planner-backed chat `/auto` execution instead of a hardcoded mission shortcut
+- runtime diagnostics contracts for operations (`/api/runtime/state-contract`, `/api/runtime/config-parity`)

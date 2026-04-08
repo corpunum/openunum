@@ -2,7 +2,7 @@
 
 OpenUnum is an Ubuntu-first autonomous assistant framework focused on high tool reliability, strict model control, and agent-operable runtime behavior.
 
-**Current State (2026-04-07):**
+**Current State (2026-04-08):**
 - ✅ **Phase 1-3 Complete** — Working memory, context compaction, model behavior registry, execution envelopes, council validation
 - 🟡 **Phase 4 Planned** — Remediation roadmap (audit logging, independent verifier, hippocampal replay, ODD, freshness decay)
 - Web UI with Gemini-inspired glass styling while preserving full backend feature coverage
@@ -20,6 +20,7 @@ OpenUnum is an Ubuntu-first autonomous assistant framework focused on high tool 
 - Session-aware pending handling in UI to prevent cross-session reply bleed when switching chats
 - Local session history persistence in SQLite until user clicks `New Chat`
 - **Council Validation Framework** — 6 domain experts, 35 dimensions assessed (Amber maturity: 60%)
+- **Phase 0 Runtime Foundations** — Canonical runtime-state contract + config parity diagnostics (`/api/runtime/state-contract`, `/api/runtime/config-parity`)
 
 ## Fast Start
 
@@ -45,6 +46,11 @@ pnpm e2e
 5. Optional safe UI/API smoke gate (no OAuth popups):
 ```bash
 pnpm smoke:ui:noauth
+```
+
+6. Phase 0 foundation readiness check:
+```bash
+pnpm phase0:check
 ```
 
 ## New Session Onboarding (for another agent)

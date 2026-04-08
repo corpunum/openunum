@@ -7,7 +7,7 @@
  * Tests: GET /api/audit/stats, POST /api/audit/log, response validation
  */
 
-const API_BASE = process.env.OPENUNUM_API_URL || 'http://localhost:3000';
+const API_BASE = process.env.OPENUNUM_API_URL || 'http://127.0.0.1:18880';
 
 async function smokeTest() {
   console.log('🔍 Audit API Smoke Test');
@@ -22,9 +22,9 @@ async function smokeTest() {
     const statsResponse = await fetch(`${API_BASE}/api/audit/stats`);
     const stats = await statsResponse.json();
     
-    if (statsResponse.ok && 'totalLogs' in stats) {
+    if (statsResponse.ok && ('totalLogs' in stats || 'totalEntries' in stats)) {
       console.log('   ✅ Stats endpoint working');
-      console.log(`   📊 Total logs: ${stats.totalLogs || 0}`);
+      console.log(`   📊 Total logs: ${stats.totalLogs || stats.totalEntries || 0}`);
       passed++;
     } else {
       console.log('   ❌ Stats response invalid');

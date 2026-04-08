@@ -111,6 +111,7 @@ After every change, update:
 - **Smoke tests** for basic functionality
 - **E2E tests** for advanced scenarios
 - **Council validation reports** for architectural review
+- **Runtime contract/parity checks** for deterministic operational readiness (`pnpm phase0:check`)
 
 **Phase 1-3 Implemented Systems (Document These):**
 - **Verifier** (`src/core/verifier.mjs`) — Independent state validation
@@ -119,6 +120,11 @@ After every change, update:
 - **Hippocampal Replay** (`src/core/memory-consolidator.mjs`) — Scheduled consolidation
 - **ODD Enforcement** (`src/config.mjs`) — Execution tier boundaries
 - **Replay System** (`src/core/hippocampal-replay.mjs`) — Pattern extraction from successes/failures
+
+**Phase 0 Foundations (Document These):**
+- **Runtime State Contract** (`src/core/runtime-state-contract.mjs`) — Canonical runtime packet + deterministic fingerprint
+- **Config Parity Check** (`src/core/config-parity-check.mjs`) — Provider matrix + 4B compact-profile readiness checks
+- **Runtime Diagnostics APIs** (`/api/runtime/state-contract`, `/api/runtime/config-parity`) — Read-only machine-checkable health surfaces
 
 **Agent Guidance:**
 - Document new features immediately after implementation

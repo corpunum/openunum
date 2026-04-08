@@ -4,6 +4,29 @@ All notable changes to OpenUnum are documented in this file.
 
 ---
 
+## [2.2.2] - 2026-04-08
+
+### Added
+- **Phase 0 Runtime Contract Module** — Canonical runtime-state packet creation, validation, and deterministic fingerprinting (`src/core/runtime-state-contract.mjs`)
+- **Config Parity Analyzer** — Provider matrix checks + compact-profile 4B readiness checks (`src/core/config-parity-check.mjs`)
+- **Phase 0 Check Script** — CLI readiness gate for runtime contract + config parity (`scripts/phase0-foundation-check.mjs`, `pnpm phase0:check`)
+- **Runtime Diagnostics APIs** — Read-only endpoints for operators/UI:
+  - `GET /api/runtime/state-contract`
+  - `GET /api/runtime/config-parity`
+- **E2E Coverage** — Runtime contract/parity endpoint validation (`tests/phase38.runtime-contract-parity.e2e.mjs`)
+
+### Fixed
+- **Smoke Provider Matrix Gate** — Updated smoke check to accept current `openai` provider mapping (with `generic` compatibility fallback) instead of requiring legacy-only `generic` key (`scripts/smoke-check.mjs`)
+- **Verifier E2E Drift** — Replaced stale verifier integration test that targeted non-existent endpoints with server-backed tests for implemented verifier routes (`tests/e2e/verifier.e2e.mjs`)
+
+### Documentation
+- Updated README, API reference, testing guide, onboarding, and brain principles to include Phase 0 runtime-contract/parity surfaces and commands
+- Added consolidated harvested-plan document from comparative repo review:
+  - `docs/REPO_HARVEST_CONSOLIDATED_PLAN_2026-04-08.md`
+  - `docs/PHASE0_EXECUTION_PLAN.md` (D1 marked complete)
+
+---
+
 ## [2.2.1] - 2026-04-07
 
 ### Added

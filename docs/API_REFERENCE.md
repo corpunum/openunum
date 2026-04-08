@@ -2,7 +2,7 @@
 
 Base URL: `http://127.0.0.1:18880`
 
-**Last Updated:** 2026-04-07 (Phase 1-3 endpoints added)
+**Last Updated:** 2026-04-08 (Phase 0 runtime contract/parity endpoints added)
 
 ## Health
 
@@ -45,7 +45,6 @@ Returns:
 
 - `GET /api/verifier/stats` — Verifier statistics
 - `POST /api/verifier/check` — Validate state changes independently
-- `GET /api/verifier/status` — Verifier health status
 
 Request:
 ```json
@@ -792,6 +791,28 @@ or
 ```json
 {"ok":true,"pending":false,"sessionId":"abc"}
 ```
+
+## Runtime Diagnostics
+
+- `GET /api/runtime/overview`
+- `GET /api/runtime/inventory?limit=300`
+- `GET /api/runtime/state-contract`
+- `GET /api/runtime/config-parity`
+
+`GET /api/runtime/state-contract` returns:
+- `contractVersion`
+- `validation.ok`
+- `validation.errors[]`
+- `packet.fingerprint`
+- `packet.state` (canonical runtime state)
+
+`GET /api/runtime/config-parity` returns:
+- `contractVersion`
+- `ok`
+- `severity`
+- `summary` (active/fallback provider + issue counts)
+- `providerMatrix`
+- `issues[]`
 
 ## Direct Tool Run
 
