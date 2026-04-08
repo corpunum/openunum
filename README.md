@@ -91,8 +91,11 @@ pnpm test:smoke
 pnpm test:smoke:live
 pnpm smoke:ui:noauth
 node src/cli.mjs health
+node src/cli.mjs status
 node src/cli.mjs chat --message "hello"
 node src/cli.mjs model switch --provider ollama-cloud --model ollama-cloud/minimax-m2.7:cloud
+node src/cli.mjs providers list
+node src/cli.mjs auth status
 ```
 
 ## Deployment

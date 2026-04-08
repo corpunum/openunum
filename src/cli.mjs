@@ -6,6 +6,7 @@ import { CDPBrowser } from './browser/cdp.mjs';
 import { TelegramChannel } from './channels/telegram.mjs';
 import { loadBuiltinCommands } from './commands/loader.mjs';
 import { getRegistry } from './commands/registry.mjs';
+import { PROVIDER_ORDER, normalizeProviderId } from './models/catalog.mjs';
 
 const args = process.argv.slice(2);
 const cmd = args[0] || 'help';
@@ -64,11 +65,57 @@ async function main() {
   }
 
   if (cmd === 'model' && args[1] === 'switch') {
-    const provider = getArg('--provider', config.model.provider);
+    const provider = normalizeProviderId(getArg('--provider', config.model.provider));
     const model = getArg('--model', config.model.model);
     const out = agent.switchModel(provider, model);
     saveConfig(config);
     console.log(JSON.stringify(out));
+    return;
+  }
+
+  if (cmd === 'status') {
+    const current = agent.getCurrentModel();
+    console.log(JSON.stringify({
+      ok: true,
+      runtime: {
+        autonomyMode: config.runtime?.autonomyMode || 'autonomy-first',
+        workspaceRoot: config.runtime?.workspaceRoot || process.cwd()
+      },
+      model: current,
+      providerOrder: PROVIDER_ORDER
+    }, null, 2));
+    return;
+  }
+
+  if (cmd === 'providers' && args[1] === 'list') {
+    const selectedProvider = normalizeProviderId(config.model?.provider);
+    const rows = PROVIDER_ORDER.map((provider) => {
+      const configured = String(config.model?.providerModels?.[provider] || '').trim();
+      return {
+        provider,
+        selected: provider === selectedProvider,
+        model: configured || null
+      };
+    });
+    console.log(JSON.stringify({ ok: true, providers: rows }, null, 2));
+    return;
+  }
+
+  if (cmd === 'auth' && args[1] === 'status') {
+    const modelCfg = config.model || {};
+    const channels = config.channels || {};
+    console.log(JSON.stringify({
+      ok: true,
+      providerAuth: {
+        openrouter: Boolean(modelCfg.openrouterApiKey),
+        nvidia: Boolean(modelCfg.nvidiaApiKey),
+        xiaomimimo: Boolean(modelCfg.xiaomimimoApiKey),
+        openai: Boolean(modelCfg.openaiApiKey)
+      },
+      channelAuth: {
+        telegram: Boolean(channels.telegram?.botToken)
+      }
+    }, null, 2));
     return;
   }
 
@@ -139,7 +186,7 @@ async function main() {
     return;
   }
 
-  console.log(`openunum commands:\n  health\n  serve\n  chat --message <text> [--session <id>]\n  context status --session <id>\n  context compact --session <id> [--dry-run]\n  context artifacts --session <id> [--limit <n>]\n  model switch --provider <p> --model <m>\n  ollama use --model <id>  # compatibility alias for ollama-cloud\n  browser status\n  telegram poll-once\n  telegram run\n  command <slash-command>`);
+  console.log(`openunum commands:\n  health\n  status\n  serve\n  chat --message <text> [--session <id>]\n  context status --session <id>\n  context compact --session <id> [--dry-run]\n  context artifacts --session <id> [--limit <n>]\n  model switch --provider <p> --model <m>\n  providers list\n  auth status\n  ollama use --model <id>  # compatibility alias for ollama-cloud\n  browser status\n  telegram poll-once\n  telegram run\n  command <slash-command>`);
 }
 
 main().catch((error) => {
