@@ -4,6 +4,23 @@ All notable changes to OpenUnum are documented in this file.
 
 ---
 
+## [2.3.7] - 2026-04-08
+
+### Fixed
+- Hardened browser mutating control-plane protection:
+  - browser-origin mutating requests are now restricted to same loopback origin+port as the server.
+  - browser-origin mutating requests now require `X-OpenUnum-Request: webui`.
+  - cross-origin localhost browser mutation attempts now return `403 origin_not_allowed`.
+
+### Added
+- New regression phase test: `phase40.origin-guard.e2e.mjs` covering preflight, origin blocking, marker enforcement, and non-browser compatibility.
+
+### Changed
+- WebUI request helpers now send `X-OpenUnum-Request: webui` on non-GET JSON requests.
+- CI core E2E contract set now includes `pnpm phase40:e2e`.
+
+---
+
 ## [2.3.6] - 2026-04-08
 
 ### Changed

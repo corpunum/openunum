@@ -12,7 +12,7 @@ Purpose: curated file map for autonomous code/docs self-reading and update workf
 
 ## Server Surface
 
-- ✅ `src/server.mjs` (1135 lines)
+- ✅ `src/server.mjs` (1164 lines)
 - ✅ `src/server/routes/health.mjs` (73 lines)
 - ✅ `src/server/services/auth_service.mjs` (402 lines)
 
@@ -20,11 +20,11 @@ Purpose: curated file map for autonomous code/docs self-reading and update workf
 
 - ✅ `src/secrets/store.mjs` (813 lines)
 - ✅ `docs/CONFIG_SCHEMA.md` (123 lines)
-- ✅ `docs/API_REFERENCE.md` (1037 lines)
+- ✅ `docs/API_REFERENCE.md` (1040 lines)
 
 ## Testing and Gates
 
-- ✅ `docs/TESTING.md` (291 lines)
+- ✅ `docs/TESTING.md` (293 lines)
 - ✅ `scripts/docs-completion-gate.mjs` (50 lines)
 - ✅ `scripts/smoke-isolated.mjs` (91 lines)
 - ✅ `scripts/session-imitation-regression.mjs` (84 lines)
@@ -35,5 +35,5 @@ Purpose: curated file map for autonomous code/docs self-reading and update workf
 - ✅ `BRAIN.MD` (192 lines)
 - ✅ `docs/AGENT_ONBOARDING.md` (410 lines)
 - ✅ `docs/ROADMAP.md` (165 lines)
-- ✅ `CHANGELOG.md` (411 lines)
+- ✅ `CHANGELOG.md` (438 lines)
 

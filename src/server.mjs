@@ -580,25 +580,43 @@ async function runSelfHeal(dryRun = false) {
 }
 
 const MUTATING_HTTP_METHODS = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
+const WEBUI_MUTATION_HEADER = 'x-openunum-request';
+const WEBUI_MUTATION_HEADER_VALUE = 'webui';
 
-function isAllowedLocalOrigin(origin) {
+function parseLoopbackOrigin(origin) {
   const raw = String(origin || '').trim();
-  if (!raw) return false;
+  if (!raw) return null;
   try {
     const parsed = new URL(raw);
-    if (!['http:', 'https:'].includes(parsed.protocol)) return false;
+    if (!['http:', 'https:'].includes(parsed.protocol)) return null;
     const host = parsed.hostname.toLowerCase();
-    return host === '127.0.0.1' || host === 'localhost' || host === '::1';
+    if (host !== '127.0.0.1' && host !== 'localhost' && host !== '::1') return null;
+    return parsed;
   } catch {
-    return false;
+    return null;
   }
+}
+
+function isSameLoopbackOriginAsServer(origin, reqHostHeader, serverPort) {
+  const parsed = parseLoopbackOrigin(origin);
+  if (!parsed) return false;
+  const originPort = Number(parsed.port || (parsed.protocol === 'https:' ? 443 : 80));
+  if (originPort !== Number(serverPort)) return false;
+  const reqHost = String(reqHostHeader || '').trim().toLowerCase();
+  const reqHostPort = reqHost.includes(':') ? Number(reqHost.split(':').pop()) : Number(serverPort);
+  if (!Number.isFinite(reqHostPort) || reqHostPort !== Number(serverPort)) return false;
+  return true;
 }
 
 const server = http.createServer(async (req, res) => {
   try {
     const url = new URL(req.url || '/', `http://${req.headers.host || '127.0.0.1'}`);
     const requestOrigin = String(req.headers.origin || '').trim();
-    const corsOrigin = isAllowedLocalOrigin(requestOrigin) ? requestOrigin : null;
+    const corsOrigin = isSameLoopbackOriginAsServer(
+      requestOrigin,
+      req.headers.host,
+      config.server.port
+    ) ? requestOrigin : null;
     const parseRequestBody = (request) => parseBody(request, {
       maxBytes: Number(config.runtime?.maxRequestBodyBytes || 1024 * 1024)
     });
@@ -614,6 +632,17 @@ const server = http.createServer(async (req, res) => {
 
     if (MUTATING_HTTP_METHODS.has(String(req.method || '').toUpperCase()) && requestOrigin && !corsOrigin) {
       return sendApiError(res, 403, 'origin_not_allowed', 'Browser origin is not allowed for mutating local control-plane requests');
+    }
+    if (MUTATING_HTTP_METHODS.has(String(req.method || '').toUpperCase()) && requestOrigin) {
+      const marker = String(req.headers[WEBUI_MUTATION_HEADER] || '').trim().toLowerCase();
+      if (marker !== WEBUI_MUTATION_HEADER_VALUE) {
+        return sendApiError(
+          res,
+          403,
+          'request_marker_required',
+          'Browser mutating requests require X-OpenUnum-Request: webui'
+        );
+      }
     }
 
     if (await handleHealthRoute({

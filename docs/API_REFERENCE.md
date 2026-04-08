@@ -871,6 +871,9 @@ Validation notes:
 - `POST /api/sessions` requires `sessionId`.
 - `POST /api/sessions/import` requires `sessionId`.
 - `POST /api/sessions/clone` requires both `sourceSessionId` and `targetSessionId`.
+- Browser-origin mutating requests are accepted only from the same loopback origin/port as the running OpenUnum server.
+- Browser-origin mutating requests must include header `X-OpenUnum-Request: webui`, otherwise the server returns `403 request_marker_required`.
+- Cross-origin browser mutation attempts return `403 origin_not_allowed`.
 
 `DELETE /api/sessions/:sessionId` deletes one session and all session-scoped history rows.
 - optional query param: `operationId=<id>`

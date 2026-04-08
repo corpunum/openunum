@@ -1544,7 +1544,7 @@
       try {
         const res = await fetchWithRetry(path, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 'Content-Type': 'application/json', 'X-OpenUnum-Request': 'webui' },
           body: JSON.stringify(body || {}),
           signal: controller.signal
         }, 2, 500);
@@ -1575,7 +1575,7 @@
         const m = String(method || 'GET').toUpperCase();
         const init = { method: m, signal: controller.signal };
         if (m !== 'GET') {
-          init.headers = { 'Content-Type': 'application/json' };
+          init.headers = { 'Content-Type': 'application/json', 'X-OpenUnum-Request': 'webui' };
           init.body = JSON.stringify(body || {});
         }
         const res = await fetchWithRetry(path, init, 2, 500);

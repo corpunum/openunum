@@ -18,6 +18,7 @@ Comprehensive testing documentation for the OpenUnum project.
 | **Runtime Surface Contract Gate** | `npm run gate:runtime-surface-contract` | Fails when new server API literals are missing from `docs/API_REFERENCE.md` |
 | **Route Wiring Gate** | `npm run gate:route-wiring` | Fails when any `src/server/routes/*.mjs` module is not both imported and invoked by `src/server.mjs` |
 | **WebUI Browser E2E** | `npm run phase39:e2e` | Real browser interaction checks for Provider Vault modal/actions and Missions create/load/stop wiring |
+| **Origin Guard E2E** | `npm run phase40:e2e` | Verifies same-origin loopback + request-marker protection on browser mutating control-plane requests |
 | **All** | `npm run test:all` | Run complete test battery |
 
 ## Quick Start
@@ -137,6 +138,7 @@ npm run test:all
 npm run test:unit
 npm run test:e2e
 npm run phase39:e2e
+npm run phase40:e2e
 npm run test:smoke
 npm run test:smoke:live
 npm run test:imitation
