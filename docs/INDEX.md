@@ -37,6 +37,7 @@ This folder is optimized for fast machine onboarding (fresh agent session, no pr
 30. [PHASE0_EXECUTION_PLAN.md](PHASE0_EXECUTION_PLAN.md) — Runtime contract/parity execution status
 31. [REPO_HARVEST_CONSOLIDATED_PLAN_2026-04-08.md](REPO_HARVEST_CONSOLIDATED_PLAN_2026-04-08.md) — Consolidated external pattern harvest mapped to OpenUnum
 32. [SESSION_IMITATION_REVIEW_2026-04-08.md](SESSION_IMITATION_REVIEW_2026-04-08.md) — Chat-session pattern review + imitation test outcomes
+33. [SELF_READING_INDEX.md](SELF_READING_INDEX.md) — Curated machine-readable self-reading file map
 
 ## Legacy Planning Docs
 
