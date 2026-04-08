@@ -4,6 +4,29 @@ All notable changes to OpenUnum are documented in this file.
 
 ---
 
+## [2.3.23] - 2026-04-08
+
+### Fixed
+- Provider Vault service hide/add row workflow now works reliably:
+  - normalized `/api/capabilities.services` secret-key names (for example `githubtoken`) to canonical service IDs (for example `github`) via `src/ui/modules/capabilities.js`.
+  - hidden-row normalization/selectors now use unioned known IDs from capabilities plus live auth catalog rows, preventing silent drops.
+
+### Added
+- Unit tests for capability service-ID normalization in `tests/unit/ui-capabilities.test.mjs`.
+
+---
+
+## [2.3.22] - 2026-04-08
+
+### Added
+- New browser regression phase `phase45.webui-vault-add-rows.e2e.mjs` to verify Provider Vault hide/add row controls for both providers and services.
+
+### Changed
+- CI Playwright gate now includes `phase45:e2e`.
+- `pnpm e2e` chain now includes `phase45:e2e`.
+
+---
+
 ## [2.3.21] - 2026-04-08
 
 ### Changed

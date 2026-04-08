@@ -2,6 +2,7 @@ import { q, qa, escapeHtml, sleep } from './modules/dom.js';
 import { jget, jpost, jrequest } from './modules/http.js';
 import { setStatus } from './modules/feedback.js';
 import { showView as showViewWithMeta } from './modules/navigation.js';
+import { normalizeServiceCapabilityIds } from './modules/capabilities.js';
 import {
   sortSessionsByRecency,
   renderSessionListView
@@ -621,7 +622,10 @@ async function refreshCapabilities() {
     MODEL_PROVIDER_IDS = [...new Set(providers.map((p) => String(p || '').trim()).filter(Boolean))];
   }
   if (services.length) {
-    SERVICE_PROVIDER_IDS = [...new Set(services.map((s) => String(s || '').trim()).filter(Boolean))];
+    SERVICE_PROVIDER_IDS = normalizeServiceCapabilityIds(
+      services,
+      Object.keys(SERVICE_SECRET_FIELD)
+    );
   }
   renderProviderSelectors();
   normalizeHiddenRows();
@@ -654,9 +658,25 @@ function formatPct(value) {
   return `${(num * 100).toFixed(1)}%`;
 }
 
+function knownProviderRowIds() {
+  return [...new Set([
+    ...MODEL_PROVIDER_IDS.map((id) => String(id || '').trim()).filter(Boolean),
+    ...((authCatalog?.providers || []).map((row) => String(row?.provider || '').trim()).filter(Boolean))
+  ])];
+}
+
+function knownServiceRowIds() {
+  return [...new Set([
+    ...SERVICE_PROVIDER_IDS.map((id) => String(id || '').trim()).filter(Boolean),
+    ...((authCatalog?.auth_methods || []).map((row) => String(row?.id || '').trim()).filter(Boolean))
+  ])];
+}
+
 function normalizeHiddenRows() {
-  hiddenProviderRows = hiddenProviderRows.filter((id, index, arr) => MODEL_PROVIDER_IDS.includes(id) && arr.indexOf(id) === index);
-  hiddenServiceRows = hiddenServiceRows.filter((id, index, arr) => SERVICE_PROVIDER_IDS.includes(id) && arr.indexOf(id) === index);
+  const providers = new Set(knownProviderRowIds());
+  const services = new Set(knownServiceRowIds());
+  hiddenProviderRows = hiddenProviderRows.filter((id, index, arr) => providers.has(id) && arr.indexOf(id) === index);
+  hiddenServiceRows = hiddenServiceRows.filter((id, index, arr) => services.has(id) && arr.indexOf(id) === index);
   localStorage.setItem('openunum_hidden_provider_rows', JSON.stringify(hiddenProviderRows));
   localStorage.setItem('openunum_hidden_service_rows', JSON.stringify(hiddenServiceRows));
 }
@@ -1336,14 +1356,16 @@ async function testVaultModal() {
 function refreshAddRowSelectors() {
   const providerSelect = q('providerAddSelect');
   const serviceSelect = q('serviceAddSelect');
+  const availableProviders = knownProviderRowIds();
+  const availableServices = knownServiceRowIds();
   if (providerSelect) {
     providerSelect.innerHTML = '<option value="">Add model provider...</option>' +
-      MODEL_PROVIDER_IDS.filter((id) => hiddenProviderRows.includes(id))
+      availableProviders.filter((id) => hiddenProviderRows.includes(id))
         .map((id) => `<option value="${id}">${id}</option>`).join('');
   }
   if (serviceSelect) {
     serviceSelect.innerHTML = '<option value="">Add service...</option>' +
-      SERVICE_PROVIDER_IDS.filter((id) => hiddenServiceRows.includes(id))
+      availableServices.filter((id) => hiddenServiceRows.includes(id))
         .map((id) => `<option value="${id}">${id}</option>`).join('');
   }
 }
