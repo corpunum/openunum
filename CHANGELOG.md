@@ -4,6 +4,20 @@ All notable changes to OpenUnum are documented in this file.
 
 ---
 
+## [2.3.15] - 2026-04-08
+
+### Added
+- New browser regression phase: `phase44.webui-vault-mission-details.e2e.mjs`.
+  - validates provider-vault modal `Test` and `Save` actions invoke backend wiring.
+  - validates mission timeline filter/search rendering for log/tool detail surfaces.
+
+### Changed
+- CI Playwright WebUI gate now runs `phase39`, `phase42`, and `phase44`.
+- `pnpm e2e` chain now includes `pnpm phase44:e2e`.
+- Testing/onboarding/state-matrix docs updated with phase44 coverage.
+
+---
+
 ## [2.3.14] - 2026-04-08
 
 ### Changed

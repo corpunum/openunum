@@ -23,6 +23,7 @@ Comprehensive testing documentation for the OpenUnum project.
 | **CLI Operator E2E** | `npm run phase41:e2e` | Verifies CLI runtime/providers/auth/missions/sessions API-bridge commands against a live test server |
 | **WebUI Routing/Auth E2E** | `npm run phase42:e2e` | Browser interaction regression for model-routing save flow and service-vault modal/save wiring |
 | **UI Static Assets E2E** | `npm run phase43:e2e` | Verifies modular UI asset serving (`/ui/styles.css`, `/ui/app.js`) and 404 behavior for missing assets |
+| **WebUI Vault/Mission Details E2E** | `npm run phase44:e2e` | Browser regression for provider-vault modal test/save actions and mission timeline filter/search rendering |
 | **All** | `npm run test:all` | Run complete test battery |
 
 ## Quick Start
@@ -146,6 +147,7 @@ npm run phase40:e2e
 npm run phase41:e2e
 npm run phase42:e2e
 npm run phase43:e2e
+npm run phase44:e2e
 npm run test:smoke
 npm run test:smoke:live
 npm run test:imitation
