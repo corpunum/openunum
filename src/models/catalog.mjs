@@ -337,28 +337,30 @@ export async function buildModelCatalog(modelConfig, memory = null) {
   const providers = [];
   const disabledProviders = modelConfig.routing?.disabledProviders || [];
   for (const provider of PROVIDER_ORDER) {
-    if (disabledProviders.includes(provider)) continue;
-    let status = 'healthy';
+    const isDisabled = disabledProviders.includes(provider);
+    let status = isDisabled ? 'disabled' : 'healthy';
     let degradedReason = null;
     let discovered = [];
-    try {
-      const connection = getProviderConnection(modelConfig, provider);
-      if (provider === 'ollama-local') {
-        discovered = (await fetchOllamaModels(connection.baseUrl, 'ollama-local'))
-          .filter((row) => isAllowedLocalOllamaModel(row.model_id));
-      } else if (provider === 'ollama-cloud') {
-        discovered = (await fetchOllamaModels(connection.baseUrl, 'ollama-cloud'))
-          .filter((row) => isCloudModelId(row.model_id));
+    if (!isDisabled) {
+      try {
+        const connection = getProviderConnection(modelConfig, provider);
+        if (provider === 'ollama-local') {
+          discovered = (await fetchOllamaModels(connection.baseUrl, 'ollama-local'))
+            .filter((row) => isAllowedLocalOllamaModel(row.model_id));
+        } else if (provider === 'ollama-cloud') {
+          discovered = (await fetchOllamaModels(connection.baseUrl, 'ollama-cloud'))
+            .filter((row) => isCloudModelId(row.model_id));
+        }
+        else if (provider === 'nvidia') discovered = await fetchNvidiaModels(connection.baseUrl, connection.apiKey);
+        else if (provider === 'openrouter') discovered = await fetchOpenRouterModels(connection.baseUrl, connection.apiKey);
+        else if (provider === 'xiaomimimo') discovered = await fetchOpenAIModels(connection.baseUrl, connection.apiKey);
+        else if (connection.apiKey) discovered = await fetchOpenAIModels(connection.baseUrl, connection.apiKey);
+        else if (connection.oauth?.active) discovered = [];
+        else discovered = await fetchOpenAIModels(connection.baseUrl, connection.apiKey);
+      } catch (error) {
+        status = 'degraded';
+        degradedReason = String(error.message || error);
       }
-      else if (provider === 'nvidia') discovered = await fetchNvidiaModels(connection.baseUrl, connection.apiKey);
-      else if (provider === 'openrouter') discovered = await fetchOpenRouterModels(connection.baseUrl, connection.apiKey);
-      else if (provider === 'xiaomimimo') discovered = await fetchOpenAIModels(connection.baseUrl, connection.apiKey);
-      else if (connection.apiKey) discovered = await fetchOpenAIModels(connection.baseUrl, connection.apiKey);
-      else if (connection.oauth?.active) discovered = [];
-      else discovered = await fetchOpenAIModels(connection.baseUrl, connection.apiKey);
-    } catch (error) {
-      status = 'degraded';
-      degradedReason = String(error.message || error);
     }
     providers.push({
       provider,

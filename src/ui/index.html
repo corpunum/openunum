@@ -2311,7 +2311,7 @@ ${verificationSummary || preview}`)}</pre>`;
             <td>
               <div class="summary-stack">
                 <div class="summary-line"><strong>${escapeHtml(provider.display_name || provider.provider)}</strong>${disabledBadge}</div>
-                <div class="summary-sub">${escapeHtml(provider.provider)}</div>
+                <div class="summary-sub provider-open" data-provider="${provider.provider}" style="cursor:pointer;text-decoration:underline;">${escapeHtml(provider.provider)}</div>
               </div>
             </td>
             <td>${renderStatusBadge(provider.status || 'unknown')}</td>
@@ -2394,6 +2394,9 @@ ${verificationSummary || preview}`)}</pre>`;
         };
       });
       qa('.provider-modal').forEach((btn) => {
+        btn.onclick = () => openVaultModal({ kind: 'provider', id: btn.dataset.provider });
+      });
+      qa('.provider-open').forEach((btn) => {
         btn.onclick = () => openVaultModal({ kind: 'provider', id: btn.dataset.provider });
       });
       qa('.provider-delete').forEach((btn) => {
@@ -3338,7 +3341,10 @@ ${verificationSummary || preview}`)}</pre>`;
 
     q('addProviderRow').onclick = () => {
       const id = q('providerAddSelect').value;
-      if (!id) return;
+      if (!id) {
+        q('providerStatus').textContent = 'no hidden/disabled provider rows to add';
+        return;
+      }
       hiddenProviderRows = hiddenProviderRows.filter((row) => row !== id);
       normalizeHiddenRows();
       refreshAddRowSelectors();
@@ -3348,7 +3354,10 @@ ${verificationSummary || preview}`)}</pre>`;
 
     q('addServiceRow').onclick = () => {
       const id = q('serviceAddSelect').value;
-      if (!id) return;
+      if (!id) {
+        q('providerStatus').textContent = 'no hidden service rows to add';
+        return;
+      }
       hiddenServiceRows = hiddenServiceRows.filter((row) => row !== id);
       normalizeHiddenRows();
       refreshAddRowSelectors();
