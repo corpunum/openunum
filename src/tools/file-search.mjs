@@ -18,7 +18,7 @@ const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB limit
  * @param {string} params.pattern - Glob pattern (e.g., "*.mjs")
  * @param {string} [params.root] - Root directory to search from (defaults to workspace)
  * @param {boolean} [params.recursive=true] - Search recursively
- * @returns {Promise<{files: string[], count: number, truncated: boolean}>}
+ * @returns {Promise<{ok: boolean, files: string[], count: number, truncated: boolean}>}
  */
 export async function file_search({ pattern, root, recursive = true }) {
   const workspaceRoot = root || process.env.OPENUNUM_WORKSPACE || process.cwd();
@@ -36,6 +36,7 @@ export async function file_search({ pattern, root, recursive = true }) {
     const resultFiles = truncated ? files.slice(0, MAX_RESULTS) : files;
     
     return {
+      ok: true,
       files: resultFiles,
       count: files.length,
       truncated,
@@ -114,7 +115,7 @@ function matchesPattern(filename, pattern) {
  * @param {string} [params.root] - Root directory
  * @param {boolean} [params.caseSensitive=false] - Case-sensitive search
  * @param {number} [params.contextLines=2] - Lines of context around matches
- * @returns {Promise<{matches: Array<{file, line, content, lineNum}>, totalMatches: number}>}
+ * @returns {Promise<{ok: boolean, matches: Array<{file, line, content, lineNum}>, totalMatches: number}>}
  */
 export async function file_grep({ search, pattern, root, caseSensitive = false, contextLines = 2 }) {
   const workspaceRoot = root || process.env.OPENUNUM_WORKSPACE || process.cwd();
@@ -129,6 +130,7 @@ export async function file_grep({ search, pattern, root, caseSensitive = false, 
     await grepDirectory(searchDir, pattern, regex, matches, contextLines, 0);
     
     return {
+      ok: true,
       matches: matches.slice(0, MAX_RESULTS),
       totalMatches: matches.length,
       truncated: matches.length > MAX_RESULTS,
@@ -209,7 +211,7 @@ async function grepDirectory(dir, filePattern, regex, matches, contextLines, dep
  * Get file info (metadata)
  * @param {Object} params
  * @param {string} params.path - File path
- * @returns {Promise<{path, size, created, modified, accessed, isDirectory}>}
+ * @returns {Promise<{ok: boolean, path, size, created, modified, accessed, isDirectory}>}
  */
 export async function file_info({ path: filePath }) {
   const resolvedPath = path.resolve(filePath);
@@ -220,6 +222,7 @@ export async function file_info({ path: filePath }) {
     const stat = await fs.promises.stat(resolvedPath);
     
     return {
+      ok: true,
       path: resolvedPath,
       size: stat.size,
       created: stat.birthtime.toISOString(),

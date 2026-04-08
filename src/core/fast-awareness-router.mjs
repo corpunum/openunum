@@ -43,7 +43,10 @@ const DEFAULT_CONFIG = {
   learningEnabled: true,
   learningDataPath: null, // Will use getHomeDir()/router-learning.json
   telemetryEnabled: true,
-  classificationRules: {
+    classificationRules: {
+    greetingKeywords: [
+      'hi', 'hello', 'hey', 'good morning', 'good afternoon', 'good evening', 'greetings', 'yo'
+    ],
     taskMetaKeywords: [
       'current task', 'what am i doing', 'my task', 'step am i',
       'what is my', 'where are we', 'progress', 'status',
@@ -76,7 +79,7 @@ const DEFAULT_CONFIG = {
 /**
  * Classification result shape
  * @typedef {Object} ClassificationResult
- * @property {string} category - 'task-meta' | 'continuation' | 'external' | 'deep-inspect' | 'knowledge' | 'unknown'
+ * @property {string} category - 'greeting' | 'task-meta' | 'continuation' | 'external' | 'deep-inspect' | 'knowledge' | 'unknown'
  * @property {number} confidence - 0.0 to 1.0
  * @property {boolean} shouldShortCircuit - Whether to skip tool execution
  * @property {string} strategy - 'skip-retrieval' | 'hot-only' | 'indexed-only' | 'full-search' | 'deep-inspect'
@@ -188,11 +191,22 @@ export class FastAwarenessRouter {
   _scoreKeywords(normalized) {
     const rules = this.config.classificationRules;
     const scores = {
+      greeting: 0,
       taskMeta: 0,
       continuation: 0,
       external: 0,
       deepInspect: 0
     };
+
+    if (this._isSimpleGreeting(normalized)) {
+      scores.greeting = 0.98;
+    } else {
+      for (const kw of rules.greetingKeywords) {
+        if (normalized === kw || normalized.startsWith(`${kw} `)) {
+          scores.greeting = Math.max(scores.greeting, 0.92);
+        }
+      }
+    }
 
     // Check each category - presence-based scoring with boost
     for (const kw of rules.taskMetaKeywords) {
@@ -237,7 +251,32 @@ export class FastAwarenessRouter {
    * @private
    */
   _determineStrategy({ normalized, isAboutCurrentTask, hasWorkingMemory, keywordScores }) {
-    const { taskMeta, continuation, external, deepInspect } = keywordScores;
+    const { greeting, taskMeta, continuation, external, deepInspect } = keywordScores;
+
+    if (this._isSimpleGreeting(normalized)) {
+      return {
+        category: 'greeting',
+        confidence: Math.max(greeting, 0.95),
+        shouldShortCircuit: true,
+        strategy: 'skip-retrieval',
+        reason: 'simple_greeting_match',
+        matchedKeywords: { greeting: Math.max(greeting, 0.95) },
+        recommendedTools: this.config.strategyTools['skip-retrieval'] || []
+      };
+    }
+
+    // Strategy 0: greeting small-talk fast path (direct response, no tools)
+    if (greeting >= this.config.minConfidenceForSkip) {
+      return {
+        category: 'greeting',
+        confidence: greeting,
+        shouldShortCircuit: true,
+        strategy: 'skip-retrieval',
+        reason: `greeting_keywords: ${greeting.toFixed(2)}`,
+        matchedKeywords: { greeting },
+        recommendedTools: this.config.strategyTools['skip-retrieval'] || []
+      };
+    }
 
     // Strategy 1: skip-retrieval (task-meta questions)
     // High confidence that this is about current task, answer from working memory
@@ -325,6 +364,7 @@ export class FastAwarenessRouter {
     // Apply category-specific adjustments based on historical success
     for (const [category, factor] of Object.entries(adjustmentFactors)) {
       const scoreKey = category === 'task-meta' ? 'taskMeta' :
+                       category === 'greeting' ? null :
                        category === 'continuation' ? 'continuation' :
                        category === 'external' ? 'external' :
                        category === 'deep-inspect' ? 'deepInspect' : null;
@@ -389,7 +429,7 @@ export class FastAwarenessRouter {
   _recalculateAdjustmentFactors() {
     const factors = {};
     
-    for (const category of ['task-meta', 'continuation', 'external', 'deep-inspect', 'knowledge']) {
+    for (const category of ['greeting', 'task-meta', 'continuation', 'external', 'deep-inspect', 'knowledge']) {
       const successes = this.learningData.successByCategory[category] || 0;
       const failures = this.learningData.failureByCategory[category] || 0;
       const total = successes + failures;
@@ -434,6 +474,24 @@ export class FastAwarenessRouter {
       hash = hash & hash;
     }
     return `class_${Math.abs(hash).toString(36)}`;
+  }
+
+  _isSimpleGreeting(normalized) {
+    const text = String(normalized || '').trim();
+    if (!text) return false;
+    if (text.length > 32) return false;
+    const greetingPatterns = [
+      /^hi$/,
+      /^hello$/,
+      /^hey$/,
+      /^yo$/,
+      /^greetings$/,
+      /^good (morning|afternoon|evening)$/,
+      /^hi [a-z]+$/,
+      /^hello [a-z]+$/,
+      /^hey [a-z]+$/
+    ];
+    return greetingPatterns.some((rx) => rx.test(text));
   }
 
   /**

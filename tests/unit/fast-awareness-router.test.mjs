@@ -50,6 +50,22 @@ describe('FastAwarenessRouter', () => {
   });
 
   describe('classify', () => {
+    describe('greeting fast-path', () => {
+      it('should classify "hello" as greeting with short-circuit', () => {
+        const result = router.classify('hello');
+        expect(result.category).toBe('greeting');
+        expect(result.strategy).toBe('skip-retrieval');
+        expect(result.shouldShortCircuit).toBe(true);
+        expect(result.confidence).toBeGreaterThanOrEqual(0.9);
+      });
+
+      it('should classify "good morning" as greeting', () => {
+        const result = router.classify('Good morning');
+        expect(result.category).toBe('greeting');
+        expect(result.shouldShortCircuit).toBe(true);
+      });
+    });
+
     describe('task-meta questions (skip-retrieval)', () => {
       it('should classify "what is my current task" as task-meta', () => {
         const result = router.classify('What is my current task?');

@@ -176,7 +176,7 @@ export class RouterDashboard {
 
   _formatSuccessRates(learning) {
     const lines = [];
-    for (const cat of ['task-meta', 'continuation', 'external', 'deep-inspect', 'knowledge']) {
+    for (const cat of ['greeting', 'task-meta', 'continuation', 'external', 'deep-inspect', 'knowledge']) {
       const success = learning.successByCategory[cat] || 0;
       const failure = learning.failureByCategory[cat] || 0;
       const total = success + failure;

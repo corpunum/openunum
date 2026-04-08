@@ -529,6 +529,22 @@ function isUiInspectionTool(run) {
   return cmd.includes('src/ui/index.html') && /grep|sed|cat|head|tail|find|ls/.test(cmd);
 }
 
+function toolRunFailed(result) {
+  if (!result || typeof result !== 'object') return true;
+  if (result.ok === false) return true;
+  if (typeof result.error === 'string' && result.error.trim()) return true;
+  return false;
+}
+
+function deterministicGreetingReply(message) {
+  const text = String(message || '').toLowerCase().replace(/[^\w\s]/g, ' ').replace(/\s+/g, ' ').trim();
+  if (/^good morning\b/.test(text)) return 'Good morning. How can I help?';
+  if (/^good afternoon\b/.test(text)) return 'Good afternoon. How can I help?';
+  if (/^good evening\b/.test(text)) return 'Good evening. How can I help?';
+  if (/^(hi|hello|hey|yo|greetings)\b/.test(text)) return 'Hello. How can I help?';
+  return '';
+}
+
 function touchedUiSourceFile(run) {
   const name = String(run?.name || '').trim();
   if (!['file_read', 'file_patch', 'file_write'].includes(name)) return false;
@@ -1354,24 +1370,27 @@ export class OpenUnumAgent {
         });
         
         // PHASE 2: Spawn repair side-quest after 2+ consecutive failures on same tool
-        if (!result?.ok && executedTools.filter((t) => t.name === tc.name && !t.result.ok).length >= 1) {
+        if (toolRunFailed(result) && executedTools.filter((t) => t.name === tc.name && toolRunFailed(t.result)).length >= 1) {
           try {
-            const priorFailures = executedTools.filter((t) => t.name === tc.name && !t.result.ok);
+            const priorFailures = executedTools.filter((t) => t.name === tc.name && toolRunFailed(t.result));
             const { questId } = await this.sideQuestManager.forkQuest(
               sessionId,
               'repair',
               `Tool ${tc.name} failed ${priorFailures.length + 1} times. Last error: ${result.error}. Diagnose root cause and propose a fix or workaround.`,
               { timeoutMs: 2 * 60 * 1000, toolsAllow: ['file_read', 'exec', 'shell'] }
             );
-            const questResult = await this.sideQuestManager.executeQuest(questId);
-            if (questResult.status === 'completed' && questResult.summary) {
-              await this.sideQuestManager.mergeQuest(questId);
-              messages.push({
-                role: 'system',
-                content: `**Repair Side-Quest Result:** ${questResult.summary}\n\nApply the recommended fix or pivot to an alternative approach.`
+            // Do not block the active user turn on repair investigation.
+            void this.sideQuestManager.executeQuest(questId)
+              .then(async (questResult) => {
+                if (questResult?.status === 'completed' && questResult.summary) {
+                  await this.sideQuestManager.mergeQuest(questId);
+                  logInfo('side_quest_repair_completed', { questId, tool: tc.name });
+                }
+              })
+              .catch((questError) => {
+                logError('side_quest_repair_async_failed', { error: String(questError?.message || questError), questId });
               });
-              logInfo('side_quest_repair_spawned', { questId, tool: tc.name, failures: priorFailures.length + 1 });
-            }
+            logInfo('side_quest_repair_spawned', { questId, tool: tc.name, failures: priorFailures.length + 1 });
           } catch (questError) {
             logError('side_quest_repair_failed', { error: String(questError.message || questError) });
           }
@@ -1408,7 +1427,7 @@ export class OpenUnumAgent {
       }
     }
     
-    if (!result?.ok && ['shell_blocked', 'owner_mode_restricted', 'tool_circuit_open', 'shell_disabled', 'unsafe_xdotool_command'].includes(result?.error)) {
+    if (toolRunFailed(result) && ['shell_blocked', 'owner_mode_restricted', 'tool_circuit_open', 'shell_disabled', 'unsafe_xdotool_command'].includes(result?.error)) {
           trace.permissionDenials.push({
             tool: tc.name,
             reason: result.error,
@@ -1954,6 +1973,41 @@ export class OpenUnumAgent {
     // FastAwarenessRouter: classify message and potentially short-circuit
     const fastAwarenessResult = fastAwarenessRouter.classify(message);
 
+    // Deterministic ultra-fast greeting path: skip provider call entirely.
+    if (fastAwarenessResult?.category === 'greeting') {
+      const quick = deterministicGreetingReply(message);
+      if (quick) {
+        finalText = quick;
+        trace = {
+          ...routeTelemetry,
+          roleMode: roleMode.mode,
+          roleModeReason: roleMode.reason,
+          fastPathUsed: true,
+          fastPathCategory: 'greeting',
+          fastPathDeterministic: true,
+          fastPathLatency: Date.now() - startTime,
+          iterations: [],
+          failures: [],
+          turnSummary: {
+            toolRuns: 0,
+            iterationCount: 0,
+            permissionDenials: 0,
+            routedTools: [],
+            answerShape: 'concise',
+            answerScore: 100
+          }
+        };
+        fastAwarenessRouter.writeTelemetry({
+          category: fastAwarenessResult.category,
+          strategy: fastAwarenessResult.strategy,
+          confidence: fastAwarenessResult.confidence,
+          latency: Date.now() - startTime,
+          shouldShortCircuit: true
+        });
+        fastAwarenessRouter.recordOutcome(fastAwarenessResult.category, true);
+      }
+    }
+
     // Phase 2: Use recommended tools from router to optimize tool routing
     if (fastAwarenessResult.recommendedTools && fastAwarenessResult.recommendedTools.length > 0) {
       routedTools = routedTools.filter((item) => fastAwarenessResult.recommendedTools.includes(item.tool));
@@ -1963,15 +2017,17 @@ export class OpenUnumAgent {
     contextPackInputs.routedTools = routedTools;
 
     // Phase 3: Write telemetry event for this classification
-    fastAwarenessRouter.writeTelemetry({
-      category: fastAwarenessResult.category,
-      strategy: fastAwarenessResult.strategy,
-      confidence: fastAwarenessResult.confidence,
-      latency: Date.now() - startTime,
-      shouldShortCircuit: fastAwarenessResult.shouldShortCircuit
-    });
+    if (!trace?.fastPathDeterministic) {
+      fastAwarenessRouter.writeTelemetry({
+        category: fastAwarenessResult.category,
+        strategy: fastAwarenessResult.strategy,
+        confidence: fastAwarenessResult.confidence,
+        latency: Date.now() - startTime,
+        shouldShortCircuit: fastAwarenessResult.shouldShortCircuit
+      });
+    }
 
-    if (fastAwarenessResult.shouldShortCircuit && attempts.length > 0) {
+    if (!finalText && fastAwarenessResult.shouldShortCircuit && attempts.length > 0) {
       const shortcutMessages = [
         { role: 'system', content: policySystemMessage },
         { role: 'system', content: roleModeInstruction },
@@ -2107,7 +2163,8 @@ export class OpenUnumAgent {
     
     // Auto-continue if task incomplete (check before storing reply)
     const executedTools = trace?.iterations?.flatMap((iter) => iter?.toolRuns || []) || [];
-    const shouldContinue = this.selfMonitor.shouldAutoContinue(sessionId, finalText, executedTools);
+    const isGreetingFastPath = trace?.fastPathCategory === 'greeting' && trace?.fastPathUsed === true;
+    const shouldContinue = !isGreetingFastPath && this.selfMonitor.shouldAutoContinue(sessionId, finalText, executedTools);
     if (shouldContinue && (!trace?.providerFailures || trace.providerFailures.length === 0)) {
       const continuationPrompt = this.selfMonitor.generateContinuationPrompt(sessionId, finalText, executedTools);
       const continuationMessages = [

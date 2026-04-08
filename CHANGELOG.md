@@ -4,6 +4,22 @@ All notable changes to OpenUnum are documented in this file.
 
 ---
 
+## [2.3.2] - 2026-04-08
+
+### Fixed
+- Greeting latency path: `hello`/`hi`/`good morning` now short-circuits immediately with deterministic response (no provider wait, no tool loop, no pending timeout churn).
+- Prevented auto-continue from re-triggering model/tool execution after greeting fast-path replies.
+- Corrected tool result contract for file inspection tools:
+  - `file_search`, `file_grep`, `file_info` now return `ok: true`.
+- Repair side-quest failure detection now requires explicit failure (`ok === false` or error) to avoid false-positive repair flows from non-error tool payloads.
+- Repair side-quest execution is now asynchronous and no longer blocks user turn completion.
+
+### Added
+- Unit regression coverage for greeting fast-path classification.
+- Unit regression coverage for file-search tool success contract.
+
+---
+
 ## [2.3.1] - 2026-04-08
 
 ### Fixed
