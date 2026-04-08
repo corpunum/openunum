@@ -22,6 +22,7 @@ import {
   formatProviderTestStatus,
   formatServiceTestStatus
 } from './modules/provider-actions.js';
+import { buildRuntimeOverviewView } from './modules/runtime-overview.js';
 import { buildMissionTimelineView } from './modules/missions.js';
 import {
   sortSessionsByRecency,
@@ -1502,37 +1503,17 @@ async function pollAuthJob(jobId, service) {
 
 async function refreshRuntimeOverview() {
   runtimeOverview = await jget('/api/runtime/overview');
-  q('runtimeAutonomyValue').textContent = runtimeOverview.autonomyMode || 'autonomy-first';
-  q('runtimeWorkspaceMeta').textContent = runtimeOverview.workspaceRoot || '-';
-
-  const git = runtimeOverview.git || {};
-  q('gitBranchValue').textContent = git.branch || 'no-git';
-  q('gitBranchMeta').textContent = git.ok
-    ? `ahead=${git.ahead || 0} behind=${git.behind || 0} modified=${git.modified || 0}`
-    : (git.error || 'git unavailable');
-
-  const degraded = (runtimeOverview.providers || []).filter((p) => p.status !== 'healthy');
-  const envelope = runtimeOverview.executionEnvelope || {};
-  const policy = runtimeOverview.autonomyPolicy || {};
-  const unavailableProviders = (runtimeOverview.providerAvailability || []).filter((row) => row.blocked);
-  q('runtimeProviderValue').textContent = degraded.length ? `${degraded.length} degraded` : 'healthy';
-  q('runtimeProviderMeta').textContent = (runtimeOverview.providers || [])
-    .map((p) => `${p.provider}:${p.status}`)
-    .join(' | ') || 'No providers';
-  if (envelope.tier) {
-    q('runtimeProviderMeta').textContent += ` | envelope=${envelope.tier} tools=${Array.isArray(envelope.toolAllowlist) ? envelope.toolAllowlist.length : 'all'} maxIters=${envelope.maxToolIterations || '-'}`;
-  }
-  q('runtimeProviderMeta').textContent += ` | policy=${policy.mode || 'execute'} selfProtect=${policy.enforceSelfProtection !== false ? 'on' : 'off'}`;
-  if (unavailableProviders.length) {
-    q('runtimeProviderMeta').textContent += ` | cooldown=${unavailableProviders.map((row) => `${row.provider}:${row.lastFailureKind || 'unknown'}`).join(',')}`;
-  }
-
-  const browserInfo = runtimeOverview.browser || {};
-  q('browserHealthValue').textContent = browserInfo.ok ? 'Connected' : 'Degraded';
-  q('browserHealthMeta').textContent = browserInfo.error || browserInfo.hint || 'CDP reachable';
-  q('browserCdpValue').textContent = browserInfo.cdpUrl || q('cdpPreset').value || '-';
-  const tabCount = Array.isArray(browserInfo.targets) ? browserInfo.targets.length : 0;
-  q('browserTabMeta').textContent = tabCount ? `${tabCount} visible targets` : 'No live target list';
+  const view = buildRuntimeOverviewView(runtimeOverview, q('cdpPreset')?.value || '');
+  q('runtimeAutonomyValue').textContent = view.runtimeAutonomyValue;
+  q('runtimeWorkspaceMeta').textContent = view.runtimeWorkspaceMeta;
+  q('gitBranchValue').textContent = view.gitBranchValue;
+  q('gitBranchMeta').textContent = view.gitBranchMeta;
+  q('runtimeProviderValue').textContent = view.runtimeProviderValue;
+  q('runtimeProviderMeta').textContent = view.runtimeProviderMeta;
+  q('browserHealthValue').textContent = view.browserHealthValue;
+  q('browserHealthMeta').textContent = view.browserHealthMeta;
+  q('browserCdpValue').textContent = view.browserCdpValue;
+  q('browserTabMeta').textContent = view.browserTabMeta;
   await refreshPhase0Diagnostics();
   await refreshContextStatus();
 }

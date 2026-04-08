@@ -4,6 +4,18 @@ All notable changes to OpenUnum are documented in this file.
 
 ---
 
+## [2.3.28] - 2026-04-08
+
+### Changed
+- Continued WebUI modularization for runtime panel formatting:
+  - extracted runtime overview text synthesis into `src/ui/modules/runtime-overview.js`
+  - `src/ui/app.js` now applies module-generated runtime/git/provider/browser view fields.
+
+### Added
+- Unit coverage for runtime overview helpers in `tests/unit/ui-runtime-overview.test.mjs`.
+
+---
+
 ## [2.3.27] - 2026-04-08
 
 ### Changed
