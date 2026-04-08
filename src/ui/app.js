@@ -14,6 +14,7 @@ import {
 } from './modules/detail-panels.js';
 import {
   pendingPollDelayMs,
+  chatFastAckTimeoutMs,
   formatRelativeTime,
   newestAssistantSince,
   buildPendingStatus,
@@ -2371,12 +2372,14 @@ q('send').onclick = async () => {
   const typing = appendTypingBubble();
   const startedAtIso = new Date().toISOString();
   typing.persistScope = `pending:${requestSessionId}:${startedAtIso}`;
+  const recentUserTurns = sessionCache.find((s) => s.sessionId === requestSessionId)?.messageCount || 0;
+  const fastAckTimeoutMs = chatFastAckTimeoutMs(message, { recentUserTurns });
   try {
     if (/^\/auto\b/i.test(message)) {
       await runAutoMissionFromChat(message, typing);
       return;
     }
-    const out = await jpost('/api/chat', { sessionId: requestSessionId, message }, { timeoutMs: 70000 });
+    const out = await jpost('/api/chat', { sessionId: requestSessionId, message }, { timeoutMs: fastAckTimeoutMs });
     if (out?.pending) {
       await resolvePendingReply(typing, out.startedAt || startedAtIso, requestSessionId, requestToken);
       return;

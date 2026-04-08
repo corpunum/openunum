@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   pendingPollDelayMs,
+  chatFastAckTimeoutMs,
   formatRelativeTime,
   newestAssistantSince,
   buildPendingStatus,
@@ -17,6 +18,12 @@ describe('ui logic module', () => {
     expect(pendingPollDelayMs(2)).toBe(1000);
     expect(pendingPollDelayMs(6)).toBe(1400);
     expect(pendingPollDelayMs(12)).toBe(1800);
+  });
+
+  it('computes feature-based fast-ack chat timeout budgets', () => {
+    expect(chatFastAckTimeoutMs('hi')).toBe(3500);
+    expect(chatFastAckTimeoutMs('can you review src/ui/app.js and fix provider modal wiring?')).toBeGreaterThanOrEqual(7000);
+    expect(chatFastAckTimeoutMs('Please debug this stack trace:\nError: timeout\n at run (src/server.mjs:120)', { recentUserTurns: 12 })).toBe(12000);
   });
 
   it('formats relative time for recent minutes', () => {

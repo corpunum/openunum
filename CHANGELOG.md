@@ -4,6 +4,18 @@ All notable changes to OpenUnum are documented in this file.
 
 ---
 
+## [2.3.21] - 2026-04-08
+
+### Changed
+- Reduced WebUI chat perceived latency on pending-capable turns:
+  - replaced fixed 70s `/api/chat` request timeout with `chatFastAckTimeoutMs` in `src/ui/modules/logic.js`.
+  - timeout budgets are now feature-based (message length/shape/context complexity) to switch into pending/live mode faster without keyword hardcoding.
+
+### Added
+- Unit coverage for fast-ack timeout budgeting in `tests/unit/ui-logic.test.mjs`.
+
+---
+
 ## [2.3.20] - 2026-04-08
 
 ### Changed

@@ -17,6 +17,35 @@ export const pendingPollDelayMs = (pollCount = 0) => {
   return 1800;
 };
 
+export function chatFastAckTimeoutMs(message, options = {}) {
+  const raw = String(message || '');
+  const normalized = raw.toLowerCase().replace(/\s+/g, ' ').trim();
+  if (!normalized) return 5000;
+
+  const words = normalized.split(' ').filter(Boolean);
+  const chars = normalized.length;
+  const punctuation = (normalized.match(/[?!.:,;]/g) || []).length;
+  const lineBreaks = (raw.match(/\n/g) || []).length;
+  const hasCodeLike = /[`{}[\]<>$\\/]/.test(raw) || /\b(src|api|model|provider|error|trace|stack|test|fix|debug)\b/.test(normalized);
+  const hasPathLike = /\/[a-z0-9._-]+/i.test(raw) || /[a-z]:\\/i.test(raw);
+  const recentUserTurns = Math.max(0, Number(options?.recentUserTurns) || 0);
+
+  let complexity = 0;
+  complexity += Math.min(words.length, 32) * 0.25;
+  complexity += Math.min(chars, 300) / 90;
+  complexity += Math.min(punctuation, 8) * 0.2;
+  complexity += Math.min(lineBreaks, 8) * 0.5;
+  complexity += hasCodeLike ? 1.2 : 0;
+  complexity += hasPathLike ? 1.0 : 0;
+  complexity += recentUserTurns >= 8 ? 0.8 : 0;
+
+  if (complexity <= 1.4) return 3500;
+  if (complexity <= 2.4) return 5000;
+  if (complexity <= 3.6) return 7000;
+  if (complexity <= 5.2) return 9000;
+  return 12000;
+}
+
 export function formatRelativeTime(iso) {
   const t = Date.parse(String(iso || ''));
   if (!Number.isFinite(t)) return '';
