@@ -4,6 +4,23 @@ All notable changes to OpenUnum are documented in this file.
 
 ---
 
+## [2.3.13] - 2026-04-08
+
+### Changed
+- Continued WebUI modularization:
+  - extracted pure UI runtime logic into `src/ui/modules/logic.js`
+    - pending poll delay strategy
+    - relative time formatting
+    - assistant-message hydration selection
+    - status-check / planning classification helpers
+    - provider/model formatting + prefix normalization
+  - `src/ui/app.js` now imports those helpers instead of defining them inline.
+
+### Added
+- New unit coverage for extracted UI logic in `tests/unit/ui-logic.test.mjs`.
+
+---
+
 ## [2.3.12] - 2026-04-08
 
 ### Changed

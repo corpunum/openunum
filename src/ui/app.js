@@ -2,6 +2,16 @@ import { q, qa, escapeHtml, sleep } from './modules/dom.js';
 import { jget, jpost, jrequest } from './modules/http.js';
 import { setStatus } from './modules/feedback.js';
 import { showView as showViewWithMeta } from './modules/navigation.js';
+import {
+  pendingPollDelayMs,
+  formatRelativeTime,
+  newestAssistantSince,
+  shouldEscalateToAuto,
+  isStatusCheckMessage,
+  isPlanningReply,
+  formatProviderModel,
+  stripProviderPrefix
+} from './modules/logic.js';
 
 const VIEW_META = {
   chat: ['Chat Terminal', 'Autonomous agent conversation'],
@@ -121,29 +131,8 @@ function bindPersistentDetailPanels(root) {
   });
 }
 
-const pendingPollDelayMs = (pollCount = 0) => {
-  const n = Number(pollCount) || 0;
-  if (n <= 1) return 700;
-  if (n <= 3) return 1000;
-  if (n <= 7) return 1400;
-  return 1800;
-};
-
 function showView(viewId) {
   showViewWithMeta(viewId, VIEW_META);
-}
-
-function formatRelativeTime(iso) {
-  const t = Date.parse(String(iso || ''));
-  if (!Number.isFinite(t)) return '';
-  const mins = Math.floor((Date.now() - t) / 60000);
-  if (mins < 1) return 'now';
-  if (mins < 60) return `${mins}m`;
-  const hrs = Math.floor(mins / 60);
-  if (hrs < 24) return `${hrs}h`;
-  const days = Math.floor(hrs / 24);
-  if (days < 7) return `${days}d`;
-  return new Date(t).toLocaleDateString();
 }
 
 function renderSessionList() {
@@ -446,17 +435,6 @@ async function resetSession() {
   await refreshSessionList();
 }
 
-function newestAssistantSince(messages, sinceIso) {
-  const sinceMs = Date.parse(sinceIso || '') || 0;
-  let candidate = null;
-  for (const m of (messages || [])) {
-    if (m.role !== 'assistant') continue;
-    const t = Date.parse(m.created_at || '');
-    if (Number.isFinite(t) && t >= sinceMs) candidate = m;
-  }
-  return candidate;
-}
-
 function buildPendingStatus(typing, activity, pendingState) {
   const toolCount = Array.isArray(activity?.toolRuns) ? activity.toolRuns.length : 0;
   const assistantMsg = newestAssistantSince(activity?.messages || [], activity?.since || pendingState?.startedAt || '');
@@ -688,36 +666,6 @@ ${verificationSummary || preview}`)}</pre>`;
   typing.bubble.textContent = 'Auto task is still running in background.';
 }
 
-function shouldEscalateToAuto(message, out) {
-  if (!autoEscalateEnabled) return false;
-  if (/^\/\w+/.test(String(message || '').trim())) return false;
-  if (!out || out.pending) return false;
-  if (isStatusCheckMessage(message)) return false;
-  const reply = String(out.reply || '').toLowerCase();
-  const completeSignals = ['mission_status: done', 'task completed', 'completed successfully', 'done'];
-  if (completeSignals.some((s) => reply.includes(s))) return false;
-
-  const iters = Array.isArray(out?.trace?.iterations) ? out.trace.iterations : [];
-  const hadTools = iters.some((it) => Array.isArray(it.toolCalls) && it.toolCalls.length > 0);
-  const last = iters.length > 0 ? iters[iters.length - 1] : null;
-  const lastHasNoTools = !last || !Array.isArray(last.toolCalls) || last.toolCalls.length === 0;
-  const planningText = String(last?.assistantText || out.reply || '').toLowerCase();
-  const planningSignal = /\b(plan|step\s*\d|next|let me|i will|going to|continue|create)\b/.test(planningText);
-
-  return lastHasNoTools && planningSignal && (hadTools || planningText.length > 80);
-}
-
-function isStatusCheckMessage(message) {
-  const t = String(message || '').toLowerCase().trim();
-  return /^(are you done\??|done\??|status\??|progress\??|did you finish\??|finished\??|so you done\??)$/.test(t);
-}
-
-function isPlanningReply(out) {
-  const iters = Array.isArray(out?.trace?.iterations) ? out.trace.iterations : [];
-  const last = iters.length > 0 ? iters[iters.length - 1] : null;
-  const txt = String(last?.assistantText || out?.reply || '').toLowerCase();
-  return /\b(plan|step\s*\d|next|let me|i will|going to|continue|create)\b/.test(txt);
-}
 
 function setSelectByValueOrFirst(id, value) {
   const el = q(id);
@@ -728,28 +676,6 @@ function setSelectByValueOrFirst(id, value) {
   }
   const options = Array.from(el.options).map((o) => o.value);
   el.value = options.includes(value) ? value : options[0] || '';
-}
-
-function formatProviderModel(provider, model) {
-  const p = String(provider || '').trim().replace(/^generic$/, 'openai').replace(/^ollama$/, 'ollama-cloud');
-  const m = String(model || '').trim();
-  if (!p) return m;
-  if (!m) return p;
-  if (m.startsWith(`${p}/`)) return m;
-  if (/^(ollama-local|ollama-cloud|ollama|openrouter|nvidia|xiaomimimo|generic|openai)\//.test(m)) {
-    return m.replace(/^generic\//, 'openai/').replace(/^ollama\//, `${p}/`);
-  }
-  return `${p}/${m}`;
-}
-
-function stripProviderPrefix(modelRef) {
-  const value = String(modelRef || '').trim();
-  if (!value) return '';
-  for (const provider of ['generic', 'ollama', ...MODEL_PROVIDER_IDS]) {
-    const prefix = `${provider}/`;
-    if (value.startsWith(prefix)) return value.slice(prefix.length);
-  }
-  return value;
 }
 
 async function refreshCapabilities() {
@@ -1143,7 +1069,7 @@ function renderProviderMatrix(providers = []) {
       const modelPatch = { providerModels, routing: { fallbackProviders, disabledProviders } };
       if (runtimeConfigCache?.model?.provider === provider) {
         modelPatch.provider = 'ollama-cloud';
-        modelPatch.model = stripProviderPrefix(providerModels['ollama-cloud'] || 'minimax-m2.7:cloud');
+        modelPatch.model = stripProviderPrefix(providerModels['ollama-cloud'] || 'minimax-m2.7:cloud', MODEL_PROVIDER_IDS);
       }
       await jpost('/api/config', { model: modelPatch });
       runtimeConfigCache = null;
@@ -1799,7 +1725,7 @@ async function loadModelsForProvider(provider, currentModel = '') {
       opt.textContent = `${rank} ${modelId} | score=${score} | ctx=${ctx}`;
       list.appendChild(opt);
     }
-    const normalizedCurrentModel = stripProviderPrefix(currentModel);
+    const normalizedCurrentModel = stripProviderPrefix(currentModel, MODEL_PROVIDER_IDS);
     if (normalizedCurrentModel && models.some((m) => (m.model_id || m.id) === normalizedCurrentModel)) {
       list.value = normalizedCurrentModel;
     }
@@ -1820,7 +1746,7 @@ async function refreshRuntime() {
     .filter((provider) => provider && provider !== c.model?.provider)
     .map((provider) => ({
       provider,
-      model: stripProviderPrefix(c.model?.providerModels?.[provider]) || preferredModelForProvider(provider)
+      model: stripProviderPrefix(c.model?.providerModels?.[provider], MODEL_PROVIDER_IDS) || preferredModelForProvider(provider)
     }));
   renderFallbackSequence();
   q('runtimeStatus').textContent =
@@ -2521,7 +2447,7 @@ q('send').onclick = async () => {
       await resolvePendingReply(typing, out.startedAt || startedAtIso, requestSessionId, requestToken);
       return;
     }
-    if (shouldEscalateToAuto(message, out)) {
+    if (shouldEscalateToAuto(message, out, autoEscalateEnabled)) {
       typing.bubble.textContent = 'Planning detected. Auto mission engaged...';
       await runAutoMissionFromChat(`/auto ${message}`, typing);
       return;

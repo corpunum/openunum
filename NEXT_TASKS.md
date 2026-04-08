@@ -5,5 +5,6 @@ Canonical next-work tracker:
 
 Immediate focus:
 1. Continue Phase 4 WebUI modularization (split remaining large `src/ui/app.js` view domains into smaller modules: chat/session, provider-vault, missions, routing).
-2. Expand browser-level interaction E2E coverage from Provider/Missions into auth-vault and model-routing workflows.
-3. Keep CI/runtime/docs gates green after each slice (`phase39/40/41/42/43`, `gate:ui-surface`, `docs:index`, `route-wiring`).
+2. Continue Phase 5 pending-path optimization (SSE-first fast completion + minimal fallback polling tail).
+3. Continue Phase 7 browser-level interaction E2E expansion (provider-vault modal matrix + mission lifecycle).
+4. Keep CI/runtime/docs gates green after each slice (`phase39/40/41/42/43`, `gate:ui-surface`, `docs:index`, `route-wiring`).
