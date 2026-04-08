@@ -1,3 +1,6 @@
+import { q, qa, escapeHtml, sleep } from './modules/dom.js';
+import { jget, jpost, jrequest } from './modules/http.js';
+
 const VIEW_META = {
   chat: ['Chat Terminal', 'Autonomous agent conversation'],
   'operator': ['Execution Trace', 'Runtime, tools, and live execution state'],
@@ -47,9 +50,6 @@ let liveActivityEnabled = localStorage.getItem('openunum_live_activity');
 if (liveActivityEnabled == null) liveActivityEnabled = 'true';
 liveActivityEnabled = liveActivityEnabled === 'true';
 localStorage.setItem('openunum_session', sessionId);
-
-const q = (id) => document.getElementById(id);
-const qa = (sel) => Array.from(document.querySelectorAll(sel));
 let toastCounter = 0;
 
 function showToast(message, type = 'info', title = 'Action') {
@@ -173,7 +173,6 @@ function bindPersistentDetailPanels(root) {
   });
 }
 
-const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 const pendingPollDelayMs = (pollCount = 0) => {
   const n = Number(pollCount) || 0;
   if (n <= 1) return 700;
@@ -181,116 +180,6 @@ const pendingPollDelayMs = (pollCount = 0) => {
   if (n <= 7) return 1400;
   return 1800;
 };
-function isTransientFetchError(error) {
-  const msg = String(error?.message || error || '').toLowerCase();
-  return msg.includes('failed to fetch') || msg.includes('networkerror') || msg.includes('network request failed');
-}
-async function fetchWithRetry(path, options = {}, retry = 2, backoffMs = 450) {
-  let lastError;
-  for (let i = 0; i < retry; i += 1) {
-    try {
-      return await fetch(path, options);
-    } catch (error) {
-      lastError = error;
-      if (!isTransientFetchError(error) || i === retry - 1) break;
-      await sleep(backoffMs * (i + 1));
-    }
-  }
-  throw lastError;
-}
-async function jget(path, opts = {}) {
-  const timeoutMs = Number.isFinite(opts.timeoutMs) ? Number(opts.timeoutMs) : 20000;
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(new Error('request_timeout')), timeoutMs);
-  try {
-    const res = await fetchWithRetry(path, { signal: controller.signal }, 2, 400);
-    const raw = await res.text();
-    let parsed;
-    try {
-      parsed = raw ? JSON.parse(raw) : {};
-    } catch {
-      parsed = { ok: false, error: `invalid_json_response status=${res.status}` };
-    }
-    if (!res.ok) {
-      const msg = parsed?.error || `${res.status} ${res.statusText}`;
-      throw new Error(msg);
-    }
-    return parsed;
-  } catch (error) {
-    if (String(error?.name || '') === 'AbortError') throw new Error('request_timeout');
-    throw error;
-  } finally {
-    clearTimeout(timer);
-  }
-}
-const escapeHtml = (s) =>
-  String(s || '')
-    .replaceAll('&', '&amp;')
-    .replaceAll('<', '&lt;')
-    .replaceAll('>', '&gt;')
-    .replaceAll('"', '&quot;')
-    .replaceAll("'", '&#39;');
-async function jpost(path, body, opts = {}) {
-  const timeoutMs = Number.isFinite(opts.timeoutMs) ? Number(opts.timeoutMs) : 30000;
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(new Error('request_timeout')), timeoutMs);
-  try {
-    const res = await fetchWithRetry(path, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'X-OpenUnum-Request': 'webui' },
-      body: JSON.stringify(body || {}),
-      signal: controller.signal
-    }, 2, 500);
-    const raw = await res.text();
-    let parsed;
-    try {
-      parsed = raw ? JSON.parse(raw) : {};
-    } catch {
-      parsed = { ok: false, error: `invalid_json_response status=${res.status}` };
-    }
-    if (!res.ok) {
-      const msg = parsed?.error || `${res.status} ${res.statusText}`;
-      throw new Error(msg);
-    }
-    return parsed;
-  } catch (error) {
-    if (String(error?.name || '') === 'AbortError') throw new Error('request_timeout');
-    throw error;
-  } finally {
-    clearTimeout(timer);
-  }
-}
-async function jrequest(method, path, body = undefined, opts = {}) {
-  const timeoutMs = Number.isFinite(opts.timeoutMs) ? Number(opts.timeoutMs) : 30000;
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(new Error('request_timeout')), timeoutMs);
-  try {
-    const m = String(method || 'GET').toUpperCase();
-    const init = { method: m, signal: controller.signal };
-    if (m !== 'GET') {
-      init.headers = { 'Content-Type': 'application/json', 'X-OpenUnum-Request': 'webui' };
-      init.body = JSON.stringify(body || {});
-    }
-    const res = await fetchWithRetry(path, init, 2, 500);
-    const raw = await res.text();
-    let parsed;
-    try {
-      parsed = raw ? JSON.parse(raw) : {};
-    } catch {
-      parsed = { ok: false, error: `invalid_json_response status=${res.status}`, raw };
-    }
-    if (!res.ok) {
-      const msg = parsed?.error || `${res.status} ${res.statusText}`;
-      throw new Error(msg);
-    }
-    return parsed;
-  } catch (error) {
-    if (String(error?.name || '') === 'AbortError') throw new Error('request_timeout');
-    throw error;
-  } finally {
-    clearTimeout(timer);
-  }
-}
 
 function showView(viewId) {
   qa('.menu-btn').forEach((b) => b.classList.toggle('active', b.dataset.view === viewId));

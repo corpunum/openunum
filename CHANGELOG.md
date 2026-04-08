@@ -4,6 +4,17 @@ All notable changes to OpenUnum are documented in this file.
 
 ---
 
+## [2.3.11] - 2026-04-08
+
+### Changed
+- Continued WebUI modularization inside the JS runtime:
+  - introduced `src/ui/modules/dom.js` for shared DOM/query/escape/sleep helpers
+  - introduced `src/ui/modules/http.js` for retrying JSON API request helpers
+  - `src/ui/app.js` now imports shared helpers instead of keeping all utility code inline
+  - `src/ui/index.html` now loads app runtime as an ES module (`type=\"module\"`)
+
+---
+
 ## [2.3.10] - 2026-04-08
 
 ### Changed
