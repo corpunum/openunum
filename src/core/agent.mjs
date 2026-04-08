@@ -49,6 +49,7 @@ import { PolicyLoader, buildSystemMessage } from './policy-loader.mjs';
 import { PredictiveFailureDetector } from './predictive-failure.mjs';
 import { TaskOrchestrator } from './task-orchestrator.mjs';
 import { FastAwarenessRouter, createFastAwarenessRouter } from './fast-awareness-router.mjs';
+import { classifyRoleMode, modeDirective } from './role-mode-router.mjs';
 import { WorkerOrchestrator } from './worker-orchestrator.mjs';
 import { DaemonManager } from './daemon-manager.mjs';
 import { logInfo, logError } from '../logger.mjs';
@@ -1940,6 +1941,8 @@ export class OpenUnumAgent {
     const attempts = this.buildProviderAttempts();
     const failures = [];
     const routeTelemetry = {};
+    const roleMode = classifyRoleMode({ message });
+    const roleModeInstruction = modeDirective(roleMode);
 
     // FastAwarenessRouter: classify message and potentially short-circuit
     const fastAwarenessResult = fastAwarenessRouter.classify(message);
@@ -1964,6 +1967,7 @@ export class OpenUnumAgent {
     if (fastAwarenessResult.shouldShortCircuit && attempts.length > 0) {
       const shortcutMessages = [
         { role: 'system', content: policySystemMessage },
+        { role: 'system', content: roleModeInstruction },
         {
           role: 'system',
           content: `FAST PATH: This is a ${fastAwarenessResult.category} question. Answer directly without tool execution. Be concise and accurate.`
@@ -1987,6 +1991,8 @@ export class OpenUnumAgent {
           trace = {
             ...(shortcutRun.trace || {}),
             ...routeTelemetry,
+            roleMode: roleMode.mode,
+            roleModeReason: roleMode.reason,
             fastPathUsed: true,
             fastPathCategory: fastAwarenessResult.category,
             fastPathLatency: Date.now() - startTime
@@ -2003,6 +2009,7 @@ export class OpenUnumAgent {
     if (!finalText) {
       const messages = [
         { role: 'system', content: policySystemMessage },
+        { role: 'system', content: roleModeInstruction },
         ...history
       ];
 
@@ -2024,7 +2031,9 @@ export class OpenUnumAgent {
             finalText = run.finalText;
             trace = {
               ...(run.trace || {}),
-              ...routeTelemetry
+              ...routeTelemetry,
+              roleMode: roleMode.mode,
+              roleModeReason: roleMode.reason
             };
             if (failures.length) trace.providerFailures = [...failures];
 
@@ -2071,6 +2080,8 @@ export class OpenUnumAgent {
           providerFailures: failures,
           permissionDenials: [],
           ...routeTelemetry,
+          roleMode: roleMode.mode,
+          roleModeReason: roleMode.reason,
           pivotHints: buildPivotHints({
             executedTools: [],
             permissionDenials: [],

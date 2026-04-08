@@ -100,6 +100,9 @@ Progress (2026-04-08):
 - `/api/self-heal*` + `/api/health` now route through the orchestrator in `src/server.mjs`.
 - Legacy modules remain for compatibility (`selfheal.mjs`, `self-heal.mjs`, `auto-recover.mjs`) and are next in line for deprecation shims.
 
+Role mode progress (2026-04-08):
+- Added bounded role-mode router (`src/core/role-mode-router.mjs`) with explicit modes (`intent`, `execution`, `proof`, `repair`, `retrieval`) wired into turn system directives and trace metadata.
+
 ## 6. Production Hardening
 
 Goal:

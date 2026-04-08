@@ -77,6 +77,15 @@ Date: 2026-04-07
   - `data/side-quests/*.json`
   - `local_models.txt`, `models.txt`
 
+## Bounded Role Modes (2026-04-08)
+
+**Status:** ✅ Initial bounded mode layer implemented
+
+- Added `src/core/role-mode-router.mjs`.
+- Added explicit mode directive injection (`intent`, `execution`, `proof`, `repair`, `retrieval`) into agent system messages.
+- Added role mode metadata in execution trace.
+- Added unit coverage: `tests/unit/role-mode-router.test.mjs`.
+
 ## Phase 1-3 Completion + Council Validation (2026-04-07)
 
 **Status:** ✅ Phase 1-3 Complete | 🟡 Phase 4 Planned

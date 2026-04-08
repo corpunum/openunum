@@ -13,6 +13,7 @@ All notable changes to OpenUnum are documented in this file.
   - `OPENUNUM_SECRETS_PASSPHRASE=<passphrase>`
 - Secret-store status surfaced in auth catalog payload and WebUI provider status.
 - Unit coverage for encrypted secret store behavior (`tests/unit/secret-store-encryption.test.mjs`).
+- Bounded role-mode router (`src/core/role-mode-router.mjs`) integrated into agent turn directives and trace metadata.
 
 ### Security
 - Secret store upgraded to `2026-04-08.secret-store.v2`.
