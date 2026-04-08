@@ -4,6 +4,22 @@ All notable changes to OpenUnum are documented in this file.
 
 ---
 
+## [2.2.4] - 2026-04-08
+
+### Added
+- Passphrase-backed encrypted secret storage backend in `src/secrets/store.mjs`.
+- New environment controls:
+  - `OPENUNUM_SECRETS_BACKEND=passphrase|plaintext`
+  - `OPENUNUM_SECRETS_PASSPHRASE=<passphrase>`
+- Secret-store status surfaced in auth catalog payload and WebUI provider status.
+- Unit coverage for encrypted secret store behavior (`tests/unit/secret-store-encryption.test.mjs`).
+
+### Security
+- Secret store upgraded to `2026-04-08.secret-store.v2`.
+- Encrypted backend writes `secrets.enc.json` using AES-256-GCM + scrypt and removes plaintext file after encrypted save by default.
+
+---
+
 ## [2.2.3] - 2026-04-08
 
 ### Added

@@ -76,6 +76,11 @@ Deliverables:
 - migration path from current JSON store
 - operator docs for backup/restore and headless usage
 
+Progress (2026-04-08):
+- Added passphrase-backed encrypted secret backend (`OPENUNUM_SECRETS_BACKEND=passphrase`) using AES-256-GCM + scrypt.
+- Added compatibility migration path (`secrets.json` -> `secrets.enc.json`) on save when passphrase backend is enabled.
+- Added auth catalog visibility for backend/lock state.
+
 ## 5. Consolidate Self-Heal Surfaces
 
 Goal:

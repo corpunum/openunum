@@ -113,3 +113,6 @@ node src/cli.mjs model switch --provider ollama --model ollama/qwen3.5:397b-clou
 - Use `GET /api/providers/config` for provider readiness booleans (`hasOpenrouterApiKey`, `hasNvidiaApiKey`, `hasOpenaiApiKey`).
 - Use `GET /api/auth/catalog` for redacted provider/service auth state and source previews.
 - If local secrets changed, run `POST /api/auth/prefill-local` to rescan/import provider credentials from local sources.
+- Optional encrypted secrets backend:
+  - `OPENUNUM_SECRETS_BACKEND=passphrase`
+  - `OPENUNUM_SECRETS_PASSPHRASE=<strong passphrase>`

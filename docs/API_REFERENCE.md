@@ -569,6 +569,10 @@ Credential visibility rules:
 {
   "contract_version": "2026-04-01.auth-catalog.v1",
   "secret_store_path": "/home/user/.openunum/secrets.json",
+  "secret_store": {
+    "backend": "plaintext",
+    "locked": false
+  },
   "provider_order": ["ollama", "nvidia", "openrouter", "xiaomimimo", "openai"],
   "providers": [
     {
@@ -598,6 +602,12 @@ Credential visibility rules:
   ]
 }
 ```
+
+`secret_store.backend` values:
+- `plaintext` (default)
+- `passphrase` (encrypted `secrets.enc.json`)
+
+When backend is `passphrase`, `secret_store.locked=true` means passphrase is not available in environment and stored secrets are unavailable until unlocked.
 
 `POST /api/auth/catalog` accepts:
 ```json

@@ -9,6 +9,7 @@ import {
   scanLocalAuthSources,
   getCliAuthStatus,
   getSecretsPath,
+  getSecretStoreStatus,
   AUTH_CATALOG_CONTRACT_VERSION,
   AUTH_TARGET_DEFS
 } from '../../secrets/store.mjs';
@@ -340,6 +341,7 @@ export function createAuthService({ config, PROVIDER_ORDER, reloadConfigSecrets 
     return {
       contract_version: AUTH_CATALOG_CONTRACT_VERSION,
       secret_store_path: getSecretsPath(),
+      secret_store: getSecretStoreStatus(),
       provider_order: [...PROVIDER_ORDER],
       auth_targets: AUTH_TARGET_DEFS,
       scanned_files: scan.filesScanned,

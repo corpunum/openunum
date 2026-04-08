@@ -50,6 +50,17 @@ Date: 2026-04-07
 - Added `pnpm docs:gate`.
 - Gate fails when code paths (`src/*`, `scripts/*`) changed between refs but no docs paths were updated.
 
+## Secrets At Rest Hardening (2026-04-08)
+
+**Status:** ✅ Passphrase backend implemented
+
+- Upgraded secret store to `2026-04-08.secret-store.v2`.
+- Added encrypted backend (`secrets.enc.json`) using AES-256-GCM + scrypt.
+- Added backend controls:
+  - `OPENUNUM_SECRETS_BACKEND=passphrase|plaintext`
+  - `OPENUNUM_SECRETS_PASSPHRASE=<passphrase>`
+- Added auth catalog secret-store status fields (`backend`, `locked`) and WebUI status display updates.
+
 ## Phase 1-3 Completion + Council Validation (2026-04-07)
 
 **Status:** ✅ Phase 1-3 Complete | 🟡 Phase 4 Planned

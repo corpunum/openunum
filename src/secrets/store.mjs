@@ -2,8 +2,9 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { execSync } from 'node:child_process';
+import crypto from 'node:crypto';
 
-export const SECRET_STORE_CONTRACT_VERSION = '2026-04-01.secret-store.v1';
+export const SECRET_STORE_CONTRACT_VERSION = '2026-04-08.secret-store.v2';
 export const AUTH_CATALOG_CONTRACT_VERSION = '2026-04-01.auth-catalog.v1';
 
 export const SECRET_FIELD_LABELS = {
@@ -41,13 +42,101 @@ export const AUTH_TARGET_DEFS = [
 ];
 
 const SECRET_FILE_MODE = 0o600;
+const SECRET_BACKEND_PLAINTEXT = 'plaintext';
+const SECRET_BACKEND_PASSPHRASE = 'passphrase';
 
 function getHomeDir() {
   return process.env.OPENUNUM_HOME || path.join(os.homedir(), '.openunum');
 }
 
-export function getSecretsPath() {
+function getPlainSecretsPath() {
   return path.join(getHomeDir(), 'secrets.json');
+}
+
+function getEncryptedSecretsPath() {
+  return path.join(getHomeDir(), 'secrets.enc.json');
+}
+
+function resolveSecretBackend() {
+  const configured = String(process.env.OPENUNUM_SECRETS_BACKEND || '').trim().toLowerCase();
+  if (configured === SECRET_BACKEND_PASSPHRASE) return SECRET_BACKEND_PASSPHRASE;
+  if (configured === SECRET_BACKEND_PLAINTEXT) return SECRET_BACKEND_PLAINTEXT;
+  if (String(process.env.OPENUNUM_SECRETS_PASSPHRASE || '').trim()) return SECRET_BACKEND_PASSPHRASE;
+  return SECRET_BACKEND_PLAINTEXT;
+}
+
+function getPassphrase() {
+  return String(process.env.OPENUNUM_SECRETS_PASSPHRASE || '').trim();
+}
+
+function isEncryptedEnvelope(raw = {}) {
+  return raw?.storage?.backend === SECRET_BACKEND_PASSPHRASE && typeof raw?.ciphertext === 'string';
+}
+
+function deriveKey(passphrase, saltB64) {
+  const salt = Buffer.from(saltB64, 'base64');
+  return crypto.scryptSync(passphrase, salt, 32);
+}
+
+function encryptStorePayload(store, passphrase) {
+  const salt = crypto.randomBytes(16);
+  const iv = crypto.randomBytes(12);
+  const key = crypto.scryptSync(passphrase, salt, 32);
+  const cipher = crypto.createCipheriv('aes-256-gcm', key, iv);
+  const plaintext = Buffer.from(JSON.stringify(store), 'utf8');
+  const ciphertext = Buffer.concat([cipher.update(plaintext), cipher.final()]);
+  const tag = cipher.getAuthTag();
+  return {
+    contract_version: SECRET_STORE_CONTRACT_VERSION,
+    updated_at: new Date().toISOString(),
+    storage: {
+      backend: SECRET_BACKEND_PASSPHRASE,
+      cipher: 'aes-256-gcm',
+      kdf: 'scrypt',
+      salt: salt.toString('base64'),
+      iv: iv.toString('base64'),
+      tag: tag.toString('base64')
+    },
+    ciphertext: ciphertext.toString('base64')
+  };
+}
+
+function decryptStoreEnvelope(envelope, passphrase) {
+  const key = deriveKey(passphrase, envelope.storage.salt);
+  const iv = Buffer.from(envelope.storage.iv, 'base64');
+  const tag = Buffer.from(envelope.storage.tag, 'base64');
+  const ciphertext = Buffer.from(envelope.ciphertext, 'base64');
+  const decipher = crypto.createDecipheriv('aes-256-gcm', key, iv);
+  decipher.setAuthTag(tag);
+  const decrypted = Buffer.concat([decipher.update(ciphertext), decipher.final()]).toString('utf8');
+  return JSON.parse(decrypted);
+}
+
+export function getSecretsPath() {
+  return resolveSecretBackend() === SECRET_BACKEND_PASSPHRASE
+    ? getEncryptedSecretsPath()
+    : getPlainSecretsPath();
+}
+
+export function getSecretStoreStatus() {
+  const backend = resolveSecretBackend();
+  const pathActive = getSecretsPath();
+  const pathPlain = getPlainSecretsPath();
+  const pathEncrypted = getEncryptedSecretsPath();
+  const hasPassphrase = Boolean(getPassphrase());
+  const hasPlain = fs.existsSync(pathPlain);
+  const hasEncrypted = fs.existsSync(pathEncrypted);
+  const locked = backend === SECRET_BACKEND_PASSPHRASE && !hasPassphrase;
+  return {
+    backend,
+    path: pathActive,
+    hasPassphrase,
+    locked,
+    files: {
+      plaintext: hasPlain,
+      encrypted: hasEncrypted
+    }
+  };
 }
 
 function ensureSecretHome() {
@@ -132,10 +221,45 @@ function withSecretDefaults(store = {}) {
 
 export function loadSecretStore() {
   ensureSecretHome();
-  const secretPath = getSecretsPath();
-  if (!fs.existsSync(secretPath)) return defaultSecrets();
+  const backend = resolveSecretBackend();
+  const plainPath = getPlainSecretsPath();
+  const encryptedPath = getEncryptedSecretsPath();
+
+  if (backend === SECRET_BACKEND_PASSPHRASE) {
+    const passphrase = getPassphrase();
+    if (!passphrase) {
+      return withSecretDefaults({ __storeMeta: { backend, locked: true, path: encryptedPath } });
+    }
+    if (fs.existsSync(encryptedPath)) {
+      try {
+        const raw = JSON.parse(fs.readFileSync(encryptedPath, 'utf8'));
+        if (!isEncryptedEnvelope(raw)) return defaultSecrets();
+        const parsed = decryptStoreEnvelope(raw, passphrase);
+        return withSecretDefaults({
+          ...parsed,
+          __storeMeta: { backend, locked: false, path: encryptedPath }
+        });
+      } catch {
+        return withSecretDefaults({ __storeMeta: { backend, locked: true, path: encryptedPath } });
+      }
+    }
+    if (fs.existsSync(plainPath)) {
+      try {
+        const parsed = JSON.parse(fs.readFileSync(plainPath, 'utf8'));
+        return withSecretDefaults({
+          ...parsed,
+          __storeMeta: { backend, locked: false, path: plainPath, migrationPending: true }
+        });
+      } catch {
+        return defaultSecrets();
+      }
+    }
+    return withSecretDefaults({ __storeMeta: { backend, locked: false, path: encryptedPath } });
+  }
+
+  if (!fs.existsSync(plainPath)) return defaultSecrets();
   try {
-    return withSecretDefaults(JSON.parse(fs.readFileSync(secretPath, 'utf8')));
+    return withSecretDefaults(JSON.parse(fs.readFileSync(plainPath, 'utf8')));
   } catch {
     return defaultSecrets();
   }
@@ -145,9 +269,24 @@ export function saveSecretStore(store) {
   ensureSecretHome();
   const secretPath = getSecretsPath();
   const next = withSecretDefaults(store);
+  delete next.__storeMeta;
   next.contract_version = SECRET_STORE_CONTRACT_VERSION;
   next.updated_at = new Date().toISOString();
-  fs.writeFileSync(secretPath, JSON.stringify(next, null, 2), { mode: SECRET_FILE_MODE });
+
+  if (resolveSecretBackend() === SECRET_BACKEND_PASSPHRASE) {
+    const passphrase = getPassphrase();
+    if (!passphrase) {
+      throw new Error('secrets_passphrase_missing');
+    }
+    const envelope = encryptStorePayload(next, passphrase);
+    fs.writeFileSync(secretPath, JSON.stringify(envelope, null, 2), { mode: SECRET_FILE_MODE });
+    const plainPath = getPlainSecretsPath();
+    if (fs.existsSync(plainPath) && process.env.OPENUNUM_SECRETS_KEEP_PLAINTEXT !== '1') {
+      try { fs.unlinkSync(plainPath); } catch {}
+    }
+  } else {
+    fs.writeFileSync(secretPath, JSON.stringify(next, null, 2), { mode: SECRET_FILE_MODE });
+  }
   try {
     fs.chmodSync(secretPath, SECRET_FILE_MODE);
   } catch {

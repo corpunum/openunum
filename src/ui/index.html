@@ -2391,8 +2391,10 @@ ${verificationSummary || preview}`)}</pre>`;
         renderProviderMatrix(authCatalog.providers || []);
         renderAuthMethodTable(authCatalog.auth_methods || []);
         const authById = Object.fromEntries((authCatalog.auth_methods || []).map((row) => [row.id, row]));
+        const secretStoreBackend = authCatalog.secret_store?.backend || 'plaintext';
+        const secretStoreLocked = authCatalog.secret_store?.locked ? 'locked' : 'ready';
         q('providerStatus').setAttribute('data-testid', 'provider-health');
-        q('providerStatus').textContent = `secure store=${authCatalog.secret_store_path || 'unknown'} | scanned=${Number(authCatalog.scanned_files?.length || 0)} | github_oauth=${authById.github?.cli?.authenticated ? 'active' : 'inactive'}`;
+        q('providerStatus').textContent = `secure store=${authCatalog.secret_store_path || 'unknown'} (${secretStoreBackend}/${secretStoreLocked}) | scanned=${Number(authCatalog.scanned_files?.length || 0)} | github_oauth=${authById.github?.cli?.authenticated ? 'active' : 'inactive'}`;
         return authCatalog;
       } catch (err) {
         console.error('refresh_auth_catalog_failed', err);

@@ -5,8 +5,9 @@ Config path:
 - override: `$OPENUNUM_HOME/openunum.json`
 
 Secret store path:
-- default: `~/.openunum/secrets.json`
-- override: `$OPENUNUM_HOME/secrets.json`
+- plaintext backend: `~/.openunum/secrets.json`
+- passphrase backend: `~/.openunum/secrets.enc.json`
+- override root: `$OPENUNUM_HOME/*`
 
 ## Schema (Current)
 
@@ -73,7 +74,17 @@ Secret store path:
 
 ## Secret Store
 
-Provider and integration credentials are stored separately from `openunum.json`:
+Provider and integration credentials are stored separately from `openunum.json`.
+
+Default backend is plaintext (`secrets.json`, mode `0600`).
+
+Optional passphrase backend:
+- set `OPENUNUM_SECRETS_BACKEND=passphrase`
+- set `OPENUNUM_SECRETS_PASSPHRASE=<strong passphrase>`
+- store writes encrypted envelope to `secrets.enc.json` (AES-256-GCM + scrypt)
+- plaintext file is removed after encrypted save (unless `OPENUNUM_SECRETS_KEEP_PLAINTEXT=1`)
+
+Plaintext format:
 
 ```json
 {
@@ -93,7 +104,7 @@ Provider and integration credentials are stored separately from `openunum.json`:
 }
 ```
 
-`secrets.json` is written with file mode `0600`.
+Both `secrets.json` and `secrets.enc.json` are written with file mode `0600`.
 
 ## Notes
 
