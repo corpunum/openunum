@@ -48,24 +48,25 @@ export async function handleHealthRoute({ req, res, url, ctx }) {
   }
 
   if (req.method === 'GET' && url.pathname === '/api/selfheal/status') {
-    const status = {
-      ok: true,
-      uptime: process.uptime(),
-      pendingChats: ctx.pendingChats.size,
-      telegramRunning: ctx.telegramLoopRunning(),
-      config: {
-        autonomyMode: ctx.config.runtime.autonomyMode,
-        shellEnabled: ctx.config.runtime.shellEnabled,
-        maxToolIterations: ctx.config.runtime.maxToolIterations
-      },
-      model: ctx.agent.getCurrentModel(),
-      browser: { cdpUrl: ctx.config.browser?.cdpUrl },
-      timestamp: new Date().toISOString()
-    };
+    const status = typeof ctx.selfHealStatus === 'function'
+      ? ctx.selfHealStatus()
+      : {
+        ok: true,
+        uptime: process.uptime(),
+        pendingChats: ctx.pendingChats.size,
+        telegramRunning: ctx.telegramLoopRunning(),
+        config: {
+          autonomyMode: ctx.config.runtime.autonomyMode,
+          shellEnabled: ctx.config.runtime.shellEnabled,
+          maxToolIterations: ctx.config.runtime.maxToolIterations
+        },
+        model: ctx.agent.getCurrentModel(),
+        browser: { cdpUrl: ctx.config.browser?.cdpUrl },
+        timestamp: new Date().toISOString()
+      };
     ctx.sendJson(res, 200, status);
     return true;
   }
 
   return false;
 }
-

@@ -90,6 +90,11 @@ Deliverables:
 - legacy compatibility shims only where needed
 - tests for the chosen surface
 
+Progress (2026-04-08):
+- Added canonical control-plane path `src/core/self-heal-orchestrator.mjs`.
+- `/api/self-heal*` + `/api/health` now route through the orchestrator in `src/server.mjs`.
+- Legacy modules remain for compatibility (`selfheal.mjs`, `self-heal.mjs`, `auto-recover.mjs`) and are next in line for deprecation shims.
+
 ## 6. Production Hardening
 
 Goal:

@@ -3,14 +3,13 @@ import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 import { spawn } from 'node:child_process';
-import { execSync } from 'node:child_process';
 import { marked } from 'marked';
 import sanitizeHtml from 'sanitize-html';
 import { loadConfig, saveConfig, defaultConfig } from './config.mjs';
 import { MemoryStore } from './memory/store.mjs';
 import { OpenUnumAgent } from './core/agent.mjs';
 import { MissionRunner } from './core/missions.mjs';
-import { SelfHealMonitor } from './core/selfheal.mjs';
+import { SelfHealOrchestrator } from './core/self-heal-orchestrator.mjs';
 import { getAutonomyMaster } from './core/autonomy-master.mjs';
 import { estimateMessagesTokens } from './core/context-budget.mjs';
 import { resolveExecutionEnvelope } from './core/model-execution-envelope.mjs';
@@ -149,7 +148,7 @@ const getOrStartChat = chatRuntime.getOrStartChat;
 const prunePendingChats = chatRuntime.prunePendingChats;
 
 const autonomyMaster = getAutonomyMaster({ config, agent, memoryStore: memory, browser, pendingChats });
-const selfHealMonitor = new SelfHealMonitor({ config, agent, browser, memory });
+const selfHeal = new SelfHealOrchestrator({ config, agent, browser, memory });
 const verifier = new IndependentVerifier();
 const API_ERROR_CONTRACT_VERSION = '2026-04-02.api-errors.v1';
 const TOOL_CATALOG_CONTRACT_VERSION = '2026-04-02.tool-catalog.v1';
@@ -556,89 +555,22 @@ function sendApiError(res, status, code, message, details = {}) {
 }
 
 async function runHealthCheck() {
-  // Use the SelfHealMonitor for comprehensive health checks
-  const result = await selfHealMonitor.runFullHealthCheck();
-  return result;
+  return selfHeal.runHealthCheck();
 }
 
 async function runSelfHeal(dryRun = false) {
-  const actions = [];
-  const results = [];
-
-  // Action 1: Check and fix config
-  try {
-    const cfg = loadConfig();
-    if (!cfg.runtime) {
-      actions.push({ action: 'fix_config_runtime', status: dryRun ? 'pending' : 'applied' });
-      if (!dryRun) {
-        cfg.runtime = defaultConfig().runtime;
-        saveConfig(cfg);
-      }
-      results.push({ action: 'fix_config_runtime', success: true });
-    } else {
-      results.push({ action: 'config_ok', success: true });
-    }
-  } catch (error) {
-    actions.push({ action: 'rebuild_config', status: dryRun ? 'pending' : 'applied' });
-    if (!dryRun) {
-      const newCfg = defaultConfig();
-      saveConfig(newCfg);
-    }
-    results.push({ action: 'rebuild_config', success: true });
-  }
-
-  // Action 2: Check browser CDP
-  try {
-    const status = await browser.status();
-    if (!status.ok) {
-      actions.push({ action: 'browser_cdp_unhealthy', status: 'needs_attention', details: status });
-      results.push({ action: 'browser_cdp_unhealthy', success: false, hint: 'Try /api/browser/launch' });
-    } else {
-      results.push({ action: 'browser_ok', success: true });
-    }
-  } catch (error) {
-    actions.push({ action: 'browser_cdp_error', status: 'error', error: String(error.message || error) });
-    results.push({ action: 'browser_cdp_error', success: false, hint: 'Check CDP URL in config' });
-  }
-
-  // Action 3: Check disk space
-  try {
-    const home = process.env.OPENUNUM_HOME || path.join(os.homedir(), '.openunum');
-    const dfOut = execSync(`df -h "${home}" 2>/dev/null || df -h /`, { encoding: 'utf8' });
-    const lines = dfOut.trim().split('\n');
-    if (lines.length >= 2) {
-      const parts = lines[1].split(/\s+/);
-      const usePercent = parseInt(parts[4] || '0', 10);
-      if (usePercent >= 90) {
-        actions.push({ action: 'disk_space_critical', usedPercent: usePercent, status: 'warning' });
-        results.push({ action: 'disk_space_critical', success: false, hint: 'Free up disk space' });
-      } else {
-        results.push({ action: 'disk_space_ok', usedPercent: usePercent, success: true });
-      }
-    }
-  } catch {
-    results.push({ action: 'disk_check_skipped', success: true });
-  }
-
-  // Action 4: Check pending chats
-  const pendingCount = pendingChats.size;
-  if (pendingCount > 10) {
-    actions.push({ action: 'pending_chats_high', count: pendingCount, status: 'warning' });
-    results.push({ action: 'pending_chats_high', success: false, hint: 'Wait for chats to complete or restart server' });
+  const result = await selfHeal.runSelfHeal(dryRun);
+  if (pendingChats.size > 10) {
+    result.actions = result.actions || [];
+    result.results = result.results || [];
+    result.actions.push({ action: 'pending_chats_high', count: pendingChats.size, status: 'warning' });
+    result.results.push({ action: 'pending_chats_high', success: false, hint: 'Wait for chats to complete or restart server' });
+    result.ok = false;
   } else {
-    results.push({ action: 'pending_chats_ok', count: pendingCount, success: true });
+    result.results = result.results || [];
+    result.results.push({ action: 'pending_chats_ok', count: pendingChats.size, success: true });
   }
-
-  // Action 5: Reload agent tools if config changed
-  if (actions.some(a => a.action.includes('config'))) {
-    actions.push({ action: 'reload_agent_tools', status: dryRun ? 'pending' : 'applied' });
-    if (!dryRun) {
-      agent.reloadTools();
-    }
-    results.push({ action: 'reload_agent_tools', success: !dryRun });
-  }
-
-  return { ok: results.every(r => r.success !== false), actions, results, dryRun };
+  return result;
 }
 
 const server = http.createServer(async (req, res) => {
@@ -663,6 +595,10 @@ const server = http.createServer(async (req, res) => {
         sendJson,
         runHealthCheck,
         runSelfHeal,
+        selfHealStatus: () => selfHeal.getStatus({
+          pendingChatsCount: pendingChats.size,
+          telegramRunning: telegramLoopRunning()
+        }),
         logInfo,
         telegramLoopRunning
       }

@@ -34,6 +34,14 @@ Date: 2026-04-07
 - `file_grep` regex state bug fixed (removed global flag to avoid missed matches across lines).
 - `web_search` Brave backend fixed to send proper query-string request and timeout-aware fetch.
 
+## Self-Heal Path Consolidation (Control Plane) (2026-04-08)
+
+**Status:** ✅ Implemented for server runtime paths
+
+- Added canonical orchestrator: `src/core/self-heal-orchestrator.mjs`.
+- Unified `/api/health`, `/api/self-heal`, `/api/self-heal/fix`, and `/api/selfheal/status` flow through the orchestrator.
+- Kept legacy modules in place for compatibility while reducing overlap in the active server path.
+
 ## Phase 1-3 Completion + Council Validation (2026-04-07)
 
 **Status:** ✅ Phase 1-3 Complete | 🟡 Phase 4 Planned
