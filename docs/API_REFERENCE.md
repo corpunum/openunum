@@ -187,6 +187,10 @@ or
 - `POST /api/autonomy/master/learn-skills`
 - `POST /api/autonomy/master/self-test`
 
+Validation notes:
+- Mutating autonomy endpoints that accept body payloads (`/api/autonomy/mode`, `/api/autonomy/workers/*`, `/api/autonomy/self-edit/run`, `/api/autonomy/model-scout/run`, `/api/autonomy/tasks/*`, `/api/autonomy/daemons/*`) require a JSON object body.
+- Invalid payload shape returns `400` with `error: "invalid_payload"`.
+
 ## Autonomous Workers
 
 - `GET /api/autonomy/workers?limit=80`
@@ -898,6 +902,11 @@ Error responses now follow:
 - `POST /api/skills/execute`
 - `POST /api/skills/uninstall`
 
+Validation notes:
+- Mutating skills endpoints require a JSON object payload.
+- `POST /api/skills/review`, `POST /api/skills/approve`, `POST /api/skills/execute`, and `POST /api/skills/uninstall` require `name`.
+- Invalid payload shape returns `400` with `error: "invalid_payload"`.
+
 ## Google Workspace / Email
 
 - `GET /api/email/status`
@@ -914,6 +923,10 @@ Email support is now implemented via native Google OAuth credentials stored in `
 - `GET /api/research/recent?limit=10`
 - `GET /api/research/queue?limit=50`
 - `POST /api/research/approve`
+
+Validation notes:
+- `POST /api/research/run` and `POST /api/research/approve` require a JSON object payload.
+- Invalid payload shape returns `400` with `error: "invalid_payload"`.
 
 ## Session History
 

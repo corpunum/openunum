@@ -7,6 +7,10 @@ import {
   getDaemonManager
 } from '../../core/autonomy-registry.mjs';
 
+function isPlainObject(value) {
+  return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
+}
+
 export async function handleAutonomyRoute({ req, res, url, ctx }) {
   if (req.method === 'GET' && url.pathname === '/api/autonomy/mode') {
     ctx.sendJson(res, 200, {
@@ -19,6 +23,10 @@ export async function handleAutonomyRoute({ req, res, url, ctx }) {
 
   if (req.method === 'POST' && url.pathname === '/api/autonomy/mode') {
     const body = await ctx.parseBody(req);
+    if (!isPlainObject(body)) {
+      ctx.sendJson(res, 400, { ok: false, error: 'invalid_payload' });
+      return true;
+    }
     const mode = ctx.applyAutonomyMode(body.mode);
     ctx.saveConfig(ctx.config);
     ctx.agent.reloadTools();
@@ -94,6 +102,10 @@ export async function handleAutonomyRoute({ req, res, url, ctx }) {
   if (req.method === 'POST' && url.pathname === '/api/autonomy/workers/start') {
     const orchestrator = getWorkerOrchestrator(ctx);
     const body = await ctx.parseBody(req);
+    if (!isPlainObject(body)) {
+      ctx.sendJson(res, 400, { ok: false, error: 'invalid_payload' });
+      return true;
+    }
     const out = orchestrator.startWorker(body || {});
     ctx.sendJson(res, out.ok ? 200 : 400, out);
     return true;
@@ -102,6 +114,10 @@ export async function handleAutonomyRoute({ req, res, url, ctx }) {
   if (req.method === 'POST' && url.pathname === '/api/autonomy/workers/stop') {
     const orchestrator = getWorkerOrchestrator(ctx);
     const body = await ctx.parseBody(req);
+    if (!isPlainObject(body)) {
+      ctx.sendJson(res, 400, { ok: false, error: 'invalid_payload' });
+      return true;
+    }
     const out = orchestrator.stopWorker(body?.id);
     ctx.sendJson(res, out.ok ? 200 : 404, out);
     return true;
@@ -110,6 +126,10 @@ export async function handleAutonomyRoute({ req, res, url, ctx }) {
   if (req.method === 'POST' && url.pathname === '/api/autonomy/workers/tick') {
     const orchestrator = getWorkerOrchestrator(ctx);
     const body = await ctx.parseBody(req);
+    if (!isPlainObject(body)) {
+      ctx.sendJson(res, 400, { ok: false, error: 'invalid_payload' });
+      return true;
+    }
     const out = await orchestrator.tickWorker(body?.id);
     ctx.sendJson(res, out.ok ? 200 : 404, out);
     return true;
@@ -137,6 +157,10 @@ export async function handleAutonomyRoute({ req, res, url, ctx }) {
   if (req.method === 'POST' && url.pathname === '/api/autonomy/self-edit/run') {
     const pipeline = getSelfEditPipeline(ctx);
     const body = await ctx.parseBody(req);
+    if (!isPlainObject(body)) {
+      ctx.sendJson(res, 400, { ok: false, error: 'invalid_payload' });
+      return true;
+    }
     const out = await pipeline.run(body || {});
     ctx.sendJson(res, out.ok ? 200 : 400, out);
     return true;
@@ -164,6 +188,10 @@ export async function handleAutonomyRoute({ req, res, url, ctx }) {
   if (req.method === 'POST' && url.pathname === '/api/autonomy/model-scout/run') {
     const workflow = getModelScoutWorkflow(ctx);
     const body = await ctx.parseBody(req);
+    if (!isPlainObject(body)) {
+      ctx.sendJson(res, 400, { ok: false, error: 'invalid_payload' });
+      return true;
+    }
     const out = await workflow.run(body || {});
     ctx.sendJson(res, out.ok ? 200 : 400, out);
     return true;
@@ -191,6 +219,10 @@ export async function handleAutonomyRoute({ req, res, url, ctx }) {
   if (req.method === 'POST' && url.pathname === '/api/autonomy/tasks/plan') {
     const planner = getGoalTaskPlanner(ctx);
     const body = await ctx.parseBody(req);
+    if (!isPlainObject(body)) {
+      ctx.sendJson(res, 400, { ok: false, error: 'invalid_payload' });
+      return true;
+    }
     const out = planner.plan(body || {});
     ctx.sendJson(res, out.ok ? 200 : 400, out);
     return true;
@@ -199,6 +231,10 @@ export async function handleAutonomyRoute({ req, res, url, ctx }) {
   if (req.method === 'POST' && url.pathname === '/api/autonomy/tasks/run') {
     const orchestrator = getTaskOrchestrator(ctx);
     const body = await ctx.parseBody(req);
+    if (!isPlainObject(body)) {
+      ctx.sendJson(res, 400, { ok: false, error: 'invalid_payload' });
+      return true;
+    }
     const out = await orchestrator.runTask(body || {});
     ctx.sendJson(res, out.ok ? 200 : 400, out);
     return true;
@@ -235,6 +271,10 @@ export async function handleAutonomyRoute({ req, res, url, ctx }) {
   if (req.method === 'POST' && url.pathname === '/api/autonomy/daemons/start') {
     const daemonManager = getDaemonManager(ctx);
     const body = await ctx.parseBody(req);
+    if (!isPlainObject(body)) {
+      ctx.sendJson(res, 400, { ok: false, error: 'invalid_payload' });
+      return true;
+    }
     const out = await daemonManager.startDaemon(body || {});
     ctx.sendJson(res, out.ok ? 200 : 400, out);
     return true;
@@ -243,6 +283,10 @@ export async function handleAutonomyRoute({ req, res, url, ctx }) {
   if (req.method === 'POST' && url.pathname === '/api/autonomy/daemons/stop') {
     const daemonManager = getDaemonManager(ctx);
     const body = await ctx.parseBody(req);
+    if (!isPlainObject(body)) {
+      ctx.sendJson(res, 400, { ok: false, error: 'invalid_payload' });
+      return true;
+    }
     const out = await daemonManager.stopDaemon(body?.id);
     ctx.sendJson(res, out.ok ? 200 : 404, out);
     return true;
@@ -251,6 +295,10 @@ export async function handleAutonomyRoute({ req, res, url, ctx }) {
   if (req.method === 'POST' && url.pathname === '/api/autonomy/daemons/restart') {
     const daemonManager = getDaemonManager(ctx);
     const body = await ctx.parseBody(req);
+    if (!isPlainObject(body)) {
+      ctx.sendJson(res, 400, { ok: false, error: 'invalid_payload' });
+      return true;
+    }
     const out = await daemonManager.restartDaemon(body?.id);
     ctx.sendJson(res, out.ok ? 200 : 404, out);
     return true;
@@ -259,6 +307,10 @@ export async function handleAutonomyRoute({ req, res, url, ctx }) {
   if (req.method === 'DELETE' && url.pathname === '/api/autonomy/daemons/remove') {
     const daemonManager = getDaemonManager(ctx);
     const body = await ctx.parseBody(req);
+    if (!isPlainObject(body)) {
+      ctx.sendJson(res, 400, { ok: false, error: 'invalid_payload' });
+      return true;
+    }
     const out = daemonManager.removeDaemon(body?.id);
     ctx.sendJson(res, out.ok ? 200 : 404, out);
     return true;

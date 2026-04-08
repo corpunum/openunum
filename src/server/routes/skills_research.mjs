@@ -1,3 +1,7 @@
+function isPlainObject(value) {
+  return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
+}
+
 export async function handleSkillsResearchRoute({ req, res, url, ctx }) {
   if (req.method === 'GET' && url.pathname === '/api/skills') {
     const out = await ctx.agent.runTool('skill_list', {});
@@ -7,6 +11,10 @@ export async function handleSkillsResearchRoute({ req, res, url, ctx }) {
 
   if (req.method === 'POST' && url.pathname === '/api/skills/install') {
     const body = await ctx.parseBody(req);
+    if (!isPlainObject(body)) {
+      ctx.sendJson(res, 400, { ok: false, error: 'invalid_payload' });
+      return true;
+    }
     const out = await ctx.agent.runTool('skill_install', body || {});
     ctx.sendJson(res, 200, out);
     return true;
@@ -14,28 +22,64 @@ export async function handleSkillsResearchRoute({ req, res, url, ctx }) {
 
   if (req.method === 'POST' && url.pathname === '/api/skills/review') {
     const body = await ctx.parseBody(req);
-    const out = await ctx.agent.runTool('skill_review', { name: body.name });
+    if (!isPlainObject(body)) {
+      ctx.sendJson(res, 400, { ok: false, error: 'invalid_payload' });
+      return true;
+    }
+    const name = String(body.name || '').trim();
+    if (!name) {
+      ctx.sendJson(res, 400, { ok: false, error: 'skill_name_required' });
+      return true;
+    }
+    const out = await ctx.agent.runTool('skill_review', { name });
     ctx.sendJson(res, 200, out);
     return true;
   }
 
   if (req.method === 'POST' && url.pathname === '/api/skills/approve') {
     const body = await ctx.parseBody(req);
-    const out = await ctx.agent.runTool('skill_approve', { name: body.name });
+    if (!isPlainObject(body)) {
+      ctx.sendJson(res, 400, { ok: false, error: 'invalid_payload' });
+      return true;
+    }
+    const name = String(body.name || '').trim();
+    if (!name) {
+      ctx.sendJson(res, 400, { ok: false, error: 'skill_name_required' });
+      return true;
+    }
+    const out = await ctx.agent.runTool('skill_approve', { name });
     ctx.sendJson(res, 200, out);
     return true;
   }
 
   if (req.method === 'POST' && url.pathname === '/api/skills/execute') {
     const body = await ctx.parseBody(req);
-    const out = await ctx.agent.runTool('skill_execute', { name: body.name, args: body.args || {} });
+    if (!isPlainObject(body)) {
+      ctx.sendJson(res, 400, { ok: false, error: 'invalid_payload' });
+      return true;
+    }
+    const name = String(body.name || '').trim();
+    if (!name) {
+      ctx.sendJson(res, 400, { ok: false, error: 'skill_name_required' });
+      return true;
+    }
+    const out = await ctx.agent.runTool('skill_execute', { name, args: body.args || {} });
     ctx.sendJson(res, 200, out);
     return true;
   }
 
   if (req.method === 'POST' && url.pathname === '/api/skills/uninstall') {
     const body = await ctx.parseBody(req);
-    const out = await ctx.agent.runTool('skill_uninstall', { name: body.name });
+    if (!isPlainObject(body)) {
+      ctx.sendJson(res, 400, { ok: false, error: 'invalid_payload' });
+      return true;
+    }
+    const name = String(body.name || '').trim();
+    if (!name) {
+      ctx.sendJson(res, 400, { ok: false, error: 'skill_name_required' });
+      return true;
+    }
+    const out = await ctx.agent.runTool('skill_uninstall', { name });
     ctx.sendJson(res, 200, out);
     return true;
   }
@@ -48,6 +92,10 @@ export async function handleSkillsResearchRoute({ req, res, url, ctx }) {
 
   if (req.method === 'POST' && url.pathname === '/api/email/send') {
     const body = await ctx.parseBody(req);
+    if (!isPlainObject(body)) {
+      ctx.sendJson(res, 400, { ok: false, error: 'invalid_payload' });
+      return true;
+    }
     const out = await ctx.agent.runTool('email_send', body || {});
     ctx.sendJson(res, 200, out);
     return true;
@@ -55,6 +103,10 @@ export async function handleSkillsResearchRoute({ req, res, url, ctx }) {
 
   if (req.method === 'POST' && url.pathname === '/api/email/list') {
     const body = await ctx.parseBody(req);
+    if (!isPlainObject(body)) {
+      ctx.sendJson(res, 400, { ok: false, error: 'invalid_payload' });
+      return true;
+    }
     const out = await ctx.agent.runTool('email_list', body || {});
     ctx.sendJson(res, 200, out);
     return true;
@@ -62,6 +114,10 @@ export async function handleSkillsResearchRoute({ req, res, url, ctx }) {
 
   if (req.method === 'POST' && url.pathname === '/api/email/read') {
     const body = await ctx.parseBody(req);
+    if (!isPlainObject(body)) {
+      ctx.sendJson(res, 400, { ok: false, error: 'invalid_payload' });
+      return true;
+    }
     const out = await ctx.agent.runTool('email_read', body || {});
     ctx.sendJson(res, 200, out);
     return true;
@@ -69,6 +125,10 @@ export async function handleSkillsResearchRoute({ req, res, url, ctx }) {
 
   if (req.method === 'POST' && url.pathname === '/api/gworkspace/call') {
     const body = await ctx.parseBody(req);
+    if (!isPlainObject(body)) {
+      ctx.sendJson(res, 400, { ok: false, error: 'invalid_payload' });
+      return true;
+    }
     const out = await ctx.agent.runTool('gworkspace_call', body || {});
     ctx.sendJson(res, 200, out);
     return true;
@@ -76,6 +136,10 @@ export async function handleSkillsResearchRoute({ req, res, url, ctx }) {
 
   if (req.method === 'POST' && url.pathname === '/api/research/run') {
     const body = await ctx.parseBody(req);
+    if (!isPlainObject(body)) {
+      ctx.sendJson(res, 400, { ok: false, error: 'invalid_payload' });
+      return true;
+    }
     const out = await ctx.agent.runTool('research_run_daily', { simulate: Boolean(body?.simulate) });
     ctx.sendJson(res, 200, out);
     return true;
@@ -99,6 +163,10 @@ export async function handleSkillsResearchRoute({ req, res, url, ctx }) {
 
   if (req.method === 'POST' && url.pathname === '/api/research/approve') {
     const body = await ctx.parseBody(req);
+    if (!isPlainObject(body)) {
+      ctx.sendJson(res, 400, { ok: false, error: 'invalid_payload' });
+      return true;
+    }
     const out = await ctx.agent.runTool('research_approve', {
       url: String(body?.url || ''),
       note: String(body?.note || '')
@@ -109,4 +177,3 @@ export async function handleSkillsResearchRoute({ req, res, url, ctx }) {
 
   return false;
 }
-
