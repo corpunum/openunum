@@ -1,3 +1,7 @@
+function isPlainObject(value) {
+  return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
+}
+
 export async function handleBrowserRoute({ req, res, url, ctx }) {
   if (req.method === 'GET' && url.pathname === '/api/browser/status') {
     const out = await ctx.getBrowser().status();
@@ -7,18 +11,40 @@ export async function handleBrowserRoute({ req, res, url, ctx }) {
 
   if (req.method === 'POST' && url.pathname === '/api/browser/navigate') {
     const body = await ctx.parseBody(req);
-    ctx.sendJson(res, 200, await ctx.getBrowser().navigate(body.url));
+    if (!isPlainObject(body)) {
+      ctx.sendJson(res, 400, { ok: false, error: 'invalid_payload' });
+      return true;
+    }
+    const targetUrl = String(body.url || '').trim();
+    if (!targetUrl) {
+      ctx.sendJson(res, 400, { ok: false, error: 'url_required' });
+      return true;
+    }
+    ctx.sendJson(res, 200, await ctx.getBrowser().navigate(targetUrl));
     return true;
   }
 
   if (req.method === 'POST' && url.pathname === '/api/browser/search') {
     const body = await ctx.parseBody(req);
-    ctx.sendJson(res, 200, await ctx.getBrowser().search(body.query));
+    if (!isPlainObject(body)) {
+      ctx.sendJson(res, 400, { ok: false, error: 'invalid_payload' });
+      return true;
+    }
+    const query = String(body.query || '').trim();
+    if (!query) {
+      ctx.sendJson(res, 400, { ok: false, error: 'query_required' });
+      return true;
+    }
+    ctx.sendJson(res, 200, await ctx.getBrowser().search(query));
     return true;
   }
 
   if (req.method === 'POST' && url.pathname === '/api/browser/extract') {
     const body = await ctx.parseBody(req);
+    if (!isPlainObject(body)) {
+      ctx.sendJson(res, 400, { ok: false, error: 'invalid_payload' });
+      return true;
+    }
     ctx.sendJson(res, 200, await ctx.getBrowser().extractText(body.selector || 'body'));
     return true;
   }
@@ -30,6 +56,10 @@ export async function handleBrowserRoute({ req, res, url, ctx }) {
 
   if (req.method === 'POST' && url.pathname === '/api/browser/config') {
     const body = await ctx.parseBody(req);
+    if (!isPlainObject(body)) {
+      ctx.sendJson(res, 400, { ok: false, error: 'invalid_payload' });
+      return true;
+    }
     if (!ctx.config.browser) ctx.config.browser = {};
     if (typeof body.cdpUrl === 'string' && body.cdpUrl.trim()) {
       ctx.config.browser.cdpUrl = body.cdpUrl.trim();
@@ -49,4 +79,3 @@ export async function handleBrowserRoute({ req, res, url, ctx }) {
 
   return false;
 }
-

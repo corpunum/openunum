@@ -1,3 +1,7 @@
+function isPlainObject(value) {
+  return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
+}
+
 export async function handleSessionsRoute({ req, res, url, ctx }) {
   const getRuntimeState = ({ sessionId = '', goal = '', phase = 'phase0', nextAction = '' } = {}) => {
     if (typeof ctx.buildRuntimeStateAttachment !== 'function') return null;
@@ -12,6 +16,10 @@ export async function handleSessionsRoute({ req, res, url, ctx }) {
 
   if (req.method === 'POST' && url.pathname === '/api/sessions') {
     const body = await ctx.parseBody(req);
+    if (!isPlainObject(body)) {
+      ctx.sendApiError(res, 400, 'invalid_payload', 'body must be a JSON object');
+      return true;
+    }
     const sessionId = String(body?.sessionId || '').trim();
     if (!sessionId) {
       ctx.sendApiError(res, 400, 'session_id_required', 'sessionId is required');
@@ -32,8 +40,17 @@ export async function handleSessionsRoute({ req, res, url, ctx }) {
 
   if (req.method === 'POST' && url.pathname === '/api/sessions/import') {
     const body = await ctx.parseBody(req);
+    if (!isPlainObject(body)) {
+      ctx.sendApiError(res, 400, 'invalid_payload', 'body must be a JSON object');
+      return true;
+    }
+    const sessionId = String(body?.sessionId || '').trim();
+    if (!sessionId) {
+      ctx.sendApiError(res, 400, 'session_id_required', 'sessionId is required');
+      return true;
+    }
     const imported = ctx.memory.importSession({
-      sessionId: String(body?.sessionId || '').trim(),
+      sessionId,
       messages: Array.isArray(body?.messages) ? body.messages : []
     });
     ctx.sendJson(res, 200, {
@@ -41,7 +58,7 @@ export async function handleSessionsRoute({ req, res, url, ctx }) {
       session: imported,
       runtimeState: getRuntimeState({
         sessionId: String(imported?.sessionId || body?.sessionId || '').trim(),
-        goal: `session-import:${String(imported?.sessionId || body?.sessionId || '').trim()}`,
+        goal: `session-import:${String(imported?.sessionId || sessionId).trim()}`,
         nextAction: 'Validate imported session and continue'
       })
     });
@@ -50,9 +67,19 @@ export async function handleSessionsRoute({ req, res, url, ctx }) {
 
   if (req.method === 'POST' && url.pathname === '/api/sessions/clone') {
     const body = await ctx.parseBody(req);
+    if (!isPlainObject(body)) {
+      ctx.sendApiError(res, 400, 'invalid_payload', 'body must be a JSON object');
+      return true;
+    }
+    const sourceSessionId = String(body?.sourceSessionId || '').trim();
+    const targetSessionId = String(body?.targetSessionId || '').trim();
+    if (!sourceSessionId || !targetSessionId) {
+      ctx.sendApiError(res, 400, 'session_clone_ids_required', 'sourceSessionId and targetSessionId are required');
+      return true;
+    }
     const session = ctx.memory.cloneSession({
-      sourceSessionId: String(body?.sourceSessionId || '').trim(),
-      targetSessionId: String(body?.targetSessionId || '').trim()
+      sourceSessionId,
+      targetSessionId
     });
     ctx.sendJson(res, 200, {
       ok: true,
@@ -68,6 +95,10 @@ export async function handleSessionsRoute({ req, res, url, ctx }) {
 
   if (req.method === 'POST' && url.pathname === '/api/sessions/clear') {
     const body = await ctx.parseBody(req);
+    if (!isPlainObject(body)) {
+      ctx.sendApiError(res, 400, 'invalid_payload', 'body must be a JSON object');
+      return true;
+    }
     const keepSessionId = String(body?.keepSessionId || '').trim();
     const force = Boolean(body?.force);
     const operationId = String(body?.operationId || '').trim();

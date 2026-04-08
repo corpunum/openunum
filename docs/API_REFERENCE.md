@@ -716,6 +716,11 @@ Use that endpoint only when the automatic callback/browser flow does not complet
 }
 ```
 
+Validation notes:
+- Mutating auth endpoints require JSON object payloads.
+- Invalid payload shape returns `400` with `error: "invalid_payload"`.
+- Required-field errors return `400` with endpoint-specific codes (for example `provider_required`, `service_required`, `auth_job_id_required`).
+
 ## Model Runtime
 
 - `GET /api/model/current`
@@ -857,6 +862,12 @@ Payload:
 - `force` (optional boolean; allows clearing all sessions when `keepSessionId` is empty)
 - `operationId` (optional string for idempotent replay-safe destructive operations)
 
+Validation notes:
+- Session mutating endpoints require JSON object payloads.
+- `POST /api/sessions` requires `sessionId`.
+- `POST /api/sessions/import` requires `sessionId`.
+- `POST /api/sessions/clone` requires both `sourceSessionId` and `targetSessionId`.
+
 `DELETE /api/sessions/:sessionId` deletes one session and all session-scoped history rows.
 - optional query param: `operationId=<id>`
 
@@ -982,6 +993,11 @@ Schedule update payload (partial):
 - `POST /api/browser/config`
 - `POST /api/browser/launch`
 
+Validation notes:
+- `POST /api/browser/navigate` requires `url`.
+- `POST /api/browser/search` requires `query`.
+- Mutating browser endpoints require JSON object payloads; invalid shape returns `400` with `error: "invalid_payload"`.
+
 ## Telegram
 
 - `GET /api/telegram/config`
@@ -989,6 +1005,9 @@ Schedule update payload (partial):
 - `GET /api/telegram/status`
 - `POST /api/telegram/start`
 - `POST /api/telegram/stop`
+
+Validation notes:
+- `POST /api/telegram/config` requires a JSON object payload; invalid shape returns `400` with `error: "invalid_payload"`.
 
 ## UI
 

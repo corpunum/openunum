@@ -1,3 +1,7 @@
+function isPlainObject(value) {
+  return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
+}
+
 export async function handleTelegramRoute({ req, res, url, ctx }) {
   if (req.method === 'GET' && url.pathname === '/api/telegram/config') {
     ctx.reloadConfigSecrets();
@@ -8,6 +12,10 @@ export async function handleTelegramRoute({ req, res, url, ctx }) {
 
   if (req.method === 'POST' && url.pathname === '/api/telegram/config') {
     const body = await ctx.parseBody(req);
+    if (!isPlainObject(body)) {
+      ctx.sendJson(res, 400, { ok: false, error: 'invalid_payload' });
+      return true;
+    }
     const tg = ctx.config.channels.telegram || {};
     const secretUpdates = {};
     if (typeof body.botToken === 'string') secretUpdates.telegramBotToken = body.botToken.trim();
@@ -42,4 +50,3 @@ export async function handleTelegramRoute({ req, res, url, ctx }) {
 
   return false;
 }
-

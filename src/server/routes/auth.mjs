@@ -1,3 +1,7 @@
+function isPlainObject(value) {
+  return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
+}
+
 export async function handleAuthRoute({ req, res, url, ctx }) {
   if (req.method === 'GET' && url.pathname === '/api/auth/catalog') {
     ctx.sendJson(res, 200, await ctx.buildAuthCatalogPayload(ctx.memoryStore));
@@ -6,6 +10,10 @@ export async function handleAuthRoute({ req, res, url, ctx }) {
 
   if (req.method === 'POST' && url.pathname === '/api/auth/catalog') {
     const body = await ctx.parseBody(req);
+    if (!isPlainObject(body)) {
+      ctx.sendJson(res, 400, { ok: false, error: 'invalid_payload', details: [{ field: 'body', issue: 'expected JSON object' }] });
+      return true;
+    }
     const providerBaseUrls = body?.providerBaseUrls || {};
     const secretUpdates = body?.secrets || {};
     const oauthConfig = body?.oauthConfig || {};
@@ -36,6 +44,10 @@ export async function handleAuthRoute({ req, res, url, ctx }) {
 
   if (req.method === 'POST' && url.pathname === '/api/auth/prefill-local') {
     const body = await ctx.parseBody(req);
+    if (!isPlainObject(body)) {
+      ctx.sendJson(res, 400, { ok: false, error: 'invalid_payload', details: [{ field: 'body', issue: 'expected JSON object' }] });
+      return true;
+    }
     const scan = ctx.scanLocalAuthSources();
     const overwriteBaseUrls = body?.overwriteBaseUrls === true;
     ctx.persistSecretUpdates(scan.secrets);
@@ -66,6 +78,14 @@ export async function handleAuthRoute({ req, res, url, ctx }) {
 
   if (req.method === 'POST' && url.pathname === '/api/provider/test') {
     const body = await ctx.parseBody(req);
+    if (!isPlainObject(body)) {
+      ctx.sendJson(res, 400, { ok: false, error: 'invalid_payload', details: [{ field: 'body', issue: 'expected JSON object' }] });
+      return true;
+    }
+    if (!String(body.provider || '').trim()) {
+      ctx.sendJson(res, 400, { ok: false, error: 'provider_required' });
+      return true;
+    }
     const connection = ctx.providerConnectionOverrides(body.provider, body);
     try {
       ctx.sendJson(res, 200, await ctx.testProviderConnection(connection));
@@ -82,10 +102,19 @@ export async function handleAuthRoute({ req, res, url, ctx }) {
 
   if (req.method === 'POST' && url.pathname === '/api/service/test') {
     const body = await ctx.parseBody(req);
+    if (!isPlainObject(body)) {
+      ctx.sendJson(res, 400, { ok: false, error: 'invalid_payload', details: [{ field: 'body', issue: 'expected JSON object' }] });
+      return true;
+    }
+    const service = String(body.service || '').trim().toLowerCase();
+    if (!service) {
+      ctx.sendJson(res, 400, { ok: false, error: 'service_required' });
+      return true;
+    }
     try {
       ctx.sendJson(res, 200, await ctx.testServiceConnection({
         service: body.service,
-        secret: ctx.secretForService(String(body.service || '').trim().toLowerCase(), body.secret)
+        secret: ctx.secretForService(service, body.secret)
       }));
     } catch (error) {
       ctx.sendJson(res, 200, {
@@ -154,6 +183,14 @@ export async function handleAuthRoute({ req, res, url, ctx }) {
 
   if (req.method === 'POST' && url.pathname === '/api/auth/job/input') {
     const body = await ctx.parseBody(req);
+    if (!isPlainObject(body)) {
+      ctx.sendJson(res, 400, { ok: false, error: 'invalid_payload', details: [{ field: 'body', issue: 'expected JSON object' }] });
+      return true;
+    }
+    if (!String(body?.id || '').trim()) {
+      ctx.sendJson(res, 400, { ok: false, error: 'auth_job_id_required' });
+      return true;
+    }
     const out = ctx.completeAuthJob(body?.id, body?.input);
     const code = out.ok ? 200 : 404;
     ctx.sendJson(res, code, out);
@@ -162,7 +199,15 @@ export async function handleAuthRoute({ req, res, url, ctx }) {
 
   if (req.method === 'POST' && url.pathname === '/api/service/connect') {
     const body = await ctx.parseBody(req);
+    if (!isPlainObject(body)) {
+      ctx.sendJson(res, 400, { ok: false, error: 'invalid_payload', details: [{ field: 'body', issue: 'expected JSON object' }] });
+      return true;
+    }
     const service = String(body?.service || '').trim().toLowerCase();
+    if (!service) {
+      ctx.sendJson(res, 400, { ok: false, error: 'service_required' });
+      return true;
+    }
     if (service === 'openai-oauth') {
       ctx.sendJson(res, 200, await ctx.startOpenAICodexOAuthJob());
       return true;
