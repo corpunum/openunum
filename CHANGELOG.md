@@ -4,6 +4,20 @@ All notable changes to OpenUnum are documented in this file.
 
 ---
 
+## [2.3.9] - 2026-04-08
+
+### Added
+- New browser regression phase `phase42.webui-routing-auth.e2e.mjs`:
+  - validates `Model Routing` save action wiring (`POST /api/config`)
+  - validates `Service Vault` modal open/save wiring (`POST /api/auth/catalog`)
+
+### Changed
+- CI WebUI Playwright gate now runs both:
+  - `pnpm phase39:e2e`
+  - `pnpm phase42:e2e`
+
+---
+
 ## [2.3.8] - 2026-04-08
 
 ### Added

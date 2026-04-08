@@ -63,6 +63,7 @@ This guide will help you understand:
 - `pnpm phase39:e2e` — Browser-level WebUI interaction checks (Provider Vault modal/actions + Missions create/load/stop wiring)
 - `pnpm phase40:e2e` — Origin/request-marker guard regression for browser mutating control-plane requests
 - `pnpm phase41:e2e` — CLI operator API-surface regression (runtime/providers/auth/missions/sessions)
+- `pnpm phase42:e2e` — Browser regression for model-routing save + service-vault modal/save flow wiring
 - `GET /api/runtime/state-contract` — Returns canonical runtime packet + validation status
 - `GET /api/runtime/config-parity` — Returns provider matrix + warnings/errors
 

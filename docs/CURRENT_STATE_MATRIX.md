@@ -11,7 +11,7 @@ This matrix is the quick trust checkpoint for code, tests, docs, and CI.
 | CLI operator surface | `src/cli.mjs` | Active (local + API-bridge commands) |
 | API contract docs | `docs/API_REFERENCE.md` | Updated to implemented endpoints + planned section |
 | Onboarding docs | `README.md`, `docs/INDEX.md`, `docs/AGENT_ONBOARDING.md` | Updated for council-size/phase status consistency |
-| CI baseline gates | `.github/workflows/phase-gates.yml` | Expanded (unit, smoke, UI smoke, imitation, core e2e + phase39/40/41, phase0 gates, runtime-surface gate, route-wiring gate, ui-surface gate) |
+| CI baseline gates | `.github/workflows/phase-gates.yml` | Expanded (unit, smoke, UI smoke, imitation, core e2e + phase39/40/41/42, phase0 gates, runtime-surface gate, route-wiring gate, ui-surface gate) |
 | Known architectural debt | polling-first UI + oversized `index.html` | Open |
 
 ## Minimum Local Trust Gate

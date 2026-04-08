@@ -21,6 +21,7 @@ Comprehensive testing documentation for the OpenUnum project.
 | **WebUI Browser E2E** | `npm run phase39:e2e` | Real browser interaction checks for Provider Vault modal/actions and Missions create/load/stop wiring |
 | **Origin Guard E2E** | `npm run phase40:e2e` | Verifies same-origin loopback + request-marker protection on browser mutating control-plane requests |
 | **CLI Operator E2E** | `npm run phase41:e2e` | Verifies CLI runtime/providers/auth/missions/sessions API-bridge commands against a live test server |
+| **WebUI Routing/Auth E2E** | `npm run phase42:e2e` | Browser interaction regression for model-routing save flow and service-vault modal/save wiring |
 | **All** | `npm run test:all` | Run complete test battery |
 
 ## Quick Start
@@ -142,6 +143,7 @@ npm run test:e2e
 npm run phase39:e2e
 npm run phase40:e2e
 npm run phase41:e2e
+npm run phase42:e2e
 npm run test:smoke
 npm run test:smoke:live
 npm run test:imitation
