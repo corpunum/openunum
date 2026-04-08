@@ -80,7 +80,7 @@ Read in this exact order:
 - **Phase 1-4 Status:** ✅ Complete
 - **Council Maturity:** 🟡 Amber (see latest report links in docs index)
 - **Next Milestone:** production hardening and runtime/API canonicalization
-- **Test Coverage:** 45+ unit, 37 E2E phases, 8 smoke scripts
+- **Test Coverage:** 45+ unit, 39 E2E phases, 8 smoke scripts (+ browser-interaction phase gate)
 
 ## Commands
 

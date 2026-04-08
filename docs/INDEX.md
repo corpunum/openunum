@@ -21,7 +21,7 @@ This folder is optimized for fast machine onboarding (fresh agent session, no pr
 14. [ULTIMATE_AUTONOMY_MODEL.md](ULTIMATE_AUTONOMY_MODEL.md)
 15. [SKILLS_EMAIL_RESEARCH.md](SKILLS_EMAIL_RESEARCH.md)
 16. [CONTEXT_COMPACTION.md](CONTEXT_COMPACTION.md)
-17. [PROJECT_STATE_SNAPSHOT.md](PROJECT_STATE_SNAPSHOT.md) — Current state + Council results
+17. [CURRENT_STATE_MATRIX.md](CURRENT_STATE_MATRIX.md) — Canonical code/tests/docs/CI trust checkpoint
 18. [SERVER_REFACTOR_BLUEPRINT.md](SERVER_REFACTOR_BLUEPRINT.md)
 19. [CHANGELOG_CURRENT.md](CHANGELOG_CURRENT.md) — Recent changes
 20. [MODEL_AWARE_CONTROLLER.md](MODEL_AWARE_CONTROLLER.md)
@@ -41,7 +41,7 @@ This folder is optimized for fast machine onboarding (fresh agent session, no pr
 34. [OPENUNUM_AUDIT_STATUS_2026-04-08.md](OPENUNUM_AUDIT_STATUS_2026-04-08.md) — Verified consolidated audit checklist + cleanup/test phased plan
 35. [PHASES_MASTER_PLAN_2026-04-08.md](PHASES_MASTER_PLAN_2026-04-08.md) — Canonical remaining phases plan and execution status
 36. [PHASES_COMPLETION_REPORT_2026-04-08.md](PHASES_COMPLETION_REPORT_2026-04-08.md) — Final closure evidence for all post-audit phases
-37. [CURRENT_STATE_MATRIX.md](CURRENT_STATE_MATRIX.md) — Code/tests/docs/CI trust checkpoint
+37. [PROJECT_STATE_SNAPSHOT.md](PROJECT_STATE_SNAPSHOT.md) — Historical 2026-04-07 snapshot (non-canonical)
 
 ## Legacy Planning Docs
 

@@ -59,6 +59,7 @@ This guide will help you understand:
 - `pnpm test:smoke:live` — Smoke against current running service (deployment verification)
 - `pnpm test:imitation` — Session-imitation regression replay from real chat patterns
 - `pnpm phase10:e2e && pnpm phase11:e2e` — WebUI/provider-contract checks (provider matrix + required UI markers)
+- `pnpm phase39:e2e` — Browser-level WebUI interaction checks (Provider Vault modal/actions + Missions create/load/stop wiring)
 - `GET /api/runtime/state-contract` — Returns canonical runtime packet + validation status
 - `GET /api/runtime/config-parity` — Returns provider matrix + warnings/errors
 

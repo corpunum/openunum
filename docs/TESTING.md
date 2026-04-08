@@ -17,6 +17,7 @@ Comprehensive testing documentation for the OpenUnum project.
 | **Packet Budget Gate** | `npm run gate:packet-budget` | Fails when runtime/context packet budgets exceed configured limits |
 | **Runtime Surface Contract Gate** | `npm run gate:runtime-surface-contract` | Fails when new server API literals are missing from `docs/API_REFERENCE.md` |
 | **Route Wiring Gate** | `npm run gate:route-wiring` | Fails when any `src/server/routes/*.mjs` module is not both imported and invoked by `src/server.mjs` |
+| **WebUI Browser E2E** | `npm run phase39:e2e` | Real browser interaction checks for Provider Vault modal/actions and Missions create/load/stop wiring |
 | **All** | `npm run test:all` | Run complete test battery |
 
 ## Quick Start
@@ -135,6 +136,7 @@ npm run test:all
 # Specific suites
 npm run test:unit
 npm run test:e2e
+npm run phase39:e2e
 npm run test:smoke
 npm run test:smoke:live
 npm run test:imitation
@@ -232,6 +234,14 @@ smokeTest();
 | `OPENUNUM_API_URL` | `http://127.0.0.1:18880` | API server URL |
 | `NODE_ENV` | `development` | Environment mode |
 | `TEST_VERBOSE` | `false` | Enable verbose output |
+
+### Browser E2E Prerequisite
+
+Install Chromium for Playwright once per machine:
+
+```bash
+pnpm exec playwright install chromium
+```
 
 ## Troubleshooting
 

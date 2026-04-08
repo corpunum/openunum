@@ -46,6 +46,12 @@ jobs:
       - name: Core E2E Contracts
         run: pnpm phase0:e2e && pnpm phase6:e2e && pnpm phase10:e2e && pnpm phase11:e2e
 
+      - name: Install Playwright Chromium
+        run: pnpm exec playwright install --with-deps chromium
+
+      - name: WebUI Browser E2E (Playwright)
+        run: pnpm phase39:e2e
+
       - name: Phase0 Foundation Check
         run: pnpm phase0:check
 

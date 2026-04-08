@@ -4,6 +4,20 @@ All notable changes to OpenUnum are documented in this file.
 
 ---
 
+## [2.3.5] - 2026-04-08
+
+### Added
+- Browser-level WebUI regression phase: `phase39:e2e` (`tests/phase39.webui-interactions.e2e.mjs`).
+  - Real click-path coverage for Provider Vault modal/open-hide-add row flows.
+  - Real click-path coverage for Missions create/load/stop wiring (API interception to avoid model-heavy mission execution in UI interaction tests).
+
+### Changed
+- CI phase gates now install Playwright Chromium and run `pnpm phase39:e2e`.
+- `pnpm e2e` chain now includes `pnpm phase39:e2e`.
+- Docs/testing/onboarding indices updated to include the new browser E2E gate and to mark `PROJECT_STATE_SNAPSHOT.md` as historical-only.
+
+---
+
 ## [2.3.4] - 2026-04-08
 
 ### Fixed

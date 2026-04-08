@@ -1,5 +1,8 @@
 # Project State Snapshot
 
+> Historical snapshot only (captured 2026-04-07).  
+> Canonical current status lives in `docs/CURRENT_STATE_MATRIX.md` and `docs/PHASES_COMPLETION_REPORT_2026-04-08.md`.
+
 Snapshot date: 2026-04-07  
 **Phase:** Phase 1-3 Complete ✅ | Phase 4 Planned 🟡
 

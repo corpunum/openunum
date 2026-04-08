@@ -4,7 +4,7 @@ Purpose: curated file map for autonomous code/docs self-reading and update workf
 
 ## Core Runtime
 
-- ✅ `src/core/agent.mjs` (2173 lines)
+- ✅ `src/core/agent.mjs` (2285 lines)
 - ✅ `src/core/context-compiler.mjs` (333 lines)
 - ✅ `src/core/working-memory.mjs` (724 lines)
 - ✅ `src/core/role-mode-router.mjs` (53 lines)
@@ -12,7 +12,7 @@ Purpose: curated file map for autonomous code/docs self-reading and update workf
 
 ## Server Surface
 
-- ✅ `src/server.mjs` (1141 lines)
+- ✅ `src/server.mjs` (1135 lines)
 - ✅ `src/server/routes/health.mjs` (73 lines)
 - ✅ `src/server/services/auth_service.mjs` (402 lines)
 
@@ -20,20 +20,20 @@ Purpose: curated file map for autonomous code/docs self-reading and update workf
 
 - ✅ `src/secrets/store.mjs` (813 lines)
 - ✅ `docs/CONFIG_SCHEMA.md` (123 lines)
-- ✅ `docs/API_REFERENCE.md` (1030 lines)
+- ✅ `docs/API_REFERENCE.md` (1037 lines)
 
 ## Testing and Gates
 
-- ✅ `docs/TESTING.md` (277 lines)
+- ✅ `docs/TESTING.md` (291 lines)
 - ✅ `scripts/docs-completion-gate.mjs` (50 lines)
-- ✅ `scripts/smoke-isolated.mjs` (89 lines)
+- ✅ `scripts/smoke-isolated.mjs` (91 lines)
 - ✅ `scripts/session-imitation-regression.mjs` (84 lines)
 
 ## Operations and Roadmap
 
-- ✅ `README.md` (119 lines)
+- ✅ `README.md` (122 lines)
 - ✅ `BRAIN.MD` (192 lines)
-- ✅ `docs/AGENT_ONBOARDING.md` (409 lines)
+- ✅ `docs/AGENT_ONBOARDING.md` (410 lines)
 - ✅ `docs/ROADMAP.md` (165 lines)
-- ✅ `CHANGELOG.md` (334 lines)
+- ✅ `CHANGELOG.md` (411 lines)
 
