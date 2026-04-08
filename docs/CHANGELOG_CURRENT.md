@@ -2,6 +2,38 @@
 
 Date: 2026-04-07
 
+## Fast Awareness Routing + Deterministic Smoke Runner (2026-04-08)
+
+**Status:** ✅ Implemented and test-gated
+
+### Runtime and Tooling
+
+- Added `FastAwarenessRouter` integration in `src/core/agent.mjs` for:
+  - fast-path task-meta handling
+  - routing-aware tool allowlist narrowing
+  - telemetry + learning outcome recording
+- Added deep-inspect/external search tool surfaces to runtime:
+  - `src/tools/file-search.mjs` (`file_search`, `file_grep`, `file_info`)
+  - `src/tools/web-search.mjs` (`web_search`, `web_fetch`)
+- Fixed runtime correctness issues in the WIP integration:
+  - resolved use-before-declare and trace shadowing in agent turn flow
+  - corrected routed tool filtering to use canonical `tool` keys
+  - ensured context pack uses post-routing tool list
+
+### Smoke Gate Reliability
+
+- Added isolated smoke runner:
+  - `scripts/smoke-isolated.mjs`
+- Updated smoke command contracts:
+  - `pnpm test:smoke` now runs isolated smoke by default
+  - `pnpm test:smoke:live` targets a running deployment
+- Updated `scripts/smoke-check.mjs` to support `OPENUNUM_EXPECTED_PORT`.
+
+### Bug Fixes
+
+- `file_grep` regex state bug fixed (removed global flag to avoid missed matches across lines).
+- `web_search` Brave backend fixed to send proper query-string request and timeout-aware fetch.
+
 ## Phase 1-3 Completion + Council Validation (2026-04-07)
 
 **Status:** ✅ Phase 1-3 Complete | 🟡 Phase 4 Planned

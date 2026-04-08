@@ -1,6 +1,6 @@
 export async function handleAuthRoute({ req, res, url, ctx }) {
   if (req.method === 'GET' && url.pathname === '/api/auth/catalog') {
-    ctx.sendJson(res, 200, await ctx.buildAuthCatalogPayload());
+    ctx.sendJson(res, 200, await ctx.buildAuthCatalogPayload(ctx.memoryStore));
     return true;
   }
 
@@ -28,7 +28,7 @@ export async function handleAuthRoute({ req, res, url, ctx }) {
 
     ctx.sendJson(res, 200, {
       ok: true,
-      catalog: await ctx.buildAuthCatalogPayload()
+      catalog: await ctx.buildAuthCatalogPayload(ctx.memoryStore)
     });
     return true;
   }
@@ -56,7 +56,7 @@ export async function handleAuthRoute({ req, res, url, ctx }) {
         telegramBotToken: Boolean(scan.secrets.telegramBotToken)
       },
       scannedFiles: scan.filesScanned,
-      catalog: await ctx.buildAuthCatalogPayload()
+      catalog: await ctx.buildAuthCatalogPayload(ctx.memoryStore)
     });
     return true;
   }

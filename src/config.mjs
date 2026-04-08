@@ -215,6 +215,19 @@ export function defaultConfig() {
     },
     channels: {
       telegram: { botToken: '', enabled: false }
+    },
+    fastAwarenessRouter: {
+      enabled: true,
+      minConfidenceForSkip: 0.85,
+      minConfidenceForHotOnly: 0.70,
+      weakModelTokenLimit: 4096,
+      cacheHitWindowMs: 30000,
+      classificationRules: {
+        taskMetaKeywords: ['current task', 'what am i doing', 'my task', 'step am i', 'what is my', 'where are we', 'progress', 'status'],
+        continuationKeywords: ['continue', 'go on', 'proceed', 'next', 'keep going', 'and then', 'after that'],
+        externalKeywords: ['search', 'latest', 'news', 'today', 'now', 'current', 'recent', 'web'],
+        deepInspectKeywords: ['find files', 'search files', 'look for file', 'grep', 'locate', 'where is', 'find all']
+      }
     }
   };
 }
@@ -246,6 +259,14 @@ function withDefaults(config) {
       ...(config.model || {}),
       providerModels: { ...d.model.providerModels, ...(config.model?.providerModels || {}) },
       routing: { ...d.model.routing, ...(config.model?.routing || {}) }
+    },
+    fastAwarenessRouter: {
+      ...d.fastAwarenessRouter,
+      ...(config.fastAwarenessRouter || {}),
+      classificationRules: {
+        ...d.fastAwarenessRouter.classificationRules,
+        ...(config.fastAwarenessRouter?.classificationRules || {})
+      }
     }
   };
 }

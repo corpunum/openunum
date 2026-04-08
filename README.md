@@ -43,12 +43,22 @@ node src/server.mjs
 pnpm e2e
 ```
 
-5. Optional safe UI/API smoke gate (no OAuth popups):
+5. Optional isolated API smoke gate (self-starts temp server):
+```bash
+pnpm test:smoke
+```
+
+6. Optional live-service smoke gate (checks running deployment):
+```bash
+pnpm test:smoke:live
+```
+
+7. Optional safe UI smoke gate (no OAuth popups):
 ```bash
 pnpm smoke:ui:noauth
 ```
 
-6. Phase 0 foundation readiness check:
+8. Phase 0 foundation readiness check:
 ```bash
 pnpm phase0:check
 ```
@@ -78,6 +88,8 @@ Read in this exact order:
 ```bash
 pnpm start
 pnpm e2e
+pnpm test:smoke
+pnpm test:smoke:live
 pnpm smoke:ui:noauth
 node src/cli.mjs health
 node src/cli.mjs chat --message "hello"

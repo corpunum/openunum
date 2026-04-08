@@ -13,6 +13,8 @@ import { ExecutionPolicyEngine } from '../core/execution-policy-engine.mjs';
 import { getHomeDir } from '../config.mjs';
 import { validateToolCall } from '../core/preflight-validator.mjs';
 import { summarizeToolResult } from '../core/tool-result-summarizer.mjs';
+import { file_search, file_grep, file_info, toolDefinitions as fileSearchTools } from './file-search.mjs';
+import { web_search, web_fetch, toolDefinitions as webSearchTools } from './web-search.mjs';
 
 const TOOL_CAPABILITY_META = {
   file_read: { class: 'read', mutatesState: false, destructive: false, proofHint: 'returned file content/path' },
@@ -327,6 +329,24 @@ export class ToolRuntime {
           }
         }
       },
+      // Phase 2: Deep-inspect strategy tools
+      ...Object.entries(fileSearchTools).map(([name, def]) => ({
+        type: 'function',
+        function: {
+          name,
+          description: def.description,
+          parameters: def.parameters
+        }
+      })),
+      // Phase 2: External search strategy tools
+      ...Object.entries(webSearchTools).map(([name, def]) => ({
+        type: 'function',
+        function: {
+          name,
+          description: def.description,
+          parameters: def.parameters
+        }
+      })),
       {
         type: 'function',
         function: {
@@ -1082,6 +1102,55 @@ export class ToolRuntime {
       const target = args?.path ? safePath(args.path, this.workspaceRoot) : '';
       return this.restoreLastBackup(target);
     }
+    
+    // Phase 2: Deep-inspect strategy tools
+    if (name === 'file_search') {
+      const budgetError = ensureBudget();
+      if (budgetError) return budgetError;
+      return file_search({
+        pattern: args.pattern,
+        root: args.root || this.workspaceRoot,
+        recursive: args.recursive !== false
+      });
+    }
+    if (name === 'file_grep') {
+      const budgetError = ensureBudget();
+      if (budgetError) return budgetError;
+      return file_grep({
+        search: args.search,
+        pattern: args.pattern,
+        root: args.root || this.workspaceRoot,
+        caseSensitive: Boolean(args.caseSensitive),
+        contextLines: Number(args.contextLines ?? 2)
+      });
+    }
+    if (name === 'file_info') {
+      const budgetError = ensureBudget();
+      if (budgetError) return budgetError;
+      return file_info({ path: args.path });
+    }
+    
+    // Phase 2: External search strategy tools
+    if (name === 'web_search') {
+      const budgetError = ensureBudget();
+      if (budgetError) return budgetError;
+      return web_search({
+        query: args.query,
+        backend: args.backend || 'duckduckgo',
+        limit: Number(args.limit ?? 10),
+        region: args.region || 'us-en'
+      });
+    }
+    if (name === 'web_fetch') {
+      const budgetError = ensureBudget();
+      if (budgetError) return budgetError;
+      return web_fetch({
+        url: args.url,
+        extractMode: args.extractMode || 'markdown',
+        maxChars: Number(args.maxChars ?? 10000)
+      });
+    }
+    
     if (name === 'session_list') {
       const budgetError = ensureBudget();
       if (budgetError) return budgetError;

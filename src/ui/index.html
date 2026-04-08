@@ -938,6 +938,10 @@
           <div class="ledger-section" id="missionTimelineTools"></div>
           <div class="ledger-section" id="missionTimelineArtifacts"></div>
         </div>
+        <div class="ledger" id="scheduledMissions" style="margin-top: 20px;">
+          <h4>Scheduled Missions</h4>
+          <div class="ledger-section" id="scheduledMissionsList">No scheduled missions.</div>
+        </div>
         </div>
 
         <div class="view" id="view-operator">
@@ -2174,6 +2178,7 @@ ${verificationSummary || preview}`)}</pre>`;
       host.innerHTML = visibleRows.flatMap((provider) => {
         const authField = PROVIDER_SECRET_FIELD[provider.provider];
         const advancedOpen = Boolean(providerAdvancedOpen[provider.provider]);
+        const isDisabled = Boolean(provider.disabled);
         const authPlaceholder = provider.provider === 'ollama'
           ? 'local/no key'
           : provider.provider === 'nvidia'
@@ -2186,11 +2191,13 @@ ${verificationSummary || preview}`)}</pre>`;
         const inputPlaceholder = provider.stored_preview
           ? `current ${provider.stored_preview}`
           : (provider.discovered_source ? 'discovered locally' : authPlaceholder);
+        const rowOpacity = isDisabled ? 'style="opacity: 0.5;"' : '';
+        const disabledBadge = isDisabled ? '<span class="badge" style="background: #333; border-color: #666; color: #999; margin-left: 8px;">DISABLED</span>' : '';
         const mainRow = `
-          <tr>
+          <tr ${rowOpacity}>
             <td>
               <div class="summary-stack">
-                <div class="summary-line"><strong>${escapeHtml(provider.display_name || provider.provider)}</strong></div>
+                <div class="summary-line"><strong>${escapeHtml(provider.display_name || provider.provider)}</strong>${disabledBadge}</div>
                 <div class="summary-sub">${escapeHtml(provider.provider)}</div>
               </div>
             </td>
@@ -2209,8 +2216,9 @@ ${verificationSummary || preview}`)}</pre>`;
               <div class="row compact-actions">
                 <button type="button" class="provider-save" data-provider="${provider.provider}">Save</button>
                 <button type="button" class="provider-test" data-provider="${provider.provider}">Test</button>
+                <button type="button" class="provider-disable" data-provider="${provider.provider}" style="background-color: ${provider.disabled ? '#555' : '#822'}; color: white;">${provider.disabled ? 'Enable' : 'Disable'}</button>
                 <button type="button" class="provider-use" data-provider="${provider.provider}">Use</button>
-                <button type="button" class="provider-advanced" data-provider="${provider.provider}">${advancedOpen ? 'Hide' : 'Advanced'}</button>
+                <button type="button" class="provider-advanced" data-provider="${provider.provider}">${advancedOpen ? 'Hide' : 'Edit'}</button>
                 <button type="button" class="provider-hide" data-provider="${provider.provider}">Hide</button>
               </div>
             </td>
@@ -2235,6 +2243,25 @@ ${verificationSummary || preview}`)}</pre>`;
       }).join('');
       qa('.provider-save').forEach((btn) => { btn.onclick = () => saveProviderRow(btn.dataset.provider); });
       qa('.provider-test').forEach((btn) => { btn.onclick = () => testProviderRow(btn.dataset.provider); });
+      qa('.provider-disable').forEach((btn) => {
+        btn.onclick = async () => {
+          const provider = btn.dataset.provider;
+          const cp = authCatalog.providers.find(p => p.provider === provider);
+          const nextDisabled = !cp.disabled;
+          // Use config update to persist
+          await jpost('/api/config', {
+            model: {
+              routing: {
+                disabledProviders: nextDisabled 
+                  ? [...(config.model?.routing?.disabledProviders || []), provider]
+                  : (config.model?.routing?.disabledProviders || []).filter(p => p !== provider)
+              }
+            }
+          });
+          await refreshProviderConfig();
+          await refreshModelCatalog();
+        };
+      });
       qa('.provider-use').forEach((btn) => {
         btn.onclick = async () => {
           setSelectByValueOrFirst('provider', btn.dataset.provider || 'ollama');
@@ -2342,28 +2369,36 @@ ${verificationSummary || preview}`)}</pre>`;
     }
 
     async function refreshAuthCatalog() {
-      authCatalog = await jget('/api/auth/catalog');
-      const providerIds = Array.isArray(authCatalog?.provider_order)
-        ? authCatalog.provider_order
-        : (authCatalog?.providers || []).map((row) => row.provider);
-      if (providerIds?.length) {
-        MODEL_PROVIDER_IDS = [...new Set(providerIds.map((id) => String(id || '').trim()).filter(Boolean))];
+      try {
+        authCatalog = await jget('/api/auth/catalog');
+        if (!authCatalog) throw new Error('catalog_is_null');
+        
+        const providerIds = Array.isArray(authCatalog?.provider_order)
+          ? authCatalog.provider_order
+          : (authCatalog?.providers || []).map((row) => row.provider);
+        if (providerIds?.length) {
+          MODEL_PROVIDER_IDS = [...new Set(providerIds.map((id) => String(id || '').trim()).filter(Boolean))];
+        }
+        const serviceIds = (authCatalog?.auth_targets || authCatalog?.auth_methods || [])
+          .map((row) => String(row?.id || '').trim())
+          .filter(Boolean);
+        if (serviceIds.length) {
+          SERVICE_PROVIDER_IDS = [...new Set(serviceIds)];
+        }
+        renderProviderSelectors();
+        normalizeHiddenRows();
+        refreshAddRowSelectors();
+        renderProviderMatrix(authCatalog.providers || []);
+        renderAuthMethodTable(authCatalog.auth_methods || []);
+        const authById = Object.fromEntries((authCatalog.auth_methods || []).map((row) => [row.id, row]));
+        q('providerStatus').setAttribute('data-testid', 'provider-health');
+        q('providerStatus').textContent = `secure store=${authCatalog.secret_store_path || 'unknown'} | scanned=${Number(authCatalog.scanned_files?.length || 0)} | github_oauth=${authById.github?.cli?.authenticated ? 'active' : 'inactive'}`;
+        return authCatalog;
+      } catch (err) {
+        console.error('refresh_auth_catalog_failed', err);
+        q('providerStatus').textContent = `catalog failed: ${err.message}`;
+        return null;
       }
-      const serviceIds = (authCatalog?.auth_targets || authCatalog?.auth_methods || [])
-        .map((row) => String(row?.id || '').trim())
-        .filter(Boolean);
-      if (serviceIds.length) {
-        SERVICE_PROVIDER_IDS = [...new Set(serviceIds)];
-      }
-      renderProviderSelectors();
-      normalizeHiddenRows();
-      refreshAddRowSelectors();
-      renderProviderMatrix(authCatalog.providers || []);
-      renderAuthMethodTable(authCatalog.auth_methods || []);
-      const authById = Object.fromEntries((authCatalog.auth_methods || []).map((row) => [row.id, row]));
-      q('providerStatus').setAttribute('data-testid', 'provider-health');
-      q('providerStatus').textContent = `secure store=${authCatalog.secret_store_path} | scanned=${Number(authCatalog.scanned_files?.length || 0)} | github_oauth=${authById.github?.cli?.authenticated ? 'active' : 'inactive'}`;
-      return authCatalog;
     }
 
     function refreshAddRowSelectors() {
@@ -2713,25 +2748,46 @@ ${verificationSummary || preview}`)}</pre>`;
     }
 
     async function refreshMission() {
-      if (!activeMissionId) {
+      // Refresh active mission
+      if (activeMissionId) {
+        const out = await jget(`/api/missions/status?id=${encodeURIComponent(activeMissionId)}`);
+        if (out.error) {
+          q('missionStatus').textContent = out.error;
+        } else {
+          const m = out.mission;
+          q('missionStatus').textContent = `${m.status} step=${m.step}/${m.maxSteps}`;
+          const latest = m.log?.[m.log.length - 1];
+          if (latest) q('pcOutput').value = latest.reply;
+          if (m.status !== 'running' && m.status !== 'stopping') {
+            localStorage.removeItem('openunum_mission');
+            activeMissionId = '';
+          }
+        }
+      } else {
         q('missionStatus').textContent = 'idle';
-        await refreshMissionTimeline();
-        return;
       }
-      const out = await jget(`/api/missions/status?id=${encodeURIComponent(activeMissionId)}`);
-      if (out.error) {
-        q('missionStatus').textContent = out.error;
-        await refreshMissionTimeline().catch(() => {});
-        return;
-      }
-      const m = out.mission;
-      q('missionStatus').textContent = `${m.status} step=${m.step}/${m.maxSteps}`;
-      const latest = m.log?.[m.log.length - 1];
-      if (latest) q('pcOutput').value = latest.reply;
-      await refreshMissionTimeline();
-      if (m.status !== 'running' && m.status !== 'stopping') {
-        localStorage.removeItem('openunum_mission');
-        activeMissionId = '';
+      await refreshMissionTimeline().catch(() => {});
+
+      // Refresh scheduled missions
+      try {
+        const allMissions = await jget('/api/missions');
+        const schedules = allMissions.schedules || [];
+        const host = q('scheduledMissionsList');
+        if (host) {
+          if (schedules.length === 0) {
+            host.innerHTML = 'No scheduled missions.';
+          } else {
+            host.innerHTML = schedules.map(s => {
+              const nextRun = s.nextRunAt ? new Date(s.nextRunAt).toLocaleString() : 'not scheduled';
+              return '<div class="ledger-item">' +
+                '<strong>' + escapeHtml(s.goal || 'No goal') + '</strong><br/>' +
+                '<div class="hint">ID: ' + escapeHtml(s.id) + ' | Status: ' + escapeHtml(s.status) + ' | Next: ' + nextRun + '</div>' +
+                '</div>';
+            }).join('');
+          }
+        }
+      } catch (err) {
+        console.error('refresh_scheduled_missions_failed', err);
       }
     }
 
@@ -2829,10 +2885,19 @@ ${verificationSummary || preview}`)}</pre>`;
       const provider = q('provider').value;
       const selectedModel = q('modelList').value;
       ensureFallbackSequence(provider);
+      
+      // Filter offline models from fallback sequence
+      const onlineFallbackSequence = fallbackSequence.filter(entry => {
+        const p = modelCatalog.providers.find(cp => cp.provider === entry.provider);
+        if (!p) return true;
+        const m = p.models.find(cm => cm.model_id === entry.model);
+        return m && m.status !== 'offline' && m.status !== 'quarantined';
+      });
+
       const providerModels = {
         [provider]: `${provider}/${selectedModel}`
       };
-      for (const entry of fallbackSequence) {
+      for (const entry of onlineFallbackSequence) {
         if (entry.provider && entry.model) providerModels[entry.provider] = `${entry.provider}/${entry.model}`;
       }
       const out = await jpost('/api/config', {
@@ -2842,7 +2907,7 @@ ${verificationSummary || preview}`)}</pre>`;
           providerModels,
           routing: {
             fallbackEnabled: enabled,
-            fallbackProviders: fallbackSequence.map((entry) => entry.provider)
+            fallbackProviders: onlineFallbackSequence.map((entry) => entry.provider)
           }
         },
         runtime: {
@@ -2850,7 +2915,7 @@ ${verificationSummary || preview}`)}</pre>`;
           maxToolIterations: Number(q('maxIters').value || 8)
         }
       });
-      q('modelCatalogStatus').textContent = `routing saved | primary=${formatProviderModel(provider, selectedModel || '')} | fallbacks=${fallbackSequence.map((entry) => entry.provider).join(' -> ') || 'none'}`;
+      q('modelCatalogStatus').textContent = `routing saved | primary=${formatProviderModel(provider, selectedModel || '')} | fallbacks=${onlineFallbackSequence.map((entry) => entry.provider).join(' -> ') || 'none'}`;
       await refreshModel();
       await refreshRuntimeOverview();
     };
@@ -3281,20 +3346,44 @@ ${verificationSummary || preview}`)}</pre>`;
         showView('chat');
         if (q('cpPath')) q('cpPath').value = '/api/health';
         if (q('cpBody')) q('cpBody').value = '{\n  "dryRun": true\n}';
-        await ensureSessionExists(sessionId);
-        await refreshCapabilities();
-        await refreshModel();
-        await refreshRuntime();
-        await refreshProviderConfig();
-        await refreshBrowserConfig();
-        await refreshRuntimeOverview();
-        await refreshTelegram();
-        await refreshSessionList();
-        await loadSession();
-        await refreshMission();
-        await refreshContextStatus();
-        await refreshTacticalLedger();
-        await refreshMissionTimeline();
+        
+        const initSteps = [
+          { name: 'session', fn: () => ensureSessionExists(sessionId) },
+          { name: 'capabilities', fn: refreshCapabilities },
+          { name: 'model', fn: refreshModel },
+          { name: 'runtime', fn: refreshRuntime },
+          { name: 'providers', fn: refreshProviderConfig },
+          //{ name: 'browser', fn: refreshBrowserConfig }, // Temporarily disabled due to CDP endpoint issues
+          { name: 'overview', fn: refreshRuntimeOverview },
+          { name: 'telegram', fn: refreshTelegram },
+          { name: 'sessions', fn: refreshSessionList },
+          { name: 'load', fn: loadSession },
+          { name: 'mission', fn: refreshMission },
+          { name: 'context', fn: refreshContextStatus },
+          //{ name: 'ledger', fn: refreshTacticalLedger }, // Temporarily disabled to speed up initialization
+          { name: 'timeline', fn: refreshMissionTimeline }
+        ];
+
+        for (const step of initSteps) {
+          try {
+            console.log(`Starting init step: ${step.name}`);
+            // Add timeout to prevent hanging
+            const timeoutPromise = new Promise((_, reject) => {
+              setTimeout(() => reject(new Error(`Timeout after 5 seconds`)), 5000);
+            });
+            await Promise.race([step.fn(), timeoutPromise]);
+            console.log(`Completed init step: ${step.name}`);
+          } catch (e) {
+            console.warn(`Init step failed: ${step.name}`, e);
+            topStatus.textContent = `init step failed: ${step.name} (${String(e.message || e)})`;
+          }
+        }
+        
+        if (topStatus.textContent === 'booting...') {
+          topStatus.textContent = 'ready';
+        } else if (topStatus.textContent.includes('init failed')) {
+          topStatus.textContent += ' (but continuing with limited functionality)';
+        }
       } catch (error) {
         const msg = String(error?.message || error);
         console.error('openunum_ui_init_failed', error);

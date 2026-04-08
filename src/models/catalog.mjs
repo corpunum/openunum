@@ -1,10 +1,9 @@
 import fs from 'node:fs';
 import { getEffectiveOpenAICodexOAuthStatus, scanLocalAuthSources } from '../secrets/store.mjs';
-import { MemoryStore } from '../memory/store.mjs';
 
-const memory = new MemoryStore();
 export const MODEL_CATALOG_CONTRACT_VERSION = '2026-04-01.model-catalog.v1';
-export const PROVIDER_ORDER = ['ollama', 'nvidia', 'openrouter', 'openai'];
+export const PROVIDER_ORDER = ['ollama', 'nvidia', 'openrouter', 'xiaomimimo', 'openai'];
+
 
 const PROVIDER_LABELS = {
   ollama: 'Ollama',
@@ -263,7 +262,7 @@ function getProviderConnection(modelConfig, provider) {
   };
 }
 
-function mergeProviderModels(provider, discovered = []) {
+function mergeProviderModels(provider, discovered = [], memory = null) {
   const merged = new Map();
   for (const seed of MODEL_SEEDS[provider] || []) merged.set(seed.canonical_key, { ...seed });
   for (const model of discovered) {
@@ -277,13 +276,20 @@ function mergeProviderModels(provider, discovered = []) {
 
   // Filter based on curation facts
   const allModels = [...merged.values()];
-  const filtered = allModels.filter(m => {
-    const statusFact = memory.retrieveFacts(`model.${m.provider}.${m.model_id}.status`, 1)[0];
-    if (statusFact && (statusFact.value === 'offline' || statusFact.value === 'quarantined')) {
-      return false;
+  let filtered = allModels;
+  if (memory) {
+    try {
+      filtered = allModels.filter(m => {
+        const statusFact = memory.retrieveFacts(`model.${m.provider}.${m.model_id}.status`, 1)[0];
+        if (statusFact && (statusFact.value === 'offline' || statusFact.value === 'quarantined')) {
+          return false;
+        }
+        return true;
+      });
+    } catch (err) {
+      console.error('model_catalog_fact_check_failed', err);
     }
-    return true;
-  });
+  }
 
   return sortCatalogModels(filtered);
 }
@@ -298,9 +304,11 @@ function buildSelectedPointer(modelConfig, provider, modelId) {
   };
 }
 
-export async function buildModelCatalog(modelConfig) {
+export async function buildModelCatalog(modelConfig, memory = null) {
   const providers = [];
+  const disabledProviders = modelConfig.routing?.disabledProviders || [];
   for (const provider of PROVIDER_ORDER) {
+    if (disabledProviders.includes(provider)) continue;
     let status = 'healthy';
     let degradedReason = null;
     let discovered = [];
@@ -321,7 +329,7 @@ export async function buildModelCatalog(modelConfig) {
       display_name: PROVIDER_LABELS[provider],
       status,
       degraded_reason: degradedReason,
-      models: mergeProviderModels(provider, discovered)
+      models: mergeProviderModels(provider, discovered, memory)
     });
   }
   return {
@@ -343,8 +351,8 @@ export async function buildModelCatalog(modelConfig) {
   };
 }
 
-export async function buildLegacyProviderModels(modelConfig, provider) {
-  const catalog = await buildModelCatalog(modelConfig);
+export async function buildLegacyProviderModels(modelConfig, provider, memory = null) {
+  const catalog = await buildModelCatalog(modelConfig, memory);
   const requestedProvider = normalizeProviderId(provider || modelConfig.provider);
   return catalog.providers.find((entry) => entry.provider === requestedProvider)?.models || [];
 }

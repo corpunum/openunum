@@ -65,7 +65,13 @@ export class CompletionChecklist {
     const total = this.items.size;
     const complete = [...this.items.values()].filter(i => i.status === 'complete').length;
     const failed = [...this.items.values()].filter(i => i.status === 'failed').length;
-    return { complete, failed, total, percent: total > 0 ? Math.round(complete / total * 100) : 100 };
+    return { 
+      complete, 
+      failed, 
+      total, 
+      percent: total > 0 ? Math.round(complete / total * 100) : 0,
+      hasTask: this.initialized && total > 0
+    };
   }
 
   toString() {

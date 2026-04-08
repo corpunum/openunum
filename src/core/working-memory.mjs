@@ -174,13 +174,26 @@ export class WorkingMemoryAnchor {
     };
 
     // Recent turns (raw, last N)
+    // Phase 4: Skip recent turns for simple greetings to avoid stale context confusion
     if (recentMessages && recentMessages.length > 0) {
-      const recent = recentMessages.slice(-this.maxRecentTurns * 2);
-      dynamicState.recentTurns = recent.map(m => ({
-        role: m.role === 'assistant' ? 'AGENT' : (m.role === 'tool' ? 'TOOL_RESULT' : 'USER'),
-        content: String(m.content || '').slice(0, 800),
-        timestamp: m.created_at || null
-      }));
+      const isSimpleGreeting = this._isSimpleGreeting(recentMessages);
+      
+      if (!isSimpleGreeting) {
+        const recent = recentMessages.slice(-this.maxRecentTurns * 2);
+        dynamicState.recentTurns = recent.map(m => ({
+          role: m.role === 'assistant' ? 'AGENT' : (m.role === 'tool' ? 'TOOL_RESULT' : 'USER'),
+          content: String(m.content || '').slice(0, 800),
+          timestamp: m.created_at || null
+        }));
+      } else {
+        // For greetings, only include the current user message, not stale history
+        const lastUserMessage = recentMessages.filter(m => m.role === 'user').slice(-1);
+        dynamicState.recentTurns = lastUserMessage.map(m => ({
+          role: 'USER',
+          content: String(m.content || '').slice(0, 800),
+          timestamp: m.created_at || null
+        }));
+      }
     }
 
     // CACHE HINTS (which sections can be cached)
@@ -220,20 +233,24 @@ export class WorkingMemoryAnchor {
       parts.push('═══ END RECENT ═══\n');
     }
 
-    // Continuation instruction
-    parts.push('[CONTINUATION INSTRUCTION]:');
-    parts.push('- You are mid-execution of the task in [USER ORIGIN].');
+    // Continuation instruction (skip for greetings)
+    const isGreeting = this._isSimpleGreeting(recentMessages);
     
-    if (subplan) {
-      parts.push(`- Focus on [SUBPLAN] ${subplan.index + 1}/${subplan.total}. Complete these steps before moving on.`);
-    } else {
-      parts.push('- Continue with the next concrete step from [PLAN AGREED].');
+    if (!isGreeting && (this.hasAnchor() || dynamicState.recentTurns.length > 0)) {
+      parts.push('[CONTINUATION INSTRUCTION]:');
+      parts.push('- You are mid-execution of the task in [USER ORIGIN].');
+      
+      if (subplan) {
+        parts.push(`- Focus on [SUBPLAN] ${subplan.index + 1}/${subplan.total}. Complete these steps before moving on.`);
+      } else {
+        parts.push('- Continue with the next concrete step from [PLAN AGREED].');
+      }
+      
+      parts.push('- Do not re-plan. Do not explore unrelated topics.');
+      parts.push('- If context is unclear, refer to the session history.');
+      parts.push('- Only claim DONE when [SUCCESS CRITERIA] is fully satisfied.');
+      parts.push('- If you are unsure about the original task or plan, check the ANCHOR above.\n');
     }
-    
-    parts.push('- Do not re-plan. Do not explore unrelated topics.');
-    parts.push('- If context is unclear, refer to the session history.');
-    parts.push('- Only claim DONE when [SUCCESS CRITERIA] is fully satisfied.');
-    parts.push('- If you are unsure about the original task or plan, check the ANCHOR above.\n');
 
     return {
       staticPrefix: staticParts.join('\n'),
@@ -362,6 +379,93 @@ export class WorkingMemoryAnchor {
       logError('working_memory_anchor_load_failed', { sessionId, error: error.message });
       return null;
     }
+  }
+
+  /**
+   * Check if a query is about the current task (for fast-path routing)
+   * 
+   * @param {string} query - User's query/message
+   * @returns {boolean} True if query is about current task state
+   */
+  isAboutCurrentTask(query) {
+    if (!this.hasAnchor()) return false;
+    
+    const normalizedQuery = String(query || '').toLowerCase().trim();
+    
+    // Task-meta patterns
+    const taskMetaPatterns = [
+      /\b(current )?(task|step|goal|plan)\b/,
+      /\bwhat (is|'s|am|i) (my|the|our) (current )?(task|step|goal|plan)\b/,
+      /\bwhere (are|is) (we|you|i)\b/,
+      /\bwhat should i do\b/,
+      /\bwhat am i doing\b/
+    ];
+    
+    for (const pattern of taskMetaPatterns) {
+      if (pattern.test(normalizedQuery)) {
+        return true;
+      }
+    }
+    
+    return false;
+  }
+
+  /**
+   * Check if message is a simple greeting (Phase 4 fix)
+   * Prevents stale context injection for greetings
+   * 
+   * @param {Array} messages - Recent messages
+   * @returns {boolean} True if this is a simple greeting
+   * @private
+   */
+  _isSimpleGreeting(messages) {
+    if (!messages || messages.length === 0) return false;
+    
+    const lastMessage = messages[messages.length - 1];
+    if (!lastMessage || lastMessage.role !== 'user') return false;
+    
+    // Normalize: lowercase, remove punctuation, collapse spaces
+    const content = String(lastMessage.content || '')
+      .toLowerCase()
+      .replace(/[^\w\s]/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+    
+    // Simple greetings (1-3 words, no complex intent)
+    const greetingPatterns = [
+      /^hi\s*$/i,
+      /^hello\s*$/i,
+      /^hi\s+[a-z]+\s*$/i,  // "Hi there", "Hi John"
+      /^hello\s+[a-z]+\s*$/i,  // "Hello Openunum", "Hello friend"
+      /^hey\s*$/i,
+      /^hey\s+[a-z]+\s*$/i,  // "Hey there"
+      /^good\s*(morning|afternoon|evening)\s*$/i,
+      /^morning\s*$/i,
+      /^afternoon\s*$/i,
+      /^evening\s*$/i,
+      /^yo\s*$/i,
+      /^greetings\s*$/i,
+      /^[a-z]+\s*$/i  // Single word like names ("Cemeral")
+    ];
+    
+    // Must be short (under 30 chars after normalization) and match a greeting pattern
+    if (content.length < 30) {
+      for (const pattern of greetingPatterns) {
+        if (pattern.test(content)) {
+          return true;
+        }
+      }
+    }
+    
+    return false;
+  }
+
+  /**
+   * Check if anchor is set
+   * @returns {boolean}
+   */
+  hasAnchor() {
+    return Boolean(this.anchor?.userOrigin);
   }
 
   /**

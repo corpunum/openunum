@@ -4,6 +4,27 @@ All notable changes to OpenUnum are documented in this file.
 
 ---
 
+## [2.2.3] - 2026-04-08
+
+### Added
+- **Fast Awareness Router runtime path** integrated in `src/core/agent.mjs` with strategy-aware fast path, telemetry, and learning outcome hooks.
+- **Deep inspect + external search tools**:
+  - `src/tools/file-search.mjs` (`file_search`, `file_grep`, `file_info`)
+  - `src/tools/web-search.mjs` (`web_search`, `web_fetch`)
+- **Isolated smoke runner** `scripts/smoke-isolated.mjs` that self-starts a temporary OpenUnum server and validates smoke endpoints deterministically.
+
+### Changed
+- `pnpm test:smoke` now runs isolated smoke by default.
+- Added `pnpm test:smoke:live` for deployment-instance smoke validation.
+- `scripts/smoke-check.mjs` now supports `OPENUNUM_EXPECTED_PORT`.
+
+### Fixed
+- Corrected Fast Awareness integration bugs (trace shadowing, routed-tool key mismatch, use-before-declare in fast path).
+- Fixed `file_grep` line matching reliability by removing regex global state drift.
+- Fixed Brave backend request construction in `web_search` (proper query params + timeout-aware fetch).
+
+---
+
 ## [2.2.2] - 2026-04-08
 
 ### Added

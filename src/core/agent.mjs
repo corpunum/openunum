@@ -48,6 +48,7 @@ import { ToolValidator, validateToolCall } from './tool-validator.mjs';
 import { PolicyLoader, buildSystemMessage } from './policy-loader.mjs';
 import { PredictiveFailureDetector } from './predictive-failure.mjs';
 import { TaskOrchestrator } from './task-orchestrator.mjs';
+import { FastAwarenessRouter, createFastAwarenessRouter } from './fast-awareness-router.mjs';
 import { WorkerOrchestrator } from './worker-orchestrator.mjs';
 import { DaemonManager } from './daemon-manager.mjs';
 import { logInfo, logError } from '../logger.mjs';
@@ -207,7 +208,7 @@ function extractAutomaticFacts({ message = '', reply = '', model = null, trace =
 
   const preferencePatterns = [
     { regex: /\bi prefer\s+([^.\n]{2,80})/i, key: 'owner.preference.general' },
-    { regex: /\buse\s+(ollama|openai|openrouter|nvidia|\b/i, key: 'owner.preference.provider' },
+    { regex: /\buse\s+(ollama|openai|openrouter|nvidia)\b/i, key: 'owner.preference.provider' },
     { regex: /\b(?:avoid|don\'t use|do not use)\s+(browser|shell|telegram|email)\b/i, key: 'owner.preference.avoid_surface' }
   ];
   for (const pattern of preferencePatterns) {
@@ -352,7 +353,7 @@ const EXECUTION_PROFILES = [
     ]
   },
   {
-    match: ({ provider }) => provider === 'nvidia' || provider === 'openrouter' || ,
+    match: ({ provider }) => provider === 'nvidia' || provider === 'openrouter',
     name: 'structured-api-cloud',
     turnBudgetMs: 90000,
     maxIters: 4,
@@ -1114,11 +1115,26 @@ export class OpenUnumAgent {
         }
       }
       
-      const out = await runtimeProvider.chat({
-        messages,
-        tools: this.toolRuntime.toolSchemas({ allowedTools: turnToolAllowlist }),
-        timeoutMs: remainingMs
-      });
+      let out;
+      try {
+        out = await runtimeProvider.chat({
+          messages,
+          tools: this.toolRuntime.toolSchemas({ allowedTools: turnToolAllowlist }),
+          timeoutMs: remainingMs
+        });
+      } catch (err) {
+        if (err.status === 429 || String(err.message).includes('429')) {
+          logError('provider_quota_hit', { provider, model, error: err.message });
+          const disabled = this.config.model?.routing?.disabledProviders || [];
+          if (!disabled.includes(provider)) {
+            this.config.model.routing = this.config.model.routing || {};
+            this.config.model.routing.disabledProviders = [...disabled, provider];
+            this.saveConfig(this.config);
+            this.memoryStore.rememberFact(`model.${provider}.status`, 'quota_limit');
+          }
+        }
+        throw err;
+      }
       const normalizedContent = normalizeAssistantContent(out.content);
       
       // DRIFT DETECTION (after model responds)
@@ -1766,9 +1782,12 @@ export class OpenUnumAgent {
     }
 
     const skills = loadSkills();
-    const routedTools = inferRoutedTools(message);
+    let routedTools = inferRoutedTools(message);
 
     this.memoryStore.addMessage(sessionId, 'user', message);
+    
+    // Start timing for telemetry
+    const startTime = Date.now();
 
     // Start self-monitoring for automatic continuation
     this.selfMonitor.startMonitoring(sessionId, message);
@@ -1811,6 +1830,10 @@ export class OpenUnumAgent {
     if (workingMemory) {
       logInfo('working_memory_initialized', { sessionId, hasPlan: Boolean(decomposition.decomposed) });
     }
+
+    // Initialize FastAwarenessRouter (MWS - task-meta fast path)
+    const fastAwarenessConfig = this.config?.fastAwarenessRouter || {};
+    const fastAwarenessRouter = createFastAwarenessRouter(fastAwarenessConfig, workingMemory);
 
     const modelForBudget = this.getCurrentModel();
     const sessionEnvelope = resolveExecutionEnvelope({
@@ -1912,106 +1935,178 @@ export class OpenUnumAgent {
       constraints: []
     });
 
-    const messages = [
-      {
-        role: 'system',
-        content: policySystemMessage
-      },
-      ...history
-    ];
-
     let finalText = '';
+    let trace = null;
     const attempts = this.buildProviderAttempts();
     const failures = [];
-    let trace = null;
+    const routeTelemetry = {};
 
-    for (const attempt of attempts) {
-      let attemptNo = 0;
-      while (attemptNo < 2) {
-        attemptNo += 1;
-        try {
-          const run = await this.runOneProviderTurn({
-            provider: attempt.provider,
-            model: attempt.model,
-            messages: [...messages],
-            sessionId,
-            routedTools,
-            contextPackInputs,
-            workingMemory  // NEW: Pass working memory anchor
-          });
-          this.clearProviderFailure(attempt.provider);
-          finalText = run.finalText;
-          trace = run.trace;
-          if (failures.length) trace.providerFailures = [...failures];
-          break;
-        } catch (error) {
-          const errorMessage = String(error.message || error);
-          const kind = classifyProviderFailure(error);
-          const decision = resolveFallbackAction(kind, attemptNo);
-          this.markProviderFailure(attempt.provider, {
-            kind,
-            action: decision.action,
-            cooldownMs: decision.cooldownMs,
-            errorMessage
-          });
-          failures.push({
-            provider: attempt.provider,
-            model: attempt.model,
-            attempt: attemptNo,
-            kind,
-            action: decision.action,
-            cooldownMs: decision.cooldownMs,
-            error: errorMessage
-          });
-          if (decision.action === 'retry_same_provider' && attemptNo < 2) continue;
-          break;
+    // FastAwarenessRouter: classify message and potentially short-circuit
+    const fastAwarenessResult = fastAwarenessRouter.classify(message);
+
+    // Phase 2: Use recommended tools from router to optimize tool routing
+    if (fastAwarenessResult.recommendedTools && fastAwarenessResult.recommendedTools.length > 0) {
+      routedTools = routedTools.filter((item) => fastAwarenessResult.recommendedTools.includes(item.tool));
+      routeTelemetry.recommendedTools = fastAwarenessResult.recommendedTools;
+      routeTelemetry.actualRoutedTools = routedTools.map((item) => item.tool);
+    }
+    contextPackInputs.routedTools = routedTools;
+
+    // Phase 3: Write telemetry event for this classification
+    fastAwarenessRouter.writeTelemetry({
+      category: fastAwarenessResult.category,
+      strategy: fastAwarenessResult.strategy,
+      confidence: fastAwarenessResult.confidence,
+      latency: Date.now() - startTime,
+      shouldShortCircuit: fastAwarenessResult.shouldShortCircuit
+    });
+
+    if (fastAwarenessResult.shouldShortCircuit && attempts.length > 0) {
+      const shortcutMessages = [
+        { role: 'system', content: policySystemMessage },
+        {
+          role: 'system',
+          content: `FAST PATH: This is a ${fastAwarenessResult.category} question. Answer directly without tool execution. Be concise and accurate.`
+        },
+        ...history
+      ];
+
+      try {
+        const shortcutRun = await this.runOneProviderTurn({
+          provider: attempts[0].provider,
+          model: attempts[0].model,
+          messages: shortcutMessages,
+          sessionId,
+          routedTools: [],
+          contextPackInputs,
+          workingMemory
+        });
+
+        if (shortcutRun.finalText) {
+          finalText = shortcutRun.finalText;
+          trace = {
+            ...(shortcutRun.trace || {}),
+            ...routeTelemetry,
+            fastPathUsed: true,
+            fastPathCategory: fastAwarenessResult.category,
+            fastPathLatency: Date.now() - startTime
+          };
+          fastAwarenessRouter.recordOutcome(fastAwarenessResult.category, true);
         }
+      } catch (e) {
+        logError('fast_path_failed', { error: String(e.message || e) });
+        fastAwarenessRouter.recordOutcome(fastAwarenessResult.category, false, 'fast_path_exception');
       }
-      if (finalText) break;
     }
 
-    const failureLines = failures.map((item) =>
-      `${item.provider}: kind=${item.kind} action=${item.action} error=${item.error}`
-    );
-
+    // Normal execution path (if not short-circuited or if fast path failed)
     if (!finalText) {
-      finalText = `All configured providers failed.\n${failureLines.join('\n')}`;
-      trace = {
-        provider: this.config.model.provider,
-        model: this.config.model.model,
-        routedTools,
-        iterations: [],
-        failures: failureLines,
-        providerFailures: failures,
-        permissionDenials: [],
-        pivotHints: buildPivotHints({
-          executedTools: [],
-          permissionDenials: [],
-          timedOut: false,
-          providerFailures: failures
-        }),
-        turnSummary: {
-          toolRuns: 0,
-          iterationCount: 0,
-          permissionDenials: 0,
-          routedTools: routedTools.map((item) => item.tool)
+      const messages = [
+        { role: 'system', content: policySystemMessage },
+        ...history
+      ];
+
+      for (const attempt of attempts) {
+        let attemptNo = 0;
+        while (attemptNo < 2) {
+          attemptNo += 1;
+          try {
+            const run = await this.runOneProviderTurn({
+              provider: attempt.provider,
+              model: attempt.model,
+              messages: [...messages],
+              sessionId,
+              routedTools,
+              contextPackInputs,
+              workingMemory
+            });
+            this.clearProviderFailure(attempt.provider);
+            finalText = run.finalText;
+            trace = {
+              ...(run.trace || {}),
+              ...routeTelemetry
+            };
+            if (failures.length) trace.providerFailures = [...failures];
+
+            if (!trace.fastPathUsed && fastAwarenessResult) {
+              fastAwarenessRouter.recordOutcome(fastAwarenessResult.category, true);
+            }
+            break;
+          } catch (error) {
+            const errorMessage = String(error.message || error);
+            const kind = classifyProviderFailure(error);
+            const decision = resolveFallbackAction(kind, attemptNo);
+            this.markProviderFailure(attempt.provider, {
+              kind,
+              action: decision.action,
+              cooldownMs: decision.cooldownMs,
+              errorMessage
+            });
+            failures.push({
+              provider: attempt.provider,
+              model: attempt.model,
+              attempt: attemptNo,
+              kind,
+              action: decision.action,
+              cooldownMs: decision.cooldownMs,
+              error: errorMessage
+            });
+            if (decision.action === 'retry_same_provider' && attemptNo < 2) continue;
+            break;
+          }
         }
-      };
+        if (finalText) break;
+      }
+
+      const failureLines = failures.map((item) => `${item.provider}: kind=${item.kind} action=${item.action} error=${item.error}`);
+
+      if (!finalText) {
+        finalText = `All configured providers failed.\n${failureLines.join('\n')}`;
+        trace = {
+          provider: this.config.model.provider,
+          model: this.config.model.model,
+          routedTools,
+          iterations: [],
+          failures: failureLines,
+          providerFailures: failures,
+          permissionDenials: [],
+          ...routeTelemetry,
+          pivotHints: buildPivotHints({
+            executedTools: [],
+            permissionDenials: [],
+            timedOut: false,
+            providerFailures: failures
+          }),
+          turnSummary: {
+            toolRuns: 0,
+            iterationCount: 0,
+            permissionDenials: 0,
+            routedTools: routedTools.map((item) => item.tool)
+          }
+        };
+      }
     }
     
     // Auto-continue if task incomplete (check before storing reply)
     const executedTools = trace?.iterations?.flatMap((iter) => iter?.toolRuns || []) || [];
     const shouldContinue = this.selfMonitor.shouldAutoContinue(sessionId, finalText, executedTools);
-    if (shouldContinue && failures.length === 0) {
+    if (shouldContinue && (!trace?.providerFailures || trace.providerFailures.length === 0)) {
       const continuationPrompt = this.selfMonitor.generateContinuationPrompt(sessionId, finalText, executedTools);
-      messages.push({ role: 'system', content: continuationPrompt });
+      const continuationMessages = [
+        {
+          role: 'system',
+          content: policySystemMessage
+        },
+        ...history,
+        { role: 'system', content: continuationPrompt }
+      ];
       
       // Retry with continuation
       try {
         const retryRun = await this.runOneProviderTurn({
           provider: this.config.model.provider,
           model: this.config.model.model,
-          messages: [...messages],
+          messages: continuationMessages,
           sessionId,
           routedTools,
           contextPackInputs,
@@ -2032,7 +2127,7 @@ export class OpenUnumAgent {
     if (progress.total > 0 && progress.percent < 100) {
       const progressNote = `\n\n📋 Progress: ${progress.complete}/${progress.total} (${progress.percent}%)`;
       finalText = finalText + progressNote;
-    } else if (progress.total > 0 && progress.percent === 100) {
+    } else if (progress.hasTask && progress.percent === 100) {
       finalText = finalText + '\n\n✅ Task complete!';
     }
     

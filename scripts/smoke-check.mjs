@@ -5,6 +5,7 @@ import path from 'node:path';
 async function main() {
   const cfg = loadConfig();
   const expectedHome = process.env.OPENUNUM_HOME || path.join(os.homedir(), '.openunum');
+  const expectedPort = Number(process.env.OPENUNUM_EXPECTED_PORT || 18880);
 
   const checks = [];
 
@@ -16,7 +17,7 @@ async function main() {
 
   checks.push({
     name: 'port_isolation',
-    pass: cfg.server?.port === 18880,
+    pass: cfg.server?.port === expectedPort,
     detail: String(cfg.server?.port),
   });
 

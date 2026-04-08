@@ -262,7 +262,8 @@ You are OpenUnum, an autonomous AI assistant with tool execution capabilities.
       executionState,
       workingMemoryAnchor,
       recalledMemories,
-      recentMessages
+      recentMessages,
+      retrievalConfig  // NEW: from FastAwarenessRouter
     } = options;
 
     const sections = [];
@@ -280,9 +281,11 @@ You are OpenUnum, an autonomous AI assistant with tool execution capabilities.
       sections.push(this.buildWorkingMemoryAnchor(workingMemoryAnchor));
     }
 
-    // 4. Recalled memories (dynamic)
-    if (recalledMemories) {
+    // 4. Recalled memories (dynamic) - SKIP if router says so
+    if (recalledMemories && retrievalConfig?.skipBM25 !== true) {
       sections.push(this.buildRecalledMemories(recalledMemories));
+    } else if (retrievalConfig?.skipBM25 === true) {
+      logInfo('context_compiler_skipped_bm25', { reason: retrievalConfig.reason });
     }
 
     // 5. Recent turns (last N pairs, raw)
@@ -295,7 +298,8 @@ You are OpenUnum, an autonomous AI assistant with tool execution capabilities.
     logInfo('context_compiled', {
       sections: sections.length,
       totalChars: fullContext.length,
-      recentTurns: recentMessages ? Math.floor(recentMessages.length / 2) : 0
+      recentTurns: recentMessages ? Math.floor(recentMessages.length / 2) : 0,
+      retrievalStrategy: retrievalConfig?.strategy || 'full'
     });
 
     return fullContext;

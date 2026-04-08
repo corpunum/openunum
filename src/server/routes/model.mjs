@@ -1,7 +1,7 @@
 export async function handleModelRoute({ req, res, url, ctx }) {
   if (req.method === 'GET' && url.pathname === '/api/model-catalog') {
     ctx.normalizeModelSettings();
-    const catalog = await ctx.buildModelCatalog(ctx.config.model);
+    const catalog = await ctx.buildModelCatalog(ctx.config.model, ctx.memoryStore);
     ctx.sendJson(res, 200, catalog);
     return true;
   }
@@ -13,7 +13,7 @@ export async function handleModelRoute({ req, res, url, ctx }) {
       ctx.sendJson(res, 400, { error: `unsupported_provider:${provider}` });
       return true;
     }
-    const models = await ctx.buildLegacyProviderModels(ctx.config.model, provider);
+    const models = await ctx.buildLegacyProviderModels(ctx.config.model, provider, ctx.memoryStore);
     ctx.sendJson(res, 200, { provider, models });
     return true;
   }

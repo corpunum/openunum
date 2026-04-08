@@ -49,6 +49,8 @@ This guide will help you understand:
 
 **Phase 0 Foundation Checks (new):**
 - `pnpm phase0:check` — Validates canonical runtime state contract and config parity report
+- `pnpm test:smoke` — Isolated smoke suite (self-starting temp server/home)
+- `pnpm test:smoke:live` — Smoke against current running service (deployment verification)
 - `GET /api/runtime/state-contract` — Returns canonical runtime packet + validation status
 - `GET /api/runtime/config-parity` — Returns provider matrix + warnings/errors
 

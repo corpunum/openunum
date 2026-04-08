@@ -8,7 +8,8 @@ Comprehensive testing documentation for the OpenUnum project.
 |-------|---------|-------------|
 | **Unit** | `npm run test:unit` | Fast, isolated unit tests via Vitest |
 | **E2E** | `npm run test:e2e` | End-to-end tests for core systems |
-| **Smoke** | `npm run test:smoke` | Quick API health checks |
+| **Smoke (Isolated)** | `npm run test:smoke` | Quick API health checks on a temporary local server |
+| **Smoke (Live Service)** | `npm run test:smoke:live` | Quick API health checks against the currently running service |
 | **All** | `npm run test:all` | Run complete test battery |
 
 ## Quick Start
@@ -70,9 +71,16 @@ Quick health checks for API endpoints:
 
 **Location:** `scripts/*.mjs`  
 **Framework:** Custom Node.js scripts  
-**Requirements:** Running API server  
+**Requirements:** None (this command self-starts an isolated server on a temporary OpenUnum home)  
 **Expected Duration:** < 30 seconds  
 **Exit Code:** 0 = all passed, 1 = failures detected
+
+### Live Service Smoke (`npm run test:smoke:live`)
+
+Use this only when you explicitly want to validate the currently running deployment instance.
+
+- Reads `OPENUNUM_API_URL` (default `http://127.0.0.1:18880`)
+- Uses current runtime config and can fail if the service is stale or not reachable
 
 ### Legacy Phase Tests
 
@@ -96,7 +104,7 @@ npm run phase1:e2e    # Phase 1 tests
    npm install
    ```
 
-2. **Start the API server** (for smoke tests):
+2. **Start the API server** (for live smoke only):
    ```bash
    npm start
    ```
@@ -117,6 +125,7 @@ npm run test:all
 npm run test:unit
 npm run test:e2e
 npm run test:smoke
+npm run test:smoke:live
 
 # Individual E2E test file
 node --test tests/e2e/verifier.e2e.mjs

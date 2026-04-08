@@ -329,9 +329,9 @@ export function createAuthService({ config, PROVIDER_ORDER, reloadConfigSecrets 
     return launchInTerminal(cmd);
   }
 
-  async function buildAuthCatalogPayload() {
+  async function buildAuthCatalogPayload(memory = null) {
     reloadConfigSecrets();
-    const [catalog] = await Promise.all([buildModelCatalog(config.model)]);
+    const [catalog] = await Promise.all([buildModelCatalog(config.model, memory)]);
     const store = loadSecretStore();
     const scan = scanLocalAuthSources();
     const cliStatus = getCliAuthStatus();
@@ -348,11 +348,13 @@ export function createAuthService({ config, PROVIDER_ORDER, reloadConfigSecrets 
         const baseField = PROVIDER_BASE_FIELD[provider.provider];
         const storedValue = keyField ? store.secrets?.[keyField] : '';
         const discoveredValue = keyField ? scan.secrets?.[keyField] : '';
+        const disabledProviders = config.model?.routing?.disabledProviders || [];
         return {
           provider: provider.provider,
           display_name: provider.display_name,
           auth_kind: provider.provider === 'ollama' ? 'none' : 'api_key',
           selected: catalog.selected?.provider === provider.provider,
+          disabled: disabledProviders.includes(provider.provider),
           status: provider.status,
           degraded_reason: provider.degraded_reason,
           base_url: config.model?.[baseField] || null,
