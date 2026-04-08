@@ -46,6 +46,14 @@ import {
   computeOnlineFallbackSequence,
   buildProviderModelsPatch
 } from './modules/model-routing.js';
+import {
+  createPendingTelemetry,
+  markPendingTelemetryActivity,
+  markPendingTelemetryCleared,
+  markPendingTelemetryFinal,
+  summarizePendingTelemetry,
+  formatPendingTelemetrySummary
+} from './modules/pending-telemetry.js';
 import { buildRuntimeOverviewView } from './modules/runtime-overview.js';
 import { buildMissionTimelineView } from './modules/missions.js';
 import {
@@ -476,6 +484,7 @@ async function resolvePendingReplyViaStream(typing, startedAtIso, requestSession
         return;
       }
       typing.pollCount = (typing.pollCount || 0) + 1;
+      markPendingTelemetryActivity(typing.pendingTelemetry);
       const tools = Array.isArray(payload?.toolRuns) ? payload.toolRuns : [];
       if ((typing.lastToolCount || 0) !== tools.length) {
         addLiveEvent(typing, `tool count ${typing.lastToolCount || 0} -> ${tools.length}`);
@@ -492,11 +501,17 @@ async function resolvePendingReplyViaStream(typing, startedAtIso, requestSession
         typing.bubble.textContent = statusText;
       }
       if (msgFromActivity?.content) {
+        markPendingTelemetryFinal(typing.pendingTelemetry);
+        const timingSummary = summarizePendingTelemetry(typing.pendingTelemetry);
+        if (timingSummary) addLiveEvent(typing, formatPendingTelemetrySummary(timingSummary));
         addLiveEvent(typing, 'assistant final response received');
         typing.bubble.innerHTML = msgFromActivity.html || `<pre>${escapeHtml(msgFromActivity.content)}</pre>`;
         void refreshSessionList();
         cleanup(true);
         return;
+      }
+      if (!payload?.pending) {
+        markPendingTelemetryCleared(typing.pendingTelemetry);
       }
       if (payload?.done === true) {
         cleanup(null);
@@ -509,6 +524,7 @@ async function resolvePendingReplyViaStream(typing, startedAtIso, requestSession
 
 async function resolvePendingReply(typing, startedAtIso, requestSessionId, requestToken) {
   const deadline = Date.now() + 10 * 60 * 1000;
+  typing.pendingTelemetry = createPendingTelemetry(startedAtIso);
   pendingSessions.add(requestSessionId);
   updateComposerPendingState();
   try {
@@ -528,6 +544,7 @@ async function resolvePendingReply(typing, startedAtIso, requestSessionId, reque
       if (requestToken !== requestTokenSeq) return false;
       typing.pollCount = (typing.pollCount || 0) + 1;
       const act = await jget(`/api/sessions/${encodeURIComponent(requestSessionId)}/activity?since=${encodeURIComponent(startedAtIso)}`);
+      markPendingTelemetryActivity(typing.pendingTelemetry);
       const tools = Array.isArray(act.toolRuns) ? act.toolRuns : [];
       if ((typing.lastToolCount || 0) !== tools.length) {
         addLiveEvent(typing, `tool count ${typing.lastToolCount || 0} -> ${tools.length}`);
@@ -545,15 +562,34 @@ async function resolvePendingReply(typing, startedAtIso, requestSessionId, reque
         typing.bubble.textContent = statusText;
       }
       if (msgFromActivity?.content) {
+        markPendingTelemetryFinal(typing.pendingTelemetry);
+        const timingSummary = summarizePendingTelemetry(typing.pendingTelemetry);
+        if (timingSummary) addLiveEvent(typing, formatPendingTelemetrySummary(timingSummary));
         addLiveEvent(typing, 'assistant final response received');
         typing.bubble.innerHTML = msgFromActivity.html || `<pre>${escapeHtml(msgFromActivity.content)}</pre>`;
         await refreshSessionList();
         return true;
       }
       if (pendingState.pending) continue;
-      const out = await jget(`/api/sessions/${encodeURIComponent(requestSessionId)}`);
-      const msg = newestAssistantSince(out.messages || [], startedAtIso);
+      markPendingTelemetryCleared(typing.pendingTelemetry);
+      let msg = null;
+      for (let i = 0; i < 3; i += 1) {
+        if (i > 0) await sleep(250);
+        const recheck = await jget(`/api/sessions/${encodeURIComponent(requestSessionId)}/activity?since=${encodeURIComponent(startedAtIso)}`);
+        const recheckMsg = newestAssistantSince(recheck.messages || [], startedAtIso);
+        if (recheckMsg?.content) {
+          msg = recheckMsg;
+          break;
+        }
+      }
+      if (!msg) {
+        const out = await jget(`/api/sessions/${encodeURIComponent(requestSessionId)}`);
+        msg = newestAssistantSince(out.messages || [], startedAtIso);
+      }
       if (msg?.content) {
+        markPendingTelemetryFinal(typing.pendingTelemetry);
+        const timingSummary = summarizePendingTelemetry(typing.pendingTelemetry);
+        if (timingSummary) addLiveEvent(typing, formatPendingTelemetrySummary(timingSummary));
         addLiveEvent(typing, 'assistant final response received');
         typing.bubble.innerHTML = msg.html || `<pre>${escapeHtml(msg.content)}</pre>`;
         await refreshSessionList();

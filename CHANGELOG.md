@@ -4,6 +4,19 @@ All notable changes to OpenUnum are documented in this file.
 
 ---
 
+## [2.3.32] - 2026-04-08
+
+### Changed
+- Phase 5 pending-path refinement:
+  - added pending transition timing instrumentation via `src/ui/modules/pending-telemetry.js`
+  - `resolvePendingReply` and SSE path now emit timing summary events (`total`, `firstActivity`, `tail`) on final answer receipt.
+  - tightened post-pending tail behavior with short activity rechecks before full session reload to reduce final-response lag.
+
+### Added
+- Unit coverage for pending telemetry helpers in `tests/unit/ui-pending-telemetry.test.mjs`.
+
+---
+
 ## [2.3.31] - 2026-04-08
 
 ### Changed
