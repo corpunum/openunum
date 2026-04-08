@@ -4,6 +4,12 @@ import { setStatus } from './modules/feedback.js';
 import { showView as showViewWithMeta } from './modules/navigation.js';
 import { normalizeServiceCapabilityIds } from './modules/capabilities.js';
 import {
+  knownProviderRowIds as knownProviderRowIdsForVisibility,
+  knownServiceRowIds as knownServiceRowIdsForVisibility,
+  normalizeHiddenRows as normalizeHiddenRowsForVisibility,
+  buildAddRowSelectMarkup
+} from './modules/visibility.js';
+import {
   sortSessionsByRecency,
   renderSessionListView
 } from './modules/sessions.js';
@@ -659,24 +665,22 @@ function formatPct(value) {
 }
 
 function knownProviderRowIds() {
-  return [...new Set([
-    ...MODEL_PROVIDER_IDS.map((id) => String(id || '').trim()).filter(Boolean),
-    ...((authCatalog?.providers || []).map((row) => String(row?.provider || '').trim()).filter(Boolean))
-  ])];
+  return knownProviderRowIdsForVisibility(MODEL_PROVIDER_IDS, authCatalog?.providers || []);
 }
 
 function knownServiceRowIds() {
-  return [...new Set([
-    ...SERVICE_PROVIDER_IDS.map((id) => String(id || '').trim()).filter(Boolean),
-    ...((authCatalog?.auth_methods || []).map((row) => String(row?.id || '').trim()).filter(Boolean))
-  ])];
+  return knownServiceRowIdsForVisibility(SERVICE_PROVIDER_IDS, authCatalog?.auth_methods || []);
 }
 
 function normalizeHiddenRows() {
-  const providers = new Set(knownProviderRowIds());
-  const services = new Set(knownServiceRowIds());
-  hiddenProviderRows = hiddenProviderRows.filter((id, index, arr) => providers.has(id) && arr.indexOf(id) === index);
-  hiddenServiceRows = hiddenServiceRows.filter((id, index, arr) => services.has(id) && arr.indexOf(id) === index);
+  const out = normalizeHiddenRowsForVisibility({
+    hiddenProviderRows,
+    hiddenServiceRows,
+    knownProviders: knownProviderRowIds(),
+    knownServices: knownServiceRowIds()
+  });
+  hiddenProviderRows = out.hiddenProviderRows;
+  hiddenServiceRows = out.hiddenServiceRows;
   localStorage.setItem('openunum_hidden_provider_rows', JSON.stringify(hiddenProviderRows));
   localStorage.setItem('openunum_hidden_service_rows', JSON.stringify(hiddenServiceRows));
 }
@@ -1356,17 +1360,17 @@ async function testVaultModal() {
 function refreshAddRowSelectors() {
   const providerSelect = q('providerAddSelect');
   const serviceSelect = q('serviceAddSelect');
-  const availableProviders = knownProviderRowIds();
-  const availableServices = knownServiceRowIds();
+  const markup = buildAddRowSelectMarkup({
+    knownProviders: knownProviderRowIds(),
+    knownServices: knownServiceRowIds(),
+    hiddenProviderRows,
+    hiddenServiceRows
+  });
   if (providerSelect) {
-    providerSelect.innerHTML = '<option value="">Add model provider...</option>' +
-      availableProviders.filter((id) => hiddenProviderRows.includes(id))
-        .map((id) => `<option value="${id}">${id}</option>`).join('');
+    providerSelect.innerHTML = markup.providerOptions;
   }
   if (serviceSelect) {
-    serviceSelect.innerHTML = '<option value="">Add service...</option>' +
-      availableServices.filter((id) => hiddenServiceRows.includes(id))
-        .map((id) => `<option value="${id}">${id}</option>`).join('');
+    serviceSelect.innerHTML = markup.serviceOptions;
   }
 }
 

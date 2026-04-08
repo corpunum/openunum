@@ -4,6 +4,20 @@ All notable changes to OpenUnum are documented in this file.
 
 ---
 
+## [2.3.24] - 2026-04-08
+
+### Changed
+- Continued WebUI modularization by extracting hidden-row visibility logic into `src/ui/modules/visibility.js`:
+  - canonical known-row derivation
+  - hidden-row normalization
+  - add-row selector markup generation
+- `src/ui/app.js` now consumes module helpers for Provider Vault row visibility state.
+
+### Added
+- Unit tests for visibility helpers in `tests/unit/ui-visibility.test.mjs`.
+
+---
+
 ## [2.3.23] - 2026-04-08
 
 ### Fixed
