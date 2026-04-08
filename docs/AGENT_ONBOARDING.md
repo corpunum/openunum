@@ -62,7 +62,7 @@ This guide will help you understand:
 - `pnpm phase10:e2e && pnpm phase11:e2e` — WebUI/provider-contract checks (provider matrix + required UI markers)
 - `pnpm phase39:e2e` — Browser-level WebUI interaction checks (Provider Vault modal/actions + Missions create/load/stop wiring)
 - `pnpm phase40:e2e` — Origin/request-marker guard regression for browser mutating control-plane requests
-- `pnpm phase41:e2e` — CLI operator API-surface regression (runtime/providers/auth/missions/sessions)
+- `pnpm phase41:e2e` — CLI operator API-surface regression (runtime/providers/auth/missions/sessions + provider health)
 - `pnpm phase42:e2e` — Browser regression for model-routing save + service-vault modal/save flow wiring
 - `pnpm phase43:e2e` — UI static-asset serving regression (`/ui/styles.css`, `/ui/app.js`, missing-asset 404)
 - `pnpm phase44:e2e` — Browser regression for provider-vault modal test/save and mission timeline filter/search details

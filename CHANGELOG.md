@@ -4,6 +4,17 @@ All notable changes to OpenUnum are documented in this file.
 
 ---
 
+## [2.3.18] - 2026-04-08
+
+### Added
+- CLI operator command `providers health` (API bridge) to surface runtime provider health and availability from `/api/runtime/overview`.
+
+### Changed
+- Expanded `phase41.cli-operator-surface.e2e.mjs` to validate the new provider-health CLI surface.
+- Updated README/onboarding command references for `providers health`.
+
+---
+
 ## [2.3.17] - 2026-04-08
 
 ### Changed

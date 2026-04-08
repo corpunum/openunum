@@ -96,6 +96,7 @@ node src/cli.mjs chat --message "hello"
 node src/cli.mjs model switch --provider ollama-cloud --model ollama-cloud/minimax-m2.7:cloud
 node src/cli.mjs providers list
 node src/cli.mjs providers catalog
+node src/cli.mjs providers health
 node src/cli.mjs auth status
 node src/cli.mjs auth catalog
 node src/cli.mjs missions list

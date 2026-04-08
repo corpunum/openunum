@@ -44,6 +44,10 @@ try {
   assert.equal(Array.isArray(providers.providers), true);
   assert.equal(providers.providers.length > 0, true);
 
+  const providerHealth = runCli(['providers', 'health']);
+  assert.equal(providerHealth.ok, true);
+  assert.equal(Array.isArray(providerHealth.providers), true);
+
   const auth = runCli(['auth', 'catalog']);
   assert.equal(typeof auth.contract_version, 'string');
 

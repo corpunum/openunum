@@ -170,6 +170,16 @@ async function main() {
     return;
   }
 
+  if (cmd === 'providers' && args[1] === 'health') {
+    const out = await apiRequest('GET', '/api/runtime/overview');
+    console.log(JSON.stringify({
+      ok: true,
+      providers: out.providers || [],
+      availability: out.providerAvailability || []
+    }, null, 2));
+    return;
+  }
+
   if (cmd === 'auth' && args[1] === 'status') {
     const modelCfg = config.model || {};
     const channels = config.channels || {};
@@ -317,7 +327,7 @@ async function main() {
     return;
   }
 
-  console.log(`openunum commands:\n  health\n  status\n  runtime status\n  serve\n  chat --message <text> [--session <id>]\n  context status --session <id>\n  context compact --session <id> [--dry-run]\n  context artifacts --session <id> [--limit <n>]\n  model switch --provider <p> --model <m>\n  providers list\n  providers catalog\n  auth status\n  auth catalog\n  missions list\n  missions status --id <missionId>\n  missions start --goal <text> [--max-steps <n>] [--interval-ms <n>]\n  missions stop --id <missionId>\n  sessions list [--limit <n>]\n  sessions delete --id <sessionId>\n  ollama use --model <id>  # compatibility alias for ollama-cloud\n  browser status\n  telegram poll-once\n  telegram run\n  command <slash-command>\n\n  remote API base: ${API_BASE_URL}`);
+  console.log(`openunum commands:\n  health\n  status\n  runtime status\n  serve\n  chat --message <text> [--session <id>]\n  context status --session <id>\n  context compact --session <id> [--dry-run]\n  context artifacts --session <id> [--limit <n>]\n  model switch --provider <p> --model <m>\n  providers list\n  providers catalog\n  providers health\n  auth status\n  auth catalog\n  missions list\n  missions status --id <missionId>\n  missions start --goal <text> [--max-steps <n>] [--interval-ms <n>]\n  missions stop --id <missionId>\n  sessions list [--limit <n>]\n  sessions delete --id <sessionId>\n  ollama use --model <id>  # compatibility alias for ollama-cloud\n  browser status\n  telegram poll-once\n  telegram run\n  command <slash-command>\n\n  remote API base: ${API_BASE_URL}`);
 }
 
 main().catch((error) => {
