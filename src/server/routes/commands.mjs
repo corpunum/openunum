@@ -1,94 +1,40 @@
 import { getRegistry } from '../../commands/registry.mjs';
-import { parseCommand } from '../../core/command-parser.mjs';
-import { logInfo, logError } from '../../logger.mjs';
 
-/**
- * API route handler for command execution
- * 
- * POST /api/command
- * Body: { message, sessionId }
- * Response: { handled, reply, commandName, error }
- */
-export async function handleCommandRoute({ req, res, url, ctx }) {
-  // Only accept POST
-  if (req.method !== 'POST') {
-    res.writeHead(405, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({ error: 'Method not allowed. Use POST.' }));
-    return true;
-  }
-
-  // Parse request body
-  const body = await new Promise((resolve, reject) => {
-    let data = '';
-    req.on('data', chunk => { data += chunk; });
-    req.on('end', () => {
-      try { resolve(JSON.parse(data)); }
-      catch { reject(new Error('Invalid JSON')); }
-    });
-    req.on('error', reject);
-  });
-
-  const { message, sessionId } = body;
-  if (!message) {
-    res.writeHead(400, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({ error: 'message field is required' }));
-    return true;
-  }
-
-  // Check if it's a command
-  const parsed = parseCommand(message);
-  if (!parsed) {
-    res.writeHead(200, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({ handled: false, message: 'Not a command (must start with /)' }));
-    return true;
-  }
-
-  try {
-    const registry = getRegistry();
-    const result = await registry.route(message, {
-      sessionId: sessionId || 'api',
-      agent: ctx.agent,
-      memoryStore: ctx.memoryStore,
-      config: ctx.config
-    });
-
-    res.writeHead(result?.handled ? 200 : 404, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify(result || { handled: false }));
-    return true;
-  } catch (error) {
-    logError('command_api_error', { error: String(error.message || error) });
-    res.writeHead(500, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({ error: String(error.message || error) }));
-    return true;
-  }
+function isPlainObject(value) {
+  return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
 }
 
-/**
- * API route to list all available commands
- * 
- * GET /api/commands
- * Response: { commands: [...] }
- */
-export async function handleCommandsListRoute({ req, res, ctx }) {
-  if (req.method !== 'GET') {
-    res.writeHead(405, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({ error: 'Method not allowed. Use GET.' }));
+export async function handleCommandRoute({ req, res, url, ctx }) {
+  if (!(req.method === 'POST' && url.pathname === '/api/command')) return false;
+
+  const body = await ctx.parseBody(req);
+  if (!isPlainObject(body)) {
+    ctx.sendJson(res, 400, { ok: false, error: 'invalid_payload', details: [{ field: 'body', issue: 'expected JSON object' }] });
+    return true;
+  }
+  const message = String(body.message || '').trim();
+  if (!message) {
+    ctx.sendJson(res, 400, { error: 'message field is required' });
     return true;
   }
 
-  try {
-    const registry = getRegistry();
-    const commands = registry.list();
+  const registry = getRegistry();
+  const result = await registry.route(message, {
+    sessionId: String(body.sessionId || 'api'),
+    agent: ctx.agent,
+    memoryStore: ctx.memoryStore,
+    config: ctx.config
+  });
+  ctx.sendJson(res, result?.handled ? 200 : 404, result || { handled: false });
+  return true;
+}
 
-    res.writeHead(200, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({ commands }));
-    return true;
-  } catch (error) {
-    logError('commands_list_error', { error: String(error.message || error) });
-    res.writeHead(500, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({ error: String(error.message || error) }));
-    return true;
-  }
+export async function handleCommandsListRoute({ req, res, url, ctx }) {
+  if (!(req.method === 'GET' && url.pathname === '/api/commands')) return false;
+
+  const registry = getRegistry();
+  ctx.sendJson(res, 200, { commands: registry.list() });
+  return true;
 }
 
 export default { handleCommandRoute, handleCommandsListRoute };

@@ -16,6 +16,7 @@ Comprehensive testing documentation for the OpenUnum project.
 | **Compact Profile Gate** | `npm run gate:compact-profile` | Enforces `phase0:check` when compact-profile/4B-sensitive surfaces changed |
 | **Packet Budget Gate** | `npm run gate:packet-budget` | Fails when runtime/context packet budgets exceed configured limits |
 | **Runtime Surface Contract Gate** | `npm run gate:runtime-surface-contract` | Fails when new server API literals are missing from `docs/API_REFERENCE.md` |
+| **Route Wiring Gate** | `npm run gate:route-wiring` | Fails when any `src/server/routes/*.mjs` module is not both imported and invoked by `src/server.mjs` |
 | **All** | `npm run test:all` | Run complete test battery |
 
 ## Quick Start
@@ -140,6 +141,7 @@ npm run docs:index:check
 npm run gate:compact-profile
 npm run gate:packet-budget
 npm run gate:runtime-surface-contract
+npm run gate:route-wiring
 
 # Individual E2E test file
 node --test tests/e2e/verifier.e2e.mjs

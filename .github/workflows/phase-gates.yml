@@ -57,3 +57,6 @@ jobs:
 
       - name: Runtime Surface Contract Gate
         run: pnpm gate:runtime-surface-contract
+
+      - name: Route Wiring Gate
+        run: pnpm gate:route-wiring

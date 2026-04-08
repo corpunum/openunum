@@ -49,7 +49,8 @@
     "test:imitation": "node scripts/session-imitation-regression.mjs",
     "gate:compact-profile": "node scripts/compact-profile-gate.mjs",
     "gate:packet-budget": "node scripts/packet-budget-check.mjs",
-    "gate:runtime-surface-contract": "node scripts/runtime-surface-contract-gate.mjs"
+    "gate:runtime-surface-contract": "node scripts/runtime-surface-contract-gate.mjs",
+    "gate:route-wiring": "node scripts/route-wiring-gate.mjs"
   },
   "dependencies": {
     "@mariozechner/pi-ai": "0.64.0",

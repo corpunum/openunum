@@ -1009,24 +1009,27 @@ const server = http.createServer(async (req, res) => {
       }
     })) return;
 
-    // Command system routes (before sessions to handle /api/command)
-    if (req.method === 'POST' && url.pathname === '/api/command') {
-      const body = await parseRequestBody(req);
-      if (!body?.message) return sendJson(res, 400, { error: 'message field is required' });
-      const registry = (await import('./commands/registry.mjs')).getRegistry();
-      const result = await registry.route(body.message, {
-        sessionId: body.sessionId || 'api',
+    if (await handleCommandRoute({
+      req,
+      res,
+      url,
+      ctx: {
+        parseBody: parseRequestBody,
+        sendJson,
         agent,
         memoryStore: memory,
         config
-      });
-      return sendJson(res, result?.handled ? 200 : 404, result || { handled: false });
-    }
+      }
+    })) return;
 
-    if (req.method === 'GET' && url.pathname === '/api/commands') {
-      const registry = (await import('./commands/registry.mjs')).getRegistry();
-      return sendJson(res, 200, { commands: registry.list() });
-    }
+    if (await handleCommandsListRoute({
+      req,
+      res,
+      url,
+      ctx: {
+        sendJson
+      }
+    })) return;
 
     if (await handleSessionsRoute({
       req,
