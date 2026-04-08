@@ -4,6 +4,18 @@ All notable changes to OpenUnum are documented in this file.
 
 ---
 
+## [2.3.20] - 2026-04-08
+
+### Changed
+- Continued WebUI modularization:
+  - extracted session list rendering/sort/filter helpers into `src/ui/modules/sessions.js`
+  - `src/ui/app.js` now uses `sortSessionsByRecency` and `renderSessionListView`.
+
+### Added
+- Unit coverage for session sorting/filtering helpers in `tests/unit/ui-sessions.test.mjs`.
+
+---
+
 ## [2.3.19] - 2026-04-08
 
 ### Changed

@@ -3,6 +3,10 @@ import { jget, jpost, jrequest } from './modules/http.js';
 import { setStatus } from './modules/feedback.js';
 import { showView as showViewWithMeta } from './modules/navigation.js';
 import {
+  sortSessionsByRecency,
+  renderSessionListView
+} from './modules/sessions.js';
+import {
   loadDetailPanelState,
   detailPanelKey,
   rememberDetailPanelState as rememberDetailPanelStateWithStorage,
@@ -113,44 +117,16 @@ function showView(viewId) {
 }
 
 function renderSessionList() {
-  if (!sessionListEl) return;
-  sessionListEl.innerHTML = '';
-  const query = String(q('sessionSearch')?.value || '').trim().toLowerCase();
-  const filteredSessions = !query
-    ? sessionCache
-    : sessionCache.filter((s) => {
-        const haystack = `${s.title || ''} ${s.preview || ''} ${s.sessionId || ''}`.toLowerCase();
-        return haystack.includes(query);
-      });
-  if (!filteredSessions.length) {
-    const empty = document.createElement('div');
-    empty.className = 'hint';
-    empty.textContent = query ? 'No matching sessions' : 'No sessions yet';
-    sessionListEl.appendChild(empty);
-    return;
-  }
-  for (const s of filteredSessions) {
-    const row = document.createElement('div');
-    row.className = 'session-row';
-    const itemWrap = document.createElement('div');
-    itemWrap.className = 'session-item-wrap';
-    const btn = document.createElement('button');
-    btn.type = 'button';
-    btn.className = `session-item${s.sessionId === sessionId ? ' active' : ''}`;
-    btn.innerHTML = `
-      <div class="session-title">${escapeHtml(s.title || 'New Chat')}</div>
-      <div class="session-preview">${escapeHtml(s.preview || 'No messages yet')}</div>
-      <div class="session-meta">${escapeHtml(formatRelativeTime(s.lastMessageAt || s.createdAt))} · ${Number(s.messageCount || 0)} msgs</div>
-    `;
-    btn.onclick = async () => switchToSession(s.sessionId);
-    itemWrap.appendChild(btn);
-
-    const del = document.createElement('button');
-    del.type = 'button';
-    del.className = 'session-delete';
-    del.title = 'Delete session';
-    del.textContent = 'X';
-    del.onclick = async (event) => {
+  const query = String(q('sessionSearch')?.value || '').trim();
+  renderSessionListView({
+    sessionListEl,
+    sessionCache,
+    query,
+    sessionId,
+    escapeHtml,
+    formatRelativeTime,
+    onSwitch: async (sid) => switchToSession(sid),
+    onDelete: async (event, s) => {
       event.preventDefault();
       event.stopPropagation();
       const confirmed = confirm(`Delete session ${s.sessionId}?`);
@@ -163,25 +139,15 @@ function renderSessionList() {
       } else {
         await refreshSessionList();
       }
-    };
-
-    row.appendChild(itemWrap);
-    row.appendChild(del);
-    sessionListEl.appendChild(row);
-  }
+    }
+  });
 }
 
 q('sessionSearch').addEventListener('input', () => renderSessionList());
 
 async function refreshSessionList() {
   const out = await jget('/api/sessions?limit=120');
-  sessionCache = (Array.isArray(out.sessions) ? out.sessions : [])
-    .slice()
-    .sort((a, b) => {
-      const at = Date.parse(a.lastMessageAt || a.updatedAt || a.createdAt || 0) || 0;
-      const bt = Date.parse(b.lastMessageAt || b.updatedAt || b.createdAt || 0) || 0;
-      return bt - at;
-    });
+  sessionCache = sortSessionsByRecency(out.sessions || []);
   renderSessionList();
 }
 
