@@ -3,6 +3,7 @@ import {
   pendingPollDelayMs,
   formatRelativeTime,
   newestAssistantSince,
+  buildPendingStatus,
   isStatusCheckMessage,
   isPlanningReply,
   shouldEscalateToAuto,
@@ -32,6 +33,15 @@ describe('ui logic module', () => {
       { role: 'assistant', content: 'new', created_at: newer }
     ], older);
     expect(found?.content).toBe('new');
+  });
+
+  it('builds pending status from tool/pending/activity shape', () => {
+    const typing = { pollCount: 2, lastToolCount: 1 };
+    const statusWaiting = buildPendingStatus(typing, { toolRuns: [{}, {}], messages: [] }, { pending: true, startedAt: new Date().toISOString() });
+    expect(statusWaiting).toBe('Processing tool results... (2)');
+
+    const statusFinalizing = buildPendingStatus({ pollCount: 1, lastToolCount: 1 }, { toolRuns: [{}], messages: [] }, { pending: false, startedAt: new Date().toISOString() });
+    expect(statusFinalizing).toBe('Finalizing response...');
   });
 
   it('detects status-check and planning messages', () => {

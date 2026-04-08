@@ -4,6 +4,17 @@ All notable changes to OpenUnum are documented in this file.
 
 ---
 
+## [2.3.19] - 2026-04-08
+
+### Changed
+- Continued WebUI modularization:
+  - moved pending status synthesis logic from `src/ui/app.js` into `src/ui/modules/logic.js` (`buildPendingStatus`).
+
+### Added
+- Unit coverage for pending-status synthesis in `tests/unit/ui-logic.test.mjs`.
+
+---
+
 ## [2.3.18] - 2026-04-08
 
 ### Added

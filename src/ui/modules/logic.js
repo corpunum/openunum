@@ -41,6 +41,17 @@ export function newestAssistantSince(messages, sinceIso) {
   return candidate;
 }
 
+export function buildPendingStatus(typing, activity, pendingState) {
+  const toolCount = Array.isArray(activity?.toolRuns) ? activity.toolRuns.length : 0;
+  const assistantMsg = newestAssistantSince(activity?.messages || [], activity?.since || pendingState?.startedAt || '');
+  if (assistantMsg?.content) return 'Final response ready. Restoring answer...';
+  if (!pendingState?.pending && toolCount > 0) return 'Finalizing response...';
+  if (toolCount === 0) return 'Routing request...';
+  if ((typing?.pollCount || 0) <= 1) return `Executing tools... (${toolCount})`;
+  if ((typing?.lastToolCount || 0) === toolCount) return 'Waiting for provider response...';
+  return `Processing tool results... (${toolCount})`;
+}
+
 export function isStatusCheckMessage(message) {
   const t = String(message || '').toLowerCase().trim();
   return /^(are you done\??|done\??|status\??|progress\??|did you finish\??|finished\??|so you done\??)$/.test(t);

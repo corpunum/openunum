@@ -12,6 +12,7 @@ import {
   pendingPollDelayMs,
   formatRelativeTime,
   newestAssistantSince,
+  buildPendingStatus,
   shouldEscalateToAuto,
   isStatusCheckMessage,
   isPlanningReply,
@@ -409,17 +410,6 @@ async function resetSession() {
   updateComposerPendingState();
   await ensureSessionExists(sessionId);
   await refreshSessionList();
-}
-
-function buildPendingStatus(typing, activity, pendingState) {
-  const toolCount = Array.isArray(activity?.toolRuns) ? activity.toolRuns.length : 0;
-  const assistantMsg = newestAssistantSince(activity?.messages || [], activity?.since || pendingState?.startedAt || '');
-  if (assistantMsg?.content) return 'Final response ready. Restoring answer...';
-  if (!pendingState?.pending && toolCount > 0) return 'Finalizing response...';
-  if (toolCount === 0) return 'Routing request...';
-  if (typing.pollCount <= 1) return `Executing tools... (${toolCount})`;
-  if ((typing.lastToolCount || 0) === toolCount) return 'Waiting for provider response...';
-  return `Processing tool results... (${toolCount})`;
 }
 
 async function resumePendingSessionIfNeeded(targetSessionId = sessionId) {
