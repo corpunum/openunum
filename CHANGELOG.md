@@ -4,6 +4,18 @@ All notable changes to OpenUnum are documented in this file.
 
 ---
 
+## [2.3.26] - 2026-04-08
+
+### Changed
+- Continued WebUI modularization for Provider Vault display helpers:
+  - extracted status badge and provider/service summary builders to `src/ui/modules/provider-vault.js`
+  - `src/ui/app.js` now imports module helpers instead of inline implementations.
+
+### Added
+- Unit coverage for provider-vault helpers in `tests/unit/ui-provider-vault.test.mjs`.
+
+---
+
 ## [2.3.25] - 2026-04-08
 
 ### Changed

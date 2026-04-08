@@ -9,6 +9,11 @@ import {
   normalizeHiddenRows as normalizeHiddenRowsForVisibility,
   buildAddRowSelectMarkup
 } from './modules/visibility.js';
+import {
+  renderStatusBadge,
+  providerSummaryText,
+  serviceSummaryText
+} from './modules/provider-vault.js';
 import { buildMissionTimelineView } from './modules/missions.js';
 import {
   sortSessionsByRecency,
@@ -826,19 +831,6 @@ function renderProviderCards(providers = []) {
   `).join('');
 }
 
-function badgeClassForStatus(status) {
-  const normalized = String(status || '').toLowerCase();
-  if (normalized === 'healthy' || normalized === 'configured' || normalized === 'authenticated') return 'good';
-  if (normalized === 'degraded' || normalized === 'partial') return 'warn';
-  if (normalized === 'missing' || normalized === 'unavailable') return 'bad';
-  return '';
-}
-
-function renderStatusBadge(text) {
-  const value = String(text || 'unknown');
-  return `<span class="badge ${badgeClassForStatus(value)}">${escapeHtml(value)}</span>`;
-}
-
 function setFieldMeta(id, info = '') {
   const el = q(id);
   if (el) el.textContent = info;
@@ -882,26 +874,6 @@ async function runWebuiWireValidation(action = 'mutation') {
   return true;
 }
 
-function providerSummaryText(provider) {
-  const parts = [];
-  if (provider.top_model) parts.push(`#1 ${provider.top_model}`);
-  parts.push(`${Number(provider.model_count || 0)} models`);
-  if (provider.base_url) parts.push(provider.base_url.replace(/^https?:\/\//, ''));
-  return parts.join(' | ');
-}
-
-function serviceSummaryText(row) {
-  const parts = [];
-  if (row.id === 'google-workspace' && row.oauth_client_id_preview) parts.push(`client ${row.oauth_client_id_preview}`);
-  if (row.cli?.account) parts.push(row.cli.account);
-  else if (row.stored_preview) parts.push(`stored ${row.stored_preview}`);
-  else if (row.discovered_source) parts.push('discovered locally');
-  else if (row.cli?.available) parts.push('ready to connect');
-  else parts.push('manual setup');
-  if (row.cli?.detail && !row.cli?.authenticated && !row.cli?.available) parts.push(row.cli.detail);
-  return parts.join(' | ');
-}
-
 function renderProviderMatrix(providers = []) {
   const host = q('providerMatrixBody');
   if (!host) return;
@@ -932,7 +904,7 @@ function renderProviderMatrix(providers = []) {
             <div class="summary-sub provider-open" data-provider="${provider.provider}" style="cursor:pointer;text-decoration:underline;">${escapeHtml(provider.provider)}</div>
           </div>
         </td>
-        <td>${renderStatusBadge(provider.status || 'unknown')}</td>
+        <td>${renderStatusBadge(provider.status || 'unknown', escapeHtml)}</td>
         <td>
           ${authField ? `<input class="provider-secret-input" data-provider="${provider.provider}" placeholder="${escapeHtml(inputPlaceholder)}" value="" />` : '<span class="pill">local</span>'}
           <div class="hint" style="margin-top:6px;">${provider.auth_ready ? 'ready' : 'not ready'}${provider.discovered_source ? ` | ${escapeHtml(provider.discovered_source)}` : ''}</div>
@@ -1069,7 +1041,7 @@ function renderAuthMethodTable(rows = []) {
             <div class="summary-sub">${escapeHtml(row.id)}</div>
           </div>
         </td>
-        <td>${renderStatusBadge(row.configured ? 'configured' : (row.cli?.authenticated ? 'authenticated' : (row.cli?.available ? 'available' : 'missing')))}</td>
+        <td>${renderStatusBadge(row.configured ? 'configured' : (row.cli?.authenticated ? 'authenticated' : (row.cli?.available ? 'available' : 'missing')), escapeHtml)}</td>
         <td>
           ${authCell}
           <div class="hint" style="margin-top:6px;">${escapeHtml(serviceSummaryText(row))}</div>
