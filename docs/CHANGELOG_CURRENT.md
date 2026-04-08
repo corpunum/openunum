@@ -68,6 +68,15 @@ Date: 2026-04-07
 - Added `scripts/session-imitation-regression.mjs` to replay real working-memory recovery patterns (`tool_circuit_open`) against self-monitor continuation logic.
 - Added npm command: `pnpm test:imitation`.
 
+## Runtime Artifact Hygiene (2026-04-08)
+
+**Status:** ✅ Implemented
+
+- Updated `.gitignore` to ignore runtime-generated:
+  - `data/working-memory/*.json`
+  - `data/side-quests/*.json`
+  - `local_models.txt`, `models.txt`
+
 ## Phase 1-3 Completion + Council Validation (2026-04-07)
 
 **Status:** ✅ Phase 1-3 Complete | 🟡 Phase 4 Planned

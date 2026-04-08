@@ -15,3 +15,9 @@ test_gguf.py
 test_llamacpp.py
 test_model.py
 test_ollama.py
+
+# Runtime/generated artifacts
+data/working-memory/*.json
+data/side-quests/*.json
+local_models.txt
+models.txt

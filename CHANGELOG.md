@@ -21,6 +21,9 @@ All notable changes to OpenUnum are documented in this file.
 ### Testing
 - Added session-imitation regression command (`pnpm test:imitation`) using real working-memory recovery patterns as non-blocking drift checks.
 
+### Maintenance
+- Ignored runtime-generated side-quest/working-memory artifacts and local model list files in `.gitignore` to reduce git worktree noise.
+
 ---
 
 ## [2.2.3] - 2026-04-08
