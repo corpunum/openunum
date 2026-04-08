@@ -29,6 +29,14 @@ import {
   buildTaskRunBody,
   parseControlPlaneBody
 } from './modules/control-plane.js';
+import {
+  buildClearAllSessionsPayload,
+  buildSessionExportFilename,
+  buildSessionExportStatus,
+  buildSessionImportRequest,
+  buildSessionImportStatus,
+  buildMissionCloneStatus
+} from './modules/session-io.js';
 import { buildRuntimeOverviewView } from './modules/runtime-overview.js';
 import { buildMissionTimelineView } from './modules/missions.js';
 import {
@@ -1771,7 +1779,7 @@ q('newChatInMenu').onclick = async () => {
 q('deleteAllSessions').onclick = async () => {
   const confirmed = confirm('Delete all sessions? This action cannot be undone.');
   if (!confirmed) return;
-  await jrequest('POST', '/api/sessions/clear', { force: true, keepSessionId: '' });
+  await jrequest('POST', '/api/sessions/clear', buildClearAllSessionsPayload());
   await resetSession();
   await refreshContextStatus();
   await refreshTacticalLedger();
@@ -1783,12 +1791,12 @@ q('exportSessionBtn').onclick = async () => {
   const blob = new Blob([JSON.stringify(out, null, 2)], { type: 'application/json' });
   const link = document.createElement('a');
   link.href = URL.createObjectURL(blob);
-  link.download = `openunum-session-${sessionId}.json`;
+  link.download = buildSessionExportFilename(sessionId);
   link.click();
   setTimeout(() => URL.revokeObjectURL(link.href), 1500);
   setStatus(
     'runtimeStatus',
-    `session export ready | messages=${Number(out.messages?.length || 0)} tokens=${Number(out.estimatedTokens || 0)}`,
+    buildSessionExportStatus(out),
     { type: 'success', title: 'Session Export' }
   );
   await refreshTacticalLedger();
@@ -1799,11 +1807,7 @@ q('importSessionFile').onchange = async (event) => {
   if (!file) return;
   const text = await file.text();
   const parsed = JSON.parse(text);
-  const importedSessionId = String(parsed.sessionId || crypto.randomUUID());
-  const out = await jpost('/api/sessions/import', {
-    sessionId: importedSessionId,
-    messages: Array.isArray(parsed.messages) ? parsed.messages : []
-  });
+  const out = await jpost('/api/sessions/import', buildSessionImportRequest(parsed, crypto.randomUUID()));
   sessionId = out.session.sessionId;
   localStorage.setItem('openunum_session', sessionId);
   q('chatMeta').textContent = sessionId;
@@ -1813,7 +1817,7 @@ q('importSessionFile').onchange = async (event) => {
   await refreshTacticalLedger();
   setStatus(
     'runtimeStatus',
-    `session imported | ${sessionId} | messages=${Number(out.session.messageCount || 0)}`,
+    buildSessionImportStatus(sessionId, out),
     { type: 'success', title: 'Session Import' }
   );
   showView('chat');
@@ -2175,7 +2179,7 @@ q('cloneMissionSessionBtn').onclick = async () => {
   await refreshSessionList();
   await refreshContextStatus();
   await refreshTacticalLedger();
-  setStatus('runtimeStatus', `mission session cloned | ${sourceSessionId} -> ${sessionId}`, {
+  setStatus('runtimeStatus', buildMissionCloneStatus(sourceSessionId, sessionId), {
     type: 'success',
     title: 'Mission'
   });

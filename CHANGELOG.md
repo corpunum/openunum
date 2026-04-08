@@ -4,6 +4,18 @@ All notable changes to OpenUnum are documented in this file.
 
 ---
 
+## [2.3.30] - 2026-04-08
+
+### Changed
+- Continued WebUI modularization for session import/export/clone handlers:
+  - extracted session I/O payload, filename, and status text builders to `src/ui/modules/session-io.js`
+  - `src/ui/app.js` now uses module helpers for clear-all, export, import, and mission-clone status messages.
+
+### Added
+- Unit coverage for session I/O helpers in `tests/unit/ui-session-io.test.mjs`.
+
+---
+
 ## [2.3.29] - 2026-04-08
 
 ### Changed
