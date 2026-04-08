@@ -30,9 +30,11 @@ async function main() {
   checks.push({
     name: 'provider_matrix_present',
     pass: Boolean(
-      cfg.model?.providerModels?.ollama &&
+      cfg.model?.providerModels?.['ollama-cloud'] &&
+      cfg.model?.providerModels?.['ollama-local'] &&
       cfg.model?.providerModels?.openrouter &&
       cfg.model?.providerModels?.nvidia &&
+      cfg.model?.providerModels?.xiaomimimo &&
       (cfg.model?.providerModels?.openai || cfg.model?.providerModels?.generic)
     ),
     detail: JSON.stringify(cfg.model?.providerModels || {}),

@@ -118,6 +118,8 @@ After every change, update:
 - **Session-imitation regression replay** (`pnpm test:imitation`) to guard continuation/memory behavior
 - **Secrets-at-rest hardening**: prefer encrypted passphrase backend for production deployments
 - **Canonical self-heal path**: keep runtime + autonomy surfaces on `src/core/self-heal-orchestrator.mjs` and avoid reintroducing overlapping recovery flows
+- **WebUI/backend wire validation**: after provider/model/skill/routing add-delete-edit actions, verify API wiring + runtime reflections before claiming success
+- **Provider split discipline**: treat `ollama-local` and `ollama-cloud` as separate lanes (local lane restricted to gemma4 + embeddings; cloud lane for cloud models)
 
 **Phase 1-3 Implemented Systems (Document These):**
 - **Verifier** (`src/core/verifier.mjs`) — Independent state validation

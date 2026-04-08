@@ -2,32 +2,40 @@ import fs from 'node:fs';
 import { getEffectiveOpenAICodexOAuthStatus, scanLocalAuthSources } from '../secrets/store.mjs';
 
 export const MODEL_CATALOG_CONTRACT_VERSION = '2026-04-01.model-catalog.v1';
-export const PROVIDER_ORDER = ['ollama', 'nvidia', 'openrouter', 'xiaomimimo', 'openai'];
+export const PROVIDER_ORDER = ['ollama-local', 'ollama-cloud', 'nvidia', 'openrouter', 'xiaomimimo', 'openai'];
 
 
 const PROVIDER_LABELS = {
-  ollama: 'Ollama',
+  'ollama-local': 'Ollama Local',
+  'ollama-cloud': 'Ollama Cloud',
   nvidia: 'Nvidia',
   openrouter: 'OpenRouter',
+  xiaomimimo: 'XiaomiMimo',
   openai: 'OpenAI'
 };
 
 const PROVIDER_ALIASES = {
   generic: 'openai',
-  'ollama-cloud': 'ollama',
-  'ollama-local': 'ollama'
+  ollama: 'ollama-cloud'
 };
 
 const MODEL_SEEDS = {
-  ollama: [
-    seedModel('ollama', 'qwen3.5:397b-cloud', 'Qwen 3.5 397B Cloud', 262144, 100, 'medium', 'medium', true, false, true),
-    seedModel('ollama', 'kimi-k2.5:cloud', 'Kimi K2.5 Cloud', 262144, 97, 'medium', 'medium', true, false, true),
-    seedModel('ollama', 'glm-5:cloud', 'GLM-5 Cloud', 262144, 95, 'medium', 'medium', true, false, true),
-    seedModel('ollama', 'minimax-m2.7:cloud', 'MiniMax M2.7 Cloud', 1048576, 94, 'high', 'medium', true, false, true),
-    seedModel('ollama', 'minimax-m2.5:cloud', 'MiniMax M2.5 Cloud', 1048576, 92, 'high', 'medium', true, false, true),
-    seedModel('ollama', 'qwen3.5:9b-262k', 'Qwen 3.5 9B 262K', 262144, 82, 'low', 'low', true, false, true),
-    seedModel('ollama', 'qwen3.5:9b-128k', 'Qwen 3.5 9B 128K', 131072, 80, 'low', 'low', true, false, true),
-    seedModel('ollama', 'qwen3.5:9b-64k', 'Qwen 3.5 9B 64K', 65536, 78, 'low', 'low', true, false, true)
+  'ollama-cloud': [
+    seedModel('ollama-cloud', 'qwen3.5:397b-cloud', 'Qwen 3.5 397B Cloud', 262144, 100, 'medium', 'medium', true, false, true),
+    seedModel('ollama-cloud', 'kimi-k2.5:cloud', 'Kimi K2.5 Cloud', 262144, 97, 'medium', 'medium', true, false, true),
+    seedModel('ollama-cloud', 'glm-5:cloud', 'GLM-5 Cloud', 262144, 95, 'medium', 'medium', true, false, true),
+    seedModel('ollama-cloud', 'minimax-m2.7:cloud', 'MiniMax M2.7 Cloud', 1048576, 94, 'high', 'medium', true, false, true),
+    seedModel('ollama-cloud', 'minimax-m2.5:cloud', 'MiniMax M2.5 Cloud', 1048576, 92, 'high', 'medium', true, false, true),
+    seedModel('ollama-cloud', 'deepseek-r1:cloud', 'DeepSeek R1 Cloud', 262144, 91, 'medium', 'medium', true, false, true),
+    seedModel('ollama-cloud', 'llama-3.3-70b:cloud', 'Llama 3.3 70B Cloud', 131072, 90, 'medium', 'medium', true, false, true),
+    seedModel('ollama-cloud', 'qwen3.5:32b-cloud', 'Qwen 3.5 32B Cloud', 262144, 88, 'medium', 'low', true, false, true)
+  ],
+  'ollama-local': [
+    seedModel('ollama-local', 'gemma4:latest', 'Gemma 4 CPU', 32768, 76, 'low', 'low', true, false, true),
+    seedModel('ollama-local', 'gemma4:cpu', 'Gemma 4 CPU', 32768, 76, 'low', 'low', true, false, true),
+    seedModel('ollama-local', 'nomic-embed-text:latest', 'Nomic Embed Text', 8192, 72, 'low', 'low', false, false, false),
+    seedModel('ollama-local', 'mxbai-embed-large:latest', 'MXBAI Embed Large', 8192, 71, 'low', 'low', false, false, false),
+    seedModel('ollama-local', 'all-minilm:latest', 'All MiniLM Embeddings', 8192, 68, 'low', 'low', false, false, false)
   ],
   nvidia: [
     seedModel('nvidia', 'meta/llama-3.1-405b-instruct', 'Llama 3.1 405B Instruct', 131072, 96, 'high', 'high', true, false, true),
@@ -67,8 +75,8 @@ function seedModel(provider, modelId, displayName, contextWindow, capabilityScor
 }
 
 export function normalizeProviderId(rawProvider) {
-  const provider = String(rawProvider || 'ollama').trim().toLowerCase();
-  return PROVIDER_ALIASES[provider] || (PROVIDER_ORDER.includes(provider) ? provider : 'ollama');
+  const provider = String(rawProvider || 'ollama-cloud').trim().toLowerCase();
+  return PROVIDER_ALIASES[provider] || (PROVIDER_ORDER.includes(provider) ? provider : 'ollama-cloud');
 }
 
 export function normalizeModelId(provider, rawModel) {
@@ -78,6 +86,7 @@ export function normalizeModelId(provider, rawModel) {
   const prefixes = [
     `${normalizedProvider}/`,
     `${String(provider || '').trim().toLowerCase()}/`,
+    'ollama/',
     'generic/',
     'ollama-cloud/',
     'ollama-local/'
@@ -156,17 +165,33 @@ function makeCatalogEntry(provider, modelId, displayName, contextWindow, partial
   };
 }
 
-export async function fetchOllamaModels(baseUrl) {
+export async function fetchOllamaModels(baseUrl, provider = 'ollama-local') {
   const apiBase = resolveOllamaApiBase(baseUrl);
   const res = await fetch(`${apiBase}/api/tags`, { signal: AbortSignal.timeout(5000) });
   if (!res.ok) throw new Error(`Ollama tags failed: ${res.status}`);
   const data = await res.json();
-  const models = (data.models || []).map((m) => makeCatalogEntry('ollama', m.name, m.name, m.details?.context_length || null, {
+  const models = (data.models || []).map((m) => makeCatalogEntry(provider, m.name, m.name, m.details?.context_length || null, {
     paramsB: parseParameterBillions(m.details?.parameter_size),
-    source: 'ollama-local',
+    source: provider,
     supports_vision: false
   }));
   return sortCatalogModels(models);
+}
+
+function isCloudModelId(modelId = '') {
+  const id = String(modelId || '').toLowerCase();
+  return id.includes(':cloud') || id.includes('-cloud');
+}
+
+function isAllowedLocalOllamaModel(modelId = '') {
+  const id = String(modelId || '').toLowerCase();
+  if (!id) return false;
+  if (id.includes('gemma4')) return true;
+  if (id.includes('embed')) return true;
+  if (id.includes('nomic-embed')) return true;
+  if (id.includes('mxbai-embed')) return true;
+  if (id.includes('all-minilm')) return true;
+  return false;
 }
 
 export async function fetchOpenRouterModels(baseUrl, apiKey = '') {
@@ -237,6 +262,7 @@ export function importProviderSecretsFromOpenClaw() {
   return {
     openrouterApiKey: scan.secrets.openrouterApiKey || '',
     nvidiaApiKey: scan.secrets.nvidiaApiKey || '',
+    xiaomimimoApiKey: scan.secrets.xiaomimimoApiKey || '',
     openaiApiKey: scan.secrets.openaiApiKey || '',
     githubToken: scan.secrets.githubToken || '',
     huggingfaceApiKey: scan.secrets.huggingfaceApiKey || '',
@@ -244,6 +270,7 @@ export function importProviderSecretsFromOpenClaw() {
     telegramBotToken: scan.secrets.telegramBotToken || '',
     openrouterBaseUrl: scan.providerBaseUrls.openrouterBaseUrl || '',
     nvidiaBaseUrl: scan.providerBaseUrls.nvidiaBaseUrl || '',
+    xiaomimimoBaseUrl: scan.providerBaseUrls.xiaomimimoBaseUrl || '',
     openaiBaseUrl: scan.providerBaseUrls.openaiBaseUrl || '',
     ollamaBaseUrl: scan.providerBaseUrls.ollamaBaseUrl || '',
     filesScanned: scan.filesScanned
@@ -251,9 +278,11 @@ export function importProviderSecretsFromOpenClaw() {
 }
 
 function getProviderConnection(modelConfig, provider) {
-  if (provider === 'ollama') return { baseUrl: modelConfig.ollamaBaseUrl, apiKey: '' };
+  if (provider === 'ollama-local') return { baseUrl: modelConfig.ollamaBaseUrl, apiKey: '' };
+  if (provider === 'ollama-cloud') return { baseUrl: modelConfig.ollamaBaseUrl, apiKey: '' };
   if (provider === 'nvidia') return { baseUrl: modelConfig.nvidiaBaseUrl, apiKey: modelConfig.nvidiaApiKey };
   if (provider === 'openrouter') return { baseUrl: modelConfig.openrouterBaseUrl, apiKey: modelConfig.openrouterApiKey };
+  if (provider === 'xiaomimimo') return { baseUrl: modelConfig.xiaomimimoBaseUrl, apiKey: modelConfig.xiaomimimoApiKey };
   const oauth = getEffectiveOpenAICodexOAuthStatus();
   return {
     baseUrl: modelConfig.openaiBaseUrl || modelConfig.genericBaseUrl || 'https://api.openai.com/v1',
@@ -314,9 +343,16 @@ export async function buildModelCatalog(modelConfig, memory = null) {
     let discovered = [];
     try {
       const connection = getProviderConnection(modelConfig, provider);
-      if (provider === 'ollama') discovered = await fetchOllamaModels(connection.baseUrl);
+      if (provider === 'ollama-local') {
+        discovered = (await fetchOllamaModels(connection.baseUrl, 'ollama-local'))
+          .filter((row) => isAllowedLocalOllamaModel(row.model_id));
+      } else if (provider === 'ollama-cloud') {
+        discovered = (await fetchOllamaModels(connection.baseUrl, 'ollama-cloud'))
+          .filter((row) => isCloudModelId(row.model_id));
+      }
       else if (provider === 'nvidia') discovered = await fetchNvidiaModels(connection.baseUrl, connection.apiKey);
       else if (provider === 'openrouter') discovered = await fetchOpenRouterModels(connection.baseUrl, connection.apiKey);
+      else if (provider === 'xiaomimimo') discovered = await fetchOpenAIModels(connection.baseUrl, connection.apiKey);
       else if (connection.apiKey) discovered = await fetchOpenAIModels(connection.baseUrl, connection.apiKey);
       else if (connection.oauth?.active) discovered = [];
       else discovered = await fetchOpenAIModels(connection.baseUrl, connection.apiKey);

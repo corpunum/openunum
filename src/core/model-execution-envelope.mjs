@@ -39,7 +39,7 @@ function inferTier(provider, modelId) {
   ) return 'compact';
   if (Number.isFinite(paramsB) && paramsB <= 14) return 'compact';
   if (Number.isFinite(paramsB) && paramsB <= 80) return 'balanced';
-  if (providerId === 'ollama' && /cloud|kimi|minimax|glm/.test(id)) return 'full';
+  if ((providerId === 'ollama' || providerId === 'ollama-cloud') && /cloud|kimi|minimax|glm/.test(id)) return 'full';
   if (providerId === 'openai') return 'full';
   return 'balanced';
 }

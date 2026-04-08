@@ -239,6 +239,42 @@
     .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
     .pill { font-size: 12px; color: var(--muted); }
     .hint { color: var(--muted); font-size: 12px; }
+    dialog.modal {
+      border: 1px solid rgba(83, 111, 153, .55);
+      border-radius: 16px;
+      background: linear-gradient(180deg, rgba(12, 20, 36, .98), rgba(7, 13, 26, .98));
+      color: var(--text);
+      width: min(760px, calc(100vw - 28px));
+      max-height: calc(100vh - 40px);
+      padding: 0;
+      box-shadow: 0 30px 80px rgba(0, 0, 0, .6);
+    }
+    dialog.modal::backdrop {
+      background: rgba(2, 6, 16, .76);
+      backdrop-filter: blur(3px);
+    }
+    .modal-head {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 12px 14px;
+      border-bottom: 1px solid var(--line);
+    }
+    .modal-title { font-weight: 700; font-size: 14px; }
+    .modal-body {
+      padding: 12px 14px;
+      display: grid;
+      gap: 10px;
+      overflow: auto;
+      max-height: calc(100vh - 170px);
+    }
+    .modal-actions {
+      display: flex;
+      gap: 8px;
+      justify-content: flex-end;
+      border-top: 1px solid var(--line);
+      padding: 12px 14px;
+    }
 
     .chat-wrap {
       height: calc(100vh - 126px);
@@ -709,7 +745,8 @@
             <div class="field">
               <label>Primary Provider</label>
               <select id="provider" data-testid="provider-select">
-                <option value="ollama">ollama</option>
+                <option value="ollama-local">ollama-local</option>
+                <option value="ollama-cloud">ollama-cloud</option>
                 <option value="nvidia">nvidia</option>
                 <option value="openrouter">openrouter</option>
                 <option value="xiaomimimo">xiaomimimo</option>
@@ -731,7 +768,8 @@
               <label>Add Fallback Provider</label>
               <select id="fallbackProviderPicker" data-testid="fallback-model-select">
                 <option value="">Select provider</option>
-                <option value="ollama">ollama</option>
+                <option value="ollama-local">ollama-local</option>
+                <option value="ollama-cloud">ollama-cloud</option>
                 <option value="nvidia">nvidia</option>
                 <option value="openrouter">openrouter</option>
                 <option value="xiaomimimo">xiaomimimo</option>
@@ -886,6 +924,21 @@
 
         <div class="view" id="view-missions">
           <h3 class="section-title">Mission Runner</h3>
+          <div class="grid two" style="margin-bottom:10px;">
+            <div class="field">
+              <label>Existing Missions</label>
+              <select id="missionPicker">
+                <option value="">Select mission...</option>
+              </select>
+            </div>
+            <div class="field">
+              <label>Mission Action</label>
+              <div class="row">
+                <button id="loadMissionBtn">Load</button>
+                <button id="clearMissionSelectionBtn">Clear</button>
+              </div>
+            </div>
+          </div>
           <div class="grid two">
             <div class="field">
               <label>Mission Goal</label>
@@ -1165,6 +1218,18 @@
       </section>
     </main>
   </div>
+  <dialog id="vaultEditModal" class="modal">
+    <div class="modal-head">
+      <div class="modal-title" id="vaultEditTitle">Edit Vault Entry</div>
+      <button id="vaultEditCloseTop">Close</button>
+    </div>
+    <div class="modal-body" id="vaultEditBody"></div>
+    <div class="modal-actions">
+      <button id="vaultEditTest">Test</button>
+      <button class="primary" id="vaultEditSave">Save</button>
+      <button id="vaultEditClose">Cancel</button>
+    </div>
+  </dialog>
 
   <script>
     const VIEW_META = {
@@ -1178,7 +1243,7 @@
       'control-plane': ['Control Plane API', 'Backend operations and full API access']
     };
 
-    let MODEL_PROVIDER_IDS = ['ollama', 'nvidia', 'openrouter', 'xiaomimimo', 'openai'];
+    let MODEL_PROVIDER_IDS = ['ollama-local', 'ollama-cloud', 'nvidia', 'openrouter', 'xiaomimimo', 'openai'];
     let SERVICE_PROVIDER_IDS = ['github', 'google-workspace', 'huggingface', 'elevenlabs', 'telegram', 'openai-oauth', 'github-copilot'];
     const SERVICE_SECRET_FIELD = {
       github: 'githubToken',
@@ -1190,14 +1255,16 @@
       'github-copilot': 'copilotGithubToken'
     };
     const PROVIDER_SECRET_FIELD = {
-      ollama: '',
+      'ollama-local': '',
+      'ollama-cloud': '',
       nvidia: 'nvidiaApiKey',
       openrouter: 'openrouterApiKey',
       xiaomimimo: 'xiaomimimoApiKey',
       openai: 'openaiApiKey'
     };
     const PROVIDER_BASE_FIELD = {
-      ollama: 'ollamaBaseUrl',
+      'ollama-local': 'ollamaBaseUrl',
+      'ollama-cloud': 'ollamaBaseUrl',
       nvidia: 'nvidiaBaseUrl',
       openrouter: 'openrouterBaseUrl',
       xiaomimimo: 'xiaomimimoBaseUrl',
@@ -1232,6 +1299,9 @@
     let fallbackSequence = [];
     let providerAdvancedOpen = {};
     let serviceAdvancedOpen = {};
+    let runtimeConfigCache = null;
+    let lastMissionList = [];
+    const vaultModalState = { kind: '', id: '' };
     let hiddenProviderRows = [];
     let hiddenServiceRows = [];
     let authJobPrompted = {};
@@ -1933,19 +2003,21 @@ ${verificationSummary || preview}`)}</pre>`;
     }
 
     function formatProviderModel(provider, model) {
-      const p = String(provider || '').trim().replace(/^generic$/, 'openai');
+      const p = String(provider || '').trim().replace(/^generic$/, 'openai').replace(/^ollama$/, 'ollama-cloud');
       const m = String(model || '').trim();
       if (!p) return m;
       if (!m) return p;
       if (m.startsWith(`${p}/`)) return m;
-      if (/^(ollama|openrouter|nvidia|xiaomimimo|generic|openai)\//.test(m)) return m.replace(/^generic\//, 'openai/');
+      if (/^(ollama-local|ollama-cloud|ollama|openrouter|nvidia|xiaomimimo|generic|openai)\//.test(m)) {
+        return m.replace(/^generic\//, 'openai/').replace(/^ollama\//, `${p}/`);
+      }
       return `${p}/${m}`;
     }
 
     function stripProviderPrefix(modelRef) {
       const value = String(modelRef || '').trim();
       if (!value) return '';
-      for (const provider of ['generic', ...MODEL_PROVIDER_IDS]) {
+      for (const provider of ['generic', 'ollama', ...MODEL_PROVIDER_IDS]) {
         const prefix = `${provider}/`;
         if (value.startsWith(prefix)) return value.slice(prefix.length);
       }
@@ -2019,7 +2091,7 @@ ${verificationSummary || preview}`)}</pre>`;
     }
 
     function ensureFallbackSequence(primaryProvider) {
-      const normalizedPrimary = String(primaryProvider || q('provider')?.value || 'ollama');
+      const normalizedPrimary = String(primaryProvider || q('provider')?.value || 'ollama-cloud');
       fallbackSequence = (fallbackSequence || [])
         .map((item) => ({
           provider: item.provider,
@@ -2158,6 +2230,40 @@ ${verificationSummary || preview}`)}</pre>`;
       if (el) el.textContent = info;
     }
 
+    async function runWebuiWireValidation(action = 'mutation') {
+      const checks = [];
+      try {
+        runtimeConfigCache = await jget('/api/config');
+        checks.push('config');
+      } catch {
+        q('providerStatus').textContent = `wire validation failed (${action}): config`;
+        return false;
+      }
+      try {
+        await refreshModelCatalog();
+        checks.push('model-catalog');
+      } catch {
+        q('providerStatus').textContent = `wire validation failed (${action}): model-catalog`;
+        return false;
+      }
+      try {
+        await refreshAuthCatalog();
+        checks.push('auth-catalog');
+      } catch {
+        q('providerStatus').textContent = `wire validation failed (${action}): auth-catalog`;
+        return false;
+      }
+      try {
+        await refreshRuntimeOverview();
+        checks.push('runtime');
+      } catch {
+        q('providerStatus').textContent = `wire validation failed (${action}): runtime`;
+        return false;
+      }
+      q('providerStatus').textContent = `wire validation ok (${action}) | ${checks.join(', ')}`;
+      return true;
+    }
+
     function providerSummaryText(provider) {
       const parts = [];
       if (provider.top_model) parts.push(`#1 ${provider.top_model}`);
@@ -2186,7 +2292,7 @@ ${verificationSummary || preview}`)}</pre>`;
         const authField = PROVIDER_SECRET_FIELD[provider.provider];
         const advancedOpen = Boolean(providerAdvancedOpen[provider.provider]);
         const isDisabled = Boolean(provider.disabled);
-        const authPlaceholder = provider.provider === 'ollama'
+        const authPlaceholder = String(provider.provider || '').startsWith('ollama-')
           ? 'local/no key'
           : provider.provider === 'nvidia'
             ? 'nvapi-...'
@@ -2225,6 +2331,8 @@ ${verificationSummary || preview}`)}</pre>`;
                 <button type="button" class="provider-test" data-provider="${provider.provider}">Test</button>
                 <button type="button" class="provider-disable" data-provider="${provider.provider}" style="background-color: ${provider.disabled ? '#555' : '#822'}; color: white;">${provider.disabled ? 'Enable' : 'Disable'}</button>
                 <button type="button" class="provider-use" data-provider="${provider.provider}">Use</button>
+                <button type="button" class="provider-modal" data-provider="${provider.provider}">Edit Vault</button>
+                <button type="button" class="provider-delete" data-provider="${provider.provider}">Remove</button>
                 <button type="button" class="provider-advanced" data-provider="${provider.provider}">${advancedOpen ? 'Hide' : 'Edit'}</button>
                 <button type="button" class="provider-hide" data-provider="${provider.provider}">Hide</button>
               </div>
@@ -2253,25 +2361,28 @@ ${verificationSummary || preview}`)}</pre>`;
       qa('.provider-disable').forEach((btn) => {
         btn.onclick = async () => {
           const provider = btn.dataset.provider;
-          const cp = authCatalog.providers.find(p => p.provider === provider);
+          const cp = authCatalog.providers.find((p) => p.provider === provider);
+          runtimeConfigCache = runtimeConfigCache || await jget('/api/config');
+          const existingDisabled = runtimeConfigCache?.model?.routing?.disabledProviders || [];
           const nextDisabled = !cp.disabled;
-          // Use config update to persist
           await jpost('/api/config', {
             model: {
               routing: {
-                disabledProviders: nextDisabled 
-                  ? [...(config.model?.routing?.disabledProviders || []), provider]
-                  : (config.model?.routing?.disabledProviders || []).filter(p => p !== provider)
+                disabledProviders: nextDisabled
+                  ? [...new Set([...existingDisabled, provider])]
+                  : existingDisabled.filter((p) => p !== provider)
               }
             }
           });
+          runtimeConfigCache = null;
           await refreshProviderConfig();
           await refreshModelCatalog();
+          await runWebuiWireValidation(`provider_toggle:${provider}`);
         };
       });
       qa('.provider-use').forEach((btn) => {
         btn.onclick = async () => {
-          setSelectByValueOrFirst('provider', btn.dataset.provider || 'ollama');
+          setSelectByValueOrFirst('provider', btn.dataset.provider || 'ollama-cloud');
           await loadModelsForProvider(q('provider').value);
           showView('model-routing');
         };
@@ -2280,6 +2391,32 @@ ${verificationSummary || preview}`)}</pre>`;
         btn.onclick = () => {
           providerAdvancedOpen[btn.dataset.provider] = !providerAdvancedOpen[btn.dataset.provider];
           renderProviderMatrix(authCatalog?.providers || []);
+        };
+      });
+      qa('.provider-modal').forEach((btn) => {
+        btn.onclick = () => openVaultModal({ kind: 'provider', id: btn.dataset.provider });
+      });
+      qa('.provider-delete').forEach((btn) => {
+        btn.onclick = async () => {
+          const provider = String(btn.dataset.provider || '').trim();
+          if (!provider) return;
+          runtimeConfigCache = runtimeConfigCache || await jget('/api/config');
+          const providerModels = { ...(runtimeConfigCache?.model?.providerModels || {}) };
+          delete providerModels[provider];
+          const fallbackProviders = (runtimeConfigCache?.model?.routing?.fallbackProviders || []).filter((p) => p !== provider);
+          const disabledProviders = [...new Set([...(runtimeConfigCache?.model?.routing?.disabledProviders || []), provider])];
+          const modelPatch = { providerModels, routing: { fallbackProviders, disabledProviders } };
+          if (runtimeConfigCache?.model?.provider === provider) {
+            modelPatch.provider = 'ollama-cloud';
+            modelPatch.model = stripProviderPrefix(providerModels['ollama-cloud'] || 'minimax-m2.7:cloud');
+          }
+          await jpost('/api/config', { model: modelPatch });
+          runtimeConfigCache = null;
+          q('providerStatus').textContent = `removed from routing ${provider}`;
+          await refreshRuntime();
+          await refreshProviderConfig();
+          await refreshModelCatalog();
+          await runWebuiWireValidation(`provider_remove:${provider}`);
         };
       });
       qa('.provider-hide').forEach((btn) => {
@@ -2320,6 +2457,8 @@ ${verificationSummary || preview}`)}</pre>`;
               <div class="row compact-actions">
                 ${secretField ? `<button type="button" class="service-save" data-service="${row.id}">Save</button><button type="button" class="service-test" data-service="${row.id}">Test</button>` : `<button type="button" class="service-test" data-service="${row.id}">Test</button>`}
                 ${hasOauth ? `<button type="button" class="service-connect" data-service="${row.id}">Connect</button>` : ''}
+                <button type="button" class="service-modal" data-service="${row.id}">Edit Vault</button>
+                <button type="button" class="service-delete" data-service="${row.id}">Delete</button>
                 <button type="button" class="service-advanced" data-service="${row.id}">${advancedOpen ? 'Hide' : 'Advanced'}</button>
                 <button type="button" class="service-hide" data-service="${row.id}">Hide</button>
               </div>
@@ -2355,6 +2494,24 @@ ${verificationSummary || preview}`)}</pre>`;
       qa('.service-save').forEach((btn) => { btn.onclick = () => saveServiceRow(btn.dataset.service); });
       qa('.service-test').forEach((btn) => { btn.onclick = () => testServiceRow(btn.dataset.service); });
       qa('.service-connect').forEach((btn) => { btn.onclick = () => connectServiceRow(btn.dataset.service); });
+      qa('.service-modal').forEach((btn) => {
+        btn.onclick = () => openVaultModal({ kind: 'service', id: btn.dataset.service });
+      });
+      qa('.service-delete').forEach((btn) => {
+        btn.onclick = async () => {
+          const service = String(btn.dataset.service || '').trim();
+          const secretField = SERVICE_SECRET_FIELD[service];
+          if (!secretField) {
+            q('providerStatus').textContent = `delete skipped ${service} (oauth/manual only)`;
+            return;
+          }
+          await jpost('/api/auth/catalog', { clear: [secretField] });
+          q('providerStatus').textContent = `deleted ${service}`;
+          await refreshProviderConfig();
+          await refreshRuntimeOverview();
+          await runWebuiWireValidation(`service_delete:${service}`);
+        };
+      });
       qa('.service-advanced').forEach((btn) => {
         btn.onclick = () => {
           serviceAdvancedOpen[btn.dataset.service] = !serviceAdvancedOpen[btn.dataset.service];
@@ -2373,6 +2530,92 @@ ${verificationSummary || preview}`)}</pre>`;
 
     function authMethodById(id) {
       return (authCatalog?.auth_methods || []).find((row) => row.id === id) || null;
+    }
+
+    function closeVaultModal() {
+      const modal = q('vaultEditModal');
+      if (!modal) return;
+      if (modal.open) modal.close();
+      vaultModalState.kind = '';
+      vaultModalState.id = '';
+    }
+
+    function openVaultModal({ kind, id }) {
+      const modal = q('vaultEditModal');
+      const title = q('vaultEditTitle');
+      const body = q('vaultEditBody');
+      if (!modal || !title || !body) return;
+      const safeKind = String(kind || '').trim();
+      const safeId = String(id || '').trim();
+      if (!safeKind || !safeId) return;
+      vaultModalState.kind = safeKind;
+      vaultModalState.id = safeId;
+      if (safeKind === 'provider') {
+        const row = providerCatalogRow(safeId);
+        if (!row) return;
+        const secretField = PROVIDER_SECRET_FIELD[safeId];
+        title.textContent = `Provider Vault: ${safeId}`;
+        body.innerHTML = `
+          <div class="field">
+            <label>Provider ID</label>
+            <input id="vaultProviderId" class="mono" value="${escapeHtml(safeId)}" readonly />
+          </div>
+          <div class="field">
+            <label>Base URL</label>
+            <input id="vaultProviderBase" class="mono" value="${escapeHtml(row.base_url || '')}" placeholder="https://..." />
+          </div>
+          ${secretField ? `
+            <div class="field">
+              <label>API Key / Token</label>
+              <input id="vaultProviderSecret" class="mono" value="" placeholder="${escapeHtml(row.stored_preview ? `current ${row.stored_preview}` : 'enter new secret')}" />
+            </div>
+          ` : ''}
+          <div class="field">
+            <label>Status</label>
+            <input class="mono" value="${escapeHtml(row.status || 'unknown')}" readonly />
+          </div>
+          <div class="field">
+            <label>Top Model</label>
+            <input class="mono" value="${escapeHtml(row.top_model || '')}" readonly />
+          </div>
+        `;
+      } else {
+        const row = authMethodById(safeId);
+        if (!row) return;
+        const secretField = SERVICE_SECRET_FIELD[safeId];
+        title.textContent = `Service Vault: ${safeId}`;
+        body.innerHTML = `
+          <div class="field">
+            <label>Service ID</label>
+            <input class="mono" value="${escapeHtml(safeId)}" readonly />
+          </div>
+          <div class="field">
+            <label>Auth Kind</label>
+            <input class="mono" value="${escapeHtml(row.auth_kind || 'unknown')}" readonly />
+          </div>
+          ${secretField ? `
+            <div class="field">
+              <label>Secret / Token</label>
+              <input id="vaultServiceSecret" class="mono" value="" placeholder="${escapeHtml(row.stored_preview ? `current ${row.stored_preview}` : 'enter new secret')}" />
+            </div>
+          ` : ''}
+          ${safeId === 'google-workspace' ? `
+            <div class="field">
+              <label>OAuth Client ID</label>
+              <input id="vaultGoogleClientId" class="mono" value="${escapeHtml(row.oauth_client_id || '')}" placeholder="google desktop oauth client id" />
+            </div>
+            <div class="field">
+              <label>OAuth Client Secret</label>
+              <input id="vaultGoogleClientSecret" class="mono" value="" placeholder="${escapeHtml(row.oauth_client_secret_preview ? `current ${row.oauth_client_secret_preview}` : 'optional')}" />
+            </div>
+            <div class="field">
+              <label>Scopes</label>
+              <textarea id="vaultGoogleScopes" class="mono" rows="4">${escapeHtml(row.oauth_scopes || '')}</textarea>
+            </div>
+          ` : ''}
+        `;
+      }
+      modal.showModal();
     }
 
     async function refreshAuthCatalog() {
@@ -2410,6 +2653,78 @@ ${verificationSummary || preview}`)}</pre>`;
       }
     }
 
+    async function saveVaultModal() {
+      if (vaultModalState.kind === 'provider') {
+        const provider = vaultModalState.id;
+        const row = providerCatalogRow(provider);
+        if (!row) return;
+        const secretField = PROVIDER_SECRET_FIELD[provider];
+        const baseField = PROVIDER_BASE_FIELD[provider];
+        const baseValue = q('vaultProviderBase')?.value?.trim() || row.base_url || '';
+        const secretValue = q('vaultProviderSecret')?.value?.trim() || '';
+        const payload = {
+          providerBaseUrls: baseField ? { [baseField]: baseValue } : {},
+          secrets: secretField && secretValue ? { [secretField]: secretValue } : {}
+        };
+        await jpost('/api/auth/catalog', payload);
+        q('providerStatus').textContent = `saved ${provider}`;
+        await refreshProviderConfig();
+        await refreshModelCatalog();
+        await refreshRuntimeOverview();
+        await runWebuiWireValidation(`provider_save:${provider}`);
+        closeVaultModal();
+        return;
+      }
+      if (vaultModalState.kind === 'service') {
+        const service = vaultModalState.id;
+        const secretField = SERVICE_SECRET_FIELD[service];
+        if (service === 'google-workspace') {
+          const payload = {
+            oauthConfig: {
+              googleWorkspace: {
+                clientId: q('vaultGoogleClientId')?.value?.trim() || '',
+                scopes: q('vaultGoogleScopes')?.value?.trim() || ''
+              }
+            }
+          };
+          const secret = q('vaultGoogleClientSecret')?.value?.trim() || '';
+          if (secret) payload.oauthConfig.googleWorkspace.clientSecret = secret;
+          await jpost('/api/auth/catalog', payload);
+        } else if (secretField) {
+          const secret = q('vaultServiceSecret')?.value?.trim() || '';
+          await jpost('/api/auth/catalog', secret ? { secrets: { [secretField]: secret } } : { clear: [secretField] });
+        }
+        q('providerStatus').textContent = `saved ${service}`;
+        await refreshProviderConfig();
+        await refreshRuntimeOverview();
+        await runWebuiWireValidation(`service_save:${service}`);
+        closeVaultModal();
+      }
+    }
+
+    async function testVaultModal() {
+      if (vaultModalState.kind === 'provider') {
+        const provider = vaultModalState.id;
+        const row = providerCatalogRow(provider);
+        if (!row) return;
+        const baseUrl = q('vaultProviderBase')?.value?.trim() || row.base_url || '';
+        const apiKey = q('vaultProviderSecret')?.value?.trim() || '';
+        const out = await jpost('/api/provider/test', { provider, baseUrl, apiKey });
+        q('providerStatus').textContent = out.ok
+          ? `test ok ${provider} | models=${Number(out.modelCount || 0)} | top=${out.topModel || '-'}`
+          : `test failed ${provider} | ${out.error || 'unknown'}`;
+        return;
+      }
+      if (vaultModalState.kind === 'service') {
+        const service = vaultModalState.id;
+        const secret = q('vaultServiceSecret')?.value?.trim() || '';
+        const out = await jpost('/api/service/test', { service, secret });
+        q('providerStatus').textContent = out.ok
+          ? `test ok ${service}${out.account ? ` | ${out.account}` : ''}${out.modelCount ? ` | models=${Number(out.modelCount)}` : ''}`
+          : `test failed ${service} | ${out.error || 'unknown'}`;
+      }
+    }
+
     function refreshAddRowSelectors() {
       const providerSelect = q('providerAddSelect');
       const serviceSelect = q('serviceAddSelect');
@@ -2432,10 +2747,10 @@ ${verificationSummary || preview}`)}</pre>`;
       const baseField = PROVIDER_BASE_FIELD[provider];
       const secretInput = document.querySelector(`.provider-secret-input[data-provider="${provider}"]`);
       const baseInput = document.querySelector(`.provider-base-input[data-provider="${provider}"]`);
+      const providerBaseUrls = {};
+      if (baseField) providerBaseUrls[baseField] = baseInput?.value?.trim() || row.base_url || '';
       const payload = {
-        providerBaseUrls: {
-          [baseField]: baseInput?.value?.trim() || row.base_url || ''
-        },
+        providerBaseUrls,
         secrets: secretField && secretInput?.value?.trim() ? { [secretField]: secretInput.value.trim() } : {}
       };
       await jpost('/api/auth/catalog', payload);
@@ -2443,6 +2758,7 @@ ${verificationSummary || preview}`)}</pre>`;
       await refreshProviderConfig();
       await refreshModelCatalog();
       await refreshRuntimeOverview();
+      await runWebuiWireValidation(`provider_save:${provider}`);
     }
 
     async function testProviderRow(provider) {
@@ -2480,6 +2796,7 @@ ${verificationSummary || preview}`)}</pre>`;
         await jpost('/api/auth/catalog', payload);
         q('providerStatus').textContent = `saved ${service}`;
         await refreshAuthCatalog();
+        await runWebuiWireValidation(`service_save:${service}`);
         return;
       }
       if (!secretField) return;
@@ -2489,6 +2806,7 @@ ${verificationSummary || preview}`)}</pre>`;
       q('providerStatus').textContent = `saved ${service}`;
       await refreshProviderConfig();
       await refreshRuntimeOverview();
+      await runWebuiWireValidation(`service_save:${service}`);
     }
 
     async function testServiceRow(service) {
@@ -2730,6 +3048,7 @@ ${verificationSummary || preview}`)}</pre>`;
 
     async function refreshRuntime() {
       const c = await jget('/api/config');
+      runtimeConfigCache = c;
       setSelectByValueOrFirst('autonomyMode', c.runtime?.autonomyMode || 'autonomy-first');
       setSelectByValueOrFirst('shellEnabled', String(Boolean(c.runtime?.shellEnabled)));
       setSelectByValueOrFirst('maxIters', String(c.runtime?.maxToolIterations ?? 8));
@@ -2750,7 +3069,9 @@ ${verificationSummary || preview}`)}</pre>`;
       setSelectByValueOrFirst('ollamaUrl', c.ollamaBaseUrl || 'http://127.0.0.1:11434');
       setSelectByValueOrFirst('openrouterUrl', c.openrouterBaseUrl || 'https://openrouter.ai/api/v1');
       setSelectByValueOrFirst('nvidiaUrl', c.nvidiaBaseUrl || 'https://integrate.api.nvidia.com/v1');
+      setSelectByValueOrFirst('xiaomimimoUrl', c.xiaomimimoBaseUrl || 'https://api.x.ai/v1');
       setSelectByValueOrFirst('genericUrl', c.openaiBaseUrl || c.genericBaseUrl || 'https://api.openai.com/v1');
+      runtimeConfigCache = runtimeConfigCache || await jget('/api/config').catch(() => null);
       await refreshAuthCatalog();
     }
 
@@ -2772,20 +3093,49 @@ ${verificationSummary || preview}`)}</pre>`;
     }
 
     async function refreshMission() {
+      let allMissions = { missions: [], schedules: [] };
+      try {
+        allMissions = await jget('/api/missions');
+      } catch (err) {
+        console.error('refresh_missions_list_failed', err);
+      }
+      lastMissionList = Array.isArray(allMissions.missions) ? allMissions.missions : [];
+      const picker = q('missionPicker');
+      if (picker) {
+        const selected = activeMissionId || picker.value || '';
+        picker.innerHTML = '<option value="">Select mission...</option>' + lastMissionList
+          .map((m) => {
+            const id = String(m.id || '').trim();
+            const label = `${id} | ${String(m.status || 'unknown')} | ${String(m.goal || '').slice(0, 80)}`;
+            return `<option value="${escapeHtml(id)}">${escapeHtml(label)}</option>`;
+          })
+          .join('');
+        if (selected && lastMissionList.some((m) => String(m.id || '') === selected)) {
+          picker.value = selected;
+        }
+      }
+      if (!activeMissionId && lastMissionList.length > 0) {
+        activeMissionId = String(lastMissionList[0].id || '');
+        localStorage.setItem('openunum_mission', activeMissionId);
+      }
+
       // Refresh active mission
       if (activeMissionId) {
-        const out = await jget(`/api/missions/status?id=${encodeURIComponent(activeMissionId)}`);
-        if (out.error) {
-          q('missionStatus').textContent = out.error;
-        } else {
-          const m = out.mission;
-          q('missionStatus').textContent = `${m.status} step=${m.step}/${m.maxSteps}`;
-          const latest = m.log?.[m.log.length - 1];
-          if (latest) q('pcOutput').value = latest.reply;
-          if (m.status !== 'running' && m.status !== 'stopping') {
-            localStorage.removeItem('openunum_mission');
-            activeMissionId = '';
+        try {
+          const out = await jget(`/api/missions/status?id=${encodeURIComponent(activeMissionId)}`);
+          if (out.error) {
+            q('missionStatus').textContent = out.error;
+          } else {
+            const m = out.mission;
+            q('missionStatus').textContent = `${m.status} step=${m.step}/${m.maxSteps}`;
+            const latest = m.log?.[m.log.length - 1];
+            if (latest) q('pcOutput').value = latest.reply;
+            if (m.status !== 'running' && m.status !== 'stopping') {
+              q('missionStatus').textContent = `${m.status} step=${m.step}/${m.maxSteps} (select another mission or start new)`;
+            }
           }
+        } catch {
+          q('missionStatus').textContent = `mission_not_found: ${activeMissionId}`;
         }
       } else {
         q('missionStatus').textContent = 'idle';
@@ -2794,7 +3144,6 @@ ${verificationSummary || preview}`)}</pre>`;
 
       // Refresh scheduled missions
       try {
-        const allMissions = await jget('/api/missions');
         const schedules = allMissions.schedules || [];
         const host = q('scheduledMissionsList');
         if (host) {
@@ -2817,6 +3166,18 @@ ${verificationSummary || preview}`)}</pre>`;
 
     qa('.menu-btn').forEach((btn) => {
       btn.addEventListener('click', () => showView(btn.dataset.view));
+    });
+    q('vaultEditCloseTop').onclick = closeVaultModal;
+    q('vaultEditClose').onclick = closeVaultModal;
+    q('vaultEditSave').onclick = () => saveVaultModal().catch((err) => {
+      q('providerStatus').textContent = `vault save failed: ${String(err.message || err)}`;
+    });
+    q('vaultEditTest').onclick = () => testVaultModal().catch((err) => {
+      q('providerStatus').textContent = `vault test failed: ${String(err.message || err)}`;
+    });
+    q('vaultEditModal').addEventListener('cancel', (event) => {
+      event.preventDefault();
+      closeVaultModal();
     });
 
     q('newChat').onclick = async () => {
@@ -2942,6 +3303,7 @@ ${verificationSummary || preview}`)}</pre>`;
       q('modelCatalogStatus').textContent = `routing saved | primary=${formatProviderModel(provider, selectedModel || '')} | fallbacks=${onlineFallbackSequence.map((entry) => entry.provider).join(' -> ') || 'none'}`;
       await refreshModel();
       await refreshRuntimeOverview();
+      await runWebuiWireValidation('routing_save');
     };
 
     q('prefillLocalAuth').onclick = async () => {
@@ -2950,12 +3312,14 @@ ${verificationSummary || preview}`)}</pre>`;
       await refreshProviderConfig();
       await refreshModelCatalog();
       await refreshRuntimeOverview();
+      await runWebuiWireValidation('prefill_local_auth');
     };
 
     q('refreshAuthCatalog').onclick = async () => {
       await refreshProviderConfig();
       await refreshModelCatalog();
       await refreshRuntimeOverview();
+      await runWebuiWireValidation('refresh_auth_catalog');
     };
 
     q('showAllProviderRows').onclick = () => {
@@ -2979,6 +3343,7 @@ ${verificationSummary || preview}`)}</pre>`;
       normalizeHiddenRows();
       refreshAddRowSelectors();
       renderProviderMatrix(authCatalog?.providers || []);
+      runWebuiWireValidation(`provider_add_row:${id}`).catch(() => {});
     };
 
     q('addServiceRow').onclick = () => {
@@ -2988,6 +3353,7 @@ ${verificationSummary || preview}`)}</pre>`;
       normalizeHiddenRows();
       refreshAddRowSelectors();
       renderAuthMethodTable(authCatalog?.auth_methods || []);
+      runWebuiWireValidation(`service_add_row:${id}`).catch(() => {});
     };
 
     q('addFallbackRow').onclick = () => {
@@ -3023,6 +3389,7 @@ ${verificationSummary || preview}`)}</pre>`;
       q('runtimeStatus').textContent =
         `saved mode=${out.runtime.autonomyMode || q('autonomyMode').value} shell=${out.runtime.shellEnabled} maxIters=${out.runtime.maxToolIterations}`;
       await refreshRuntimeOverview();
+      await runWebuiWireValidation('runtime_save');
     };
 
     q('compactContextBtn').onclick = async () => {
@@ -3129,6 +3496,7 @@ ${verificationSummary || preview}`)}</pre>`;
       q('missionStatus').textContent = `running id=${activeMissionId}`;
       await refreshMission();
       await refreshMissionTimeline();
+      await runWebuiWireValidation('mission_start');
     };
 
     q('stopMission').onclick = async () => {
@@ -3136,9 +3504,33 @@ ${verificationSummary || preview}`)}</pre>`;
       await jpost('/api/missions/stop', { id: activeMissionId });
       await refreshMission();
       await refreshMissionTimeline();
+      await runWebuiWireValidation('mission_stop');
     };
 
     q('refreshMission').onclick = refreshMission;
+    q('loadMissionBtn').onclick = async () => {
+      const picked = String(q('missionPicker')?.value || '').trim();
+      if (!picked) return;
+      activeMissionId = picked;
+      localStorage.setItem('openunum_mission', activeMissionId);
+      await refreshMission();
+      await refreshMissionTimeline();
+    };
+    q('clearMissionSelectionBtn').onclick = async () => {
+      activeMissionId = '';
+      localStorage.removeItem('openunum_mission');
+      if (q('missionPicker')) q('missionPicker').value = '';
+      await refreshMission();
+      await refreshMissionTimeline();
+    };
+    q('missionPicker').onchange = async () => {
+      const picked = String(q('missionPicker')?.value || '').trim();
+      if (!picked) return;
+      activeMissionId = picked;
+      localStorage.setItem('openunum_mission', activeMissionId);
+      await refreshMission();
+      await refreshMissionTimeline();
+    };
     q('openMissionSessionBtn').onclick = async () => {
       if (!missionTimelineCache?.mission?.sessionId) return;
       sessionId = missionTimelineCache.mission.sessionId;

@@ -422,26 +422,30 @@ export class SelfHealSystem {
         autonomyMode: 'autonomy-first'
       },
       model: {
-        provider: 'ollama',
-        model: 'ollama/qwen3.5:9b-64k',
+        provider: 'ollama-cloud',
+        model: 'ollama-cloud/minimax-m2.7:cloud',
         providerModels: {
-          ollama: 'ollama/qwen3.5:9b-64k',
+          'ollama-cloud': 'ollama-cloud/minimax-m2.7:cloud',
+          'ollama-local': 'ollama-local/gemma4:cpu',
           openrouter: 'openrouter/openai/gpt-4o-mini',
           nvidia: 'nvidia/qwen/qwen3-coder-480b-a35b-instruct',
+          xiaomimimo: 'xiaomimimo/gpt-4o-mini',
           openai: 'openai/gpt-4o-mini'
         },
         routing: {
           fallbackEnabled: true,
-          fallbackProviders: ['ollama', 'nvidia', 'openrouter', 'openai'],
+          fallbackProviders: ['ollama-cloud', 'nvidia', 'openrouter', 'openai'],
           forcePrimaryProvider: false
         },
         ollamaBaseUrl: 'http://127.0.0.1:11434',
         openrouterBaseUrl: 'https://openrouter.ai/api/v1',
         nvidiaBaseUrl: 'https://integrate.api.nvidia.com/v1',
+        xiaomimimoBaseUrl: 'https://api.x.ai/v1',
         openaiBaseUrl: 'https://api.openai.com/v1',
         genericBaseUrl: 'https://api.openai.com/v1',
         openrouterApiKey: '',
         nvidiaApiKey: '',
+        xiaomimimoApiKey: '',
         openaiApiKey: '',
         genericApiKey: ''
       },

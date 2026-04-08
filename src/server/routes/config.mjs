@@ -172,11 +172,13 @@ export async function handleConfigRoute({ req, res, url, ctx }) {
     if (typeof up.ollamaBaseUrl === 'string') ctx.config.model.ollamaBaseUrl = up.ollamaBaseUrl.trim();
     if (typeof up.openrouterBaseUrl === 'string') ctx.config.model.openrouterBaseUrl = up.openrouterBaseUrl.trim();
     if (typeof up.nvidiaBaseUrl === 'string') ctx.config.model.nvidiaBaseUrl = up.nvidiaBaseUrl.trim();
+    if (typeof up.xiaomimimoBaseUrl === 'string') ctx.config.model.xiaomimimoBaseUrl = up.xiaomimimoBaseUrl.trim();
     if (typeof up.openaiBaseUrl === 'string') ctx.config.model.openaiBaseUrl = up.openaiBaseUrl.trim();
     if (typeof up.genericBaseUrl === 'string') ctx.config.model.openaiBaseUrl = up.genericBaseUrl.trim();
     const secretUpdates = {};
     if (typeof up.openrouterApiKey === 'string') secretUpdates.openrouterApiKey = up.openrouterApiKey.trim();
     if (typeof up.nvidiaApiKey === 'string') secretUpdates.nvidiaApiKey = up.nvidiaApiKey.trim();
+    if (typeof up.xiaomimimoApiKey === 'string') secretUpdates.xiaomimimoApiKey = up.xiaomimimoApiKey.trim();
     if (typeof up.openaiApiKey === 'string') secretUpdates.openaiApiKey = up.openaiApiKey.trim();
     if (typeof up.genericApiKey === 'string') secretUpdates.openaiApiKey = up.genericApiKey.trim();
     ctx.persistSecretUpdates(secretUpdates);
@@ -192,6 +194,7 @@ export async function handleConfigRoute({ req, res, url, ctx }) {
     ctx.persistSecretUpdates({
       openrouterApiKey: imported.openrouterApiKey || '',
       nvidiaApiKey: imported.nvidiaApiKey || '',
+      xiaomimimoApiKey: imported.xiaomimimoApiKey || '',
       openaiApiKey: imported.openaiApiKey || '',
       githubToken: imported.githubToken || '',
       huggingfaceApiKey: imported.huggingfaceApiKey || '',
@@ -200,6 +203,7 @@ export async function handleConfigRoute({ req, res, url, ctx }) {
     });
     if (imported.openrouterBaseUrl) ctx.config.model.openrouterBaseUrl = imported.openrouterBaseUrl;
     if (imported.nvidiaBaseUrl) ctx.config.model.nvidiaBaseUrl = imported.nvidiaBaseUrl;
+    if (imported.xiaomimimoBaseUrl) ctx.config.model.xiaomimimoBaseUrl = imported.xiaomimimoBaseUrl;
     if (imported.openaiBaseUrl) ctx.config.model.openaiBaseUrl = imported.openaiBaseUrl;
     if (imported.ollamaBaseUrl) ctx.config.model.ollamaBaseUrl = imported.ollamaBaseUrl;
     ctx.normalizeModelSettings();
@@ -210,6 +214,7 @@ export async function handleConfigRoute({ req, res, url, ctx }) {
       imported: {
         openrouterApiKey: Boolean(imported.openrouterApiKey),
         nvidiaApiKey: Boolean(imported.nvidiaApiKey),
+        xiaomimimoApiKey: Boolean(imported.xiaomimimoApiKey),
         openaiApiKey: Boolean(imported.openaiApiKey),
         githubToken: Boolean(imported.githubToken),
         huggingfaceApiKey: Boolean(imported.huggingfaceApiKey),
@@ -217,6 +222,7 @@ export async function handleConfigRoute({ req, res, url, ctx }) {
         telegramBotToken: Boolean(imported.telegramBotToken),
         openrouterBaseUrl: imported.openrouterBaseUrl || ctx.config.model.openrouterBaseUrl,
         nvidiaBaseUrl: imported.nvidiaBaseUrl || ctx.config.model.nvidiaBaseUrl,
+        xiaomimimoBaseUrl: imported.xiaomimimoBaseUrl || ctx.config.model.xiaomimimoBaseUrl,
         openaiBaseUrl: imported.openaiBaseUrl || ctx.config.model.openaiBaseUrl,
         ollamaBaseUrl: imported.ollamaBaseUrl || ctx.config.model.ollamaBaseUrl
       }

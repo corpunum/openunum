@@ -5,7 +5,10 @@ import { getEffectiveOpenAICodexOAuthStatus, getStoredOpenAICodexOAuth } from '.
 import { RetryPolicy, ProviderHealthTracker, defaultRetryPolicy, healthTracker } from './retry-policy.mjs';
 
 function normalizeProviderId(provider) {
-  return String(provider || 'ollama').trim().toLowerCase() === 'generic' ? 'openai' : String(provider || 'ollama').trim().toLowerCase();
+  const normalized = String(provider || 'ollama-cloud').trim().toLowerCase();
+  if (normalized === 'generic') return 'openai';
+  if (normalized === 'ollama') return 'ollama-cloud';
+  return normalized;
 }
 
 function prefersOpenAICodexTransport(model) {
@@ -22,6 +25,14 @@ function normalizeProviderModelId(provider, model) {
   if (provider === 'nvidia') {
     return stripped.includes('/') ? stripped : raw;
   }
+  if (provider === 'xiaomimimo') {
+    return new OpenAICompatibleProvider({
+      baseUrl: config.model.xiaomimimoBaseUrl,
+      apiKey: config.model.xiaomimimoApiKey,
+      model: normalizeProviderModelId('xiaomimimo', model),
+      timeoutMs
+    });
+  }
   return stripped;
 }
 
@@ -30,7 +41,7 @@ export function buildProvider(config) {
   const provider = normalizeProviderId(config.model.provider);
   const timeoutMs = config.runtime?.providerRequestTimeoutMs ?? 120000;
 
-  if (provider === 'ollama') {
+  if (provider === 'ollama-cloud' || provider === 'ollama-local') {
     return new OllamaProvider({ baseUrl: config.model.ollamaBaseUrl, model, timeoutMs });
   }
   if (provider === 'openrouter') {

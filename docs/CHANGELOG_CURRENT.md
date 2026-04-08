@@ -2,6 +2,24 @@
 
 Date: 2026-04-07
 
+## WebUI + Provider Stack Hardening (2026-04-08)
+
+**Status:** ✅ Implemented and test-gated
+
+- Split Ollama provider lane into:
+  - `ollama-local` (local-only catalog; gemma4 + embeddings)
+  - `ollama-cloud` (cloud model catalog lane)
+- Added Provider Vault popup editor for both providers and services, with backend-linked `save`/`test`.
+- Added mission picker flow to Missions screen so existing missions can be selected/loaded and inspected.
+- Added mutation wire validation after WebUI edits (provider/service/routing/mission actions).
+- Extended config/auth/model catalog stack with `xiaomimimo` base URL + key support.
+- Removed non-gemma local models from runtime host:
+  - `qwen-stable:latest`
+  - `qwen2.5:1.5b`
+- Updated provider-order contract and smoke checks to:
+  - `ollama-local`, `ollama-cloud`, `nvidia`, `openrouter`, `xiaomimimo`, `openai`.
+- Made `phase10` and `phase11` e2e default ports dynamic to avoid external service collisions.
+
 ## Phase Plan + Cleanup Kickoff (2026-04-08)
 
 **Status:** ✅ In progress (Phase 1 execution started)

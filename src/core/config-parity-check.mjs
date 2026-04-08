@@ -1,4 +1,4 @@
-const PROVIDERS = ['ollama', 'openrouter', 'nvidia', 'openai'];
+const PROVIDERS = ['ollama-local', 'ollama-cloud', 'openrouter', 'nvidia', 'xiaomimimo', 'openai'];
 
 function toStr(v) {
   return String(v || '').trim();
@@ -12,15 +12,17 @@ function hasApiKey(config, provider) {
   const model = config?.model || {};
   if (provider === 'openrouter') return bool(toStr(model.openrouterApiKey));
   if (provider === 'nvidia') return bool(toStr(model.nvidiaApiKey));
+  if (provider === 'xiaomimimo') return bool(toStr(model.xiaomimimoApiKey));
   if (provider === 'openai') return bool(toStr(model.openaiApiKey || model.genericApiKey));
   return true;
 }
 
 function providerBaseUrl(config, provider) {
   const model = config?.model || {};
-  if (provider === 'ollama') return toStr(model.ollamaBaseUrl);
+  if (provider === 'ollama-local' || provider === 'ollama-cloud') return toStr(model.ollamaBaseUrl);
   if (provider === 'openrouter') return toStr(model.openrouterBaseUrl);
   if (provider === 'nvidia') return toStr(model.nvidiaBaseUrl);
+  if (provider === 'xiaomimimo') return toStr(model.xiaomimimoBaseUrl);
   if (provider === 'openai') return toStr(model.openaiBaseUrl || model.genericBaseUrl);
   return '';
 }
@@ -70,7 +72,7 @@ export function buildConfigParityReport(config = {}, env = process.env) {
   const issues = [];
   const model = config?.model || {};
   const runtime = config?.runtime || {};
-  const activeProvider = toStr(model.provider || 'ollama').toLowerCase();
+  const activeProvider = toStr(model.provider || 'ollama-cloud').toLowerCase().replace(/^ollama$/, 'ollama-cloud');
   const fallbackProviders = Array.isArray(model?.routing?.fallbackProviders)
     ? model.routing.fallbackProviders.map((p) => toStr(p).toLowerCase()).filter(Boolean)
     : [];
@@ -93,7 +95,7 @@ export function buildConfigParityReport(config = {}, env = process.env) {
       pushIssue(issues, 'error', 'provider_base_url_missing', `Provider ${provider} is active/fallback but has no base URL configured`, { provider });
     }
 
-    if ((provider === activeProvider || fallbackProviders.includes(provider)) && provider !== 'ollama' && !keyPresent) {
+    if ((provider === activeProvider || fallbackProviders.includes(provider)) && !provider.startsWith('ollama-') && !keyPresent) {
       pushIssue(issues, 'warning', 'provider_api_key_missing', `Provider ${provider} is active/fallback but API key is missing`, { provider });
     }
   }

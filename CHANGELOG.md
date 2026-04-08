@@ -7,6 +7,24 @@ All notable changes to OpenUnum are documented in this file.
 ## [2.3.0] - 2026-04-08
 
 ### Added
+- WebUI Provider Vault popup editor (`Edit Vault`) for model providers and service providers with backend-linked save/test flows.
+- Mission screen usability expansion:
+  - existing mission picker (`missionPicker`)
+  - load/clear mission actions
+  - timeline/detail loading for existing missions.
+- Provider split for Ollama:
+  - `ollama-local` (local-only, filtered to gemma4 + embeddings)
+  - `ollama-cloud` (cloud model catalog lane)
+- Runtime/UI wire-validation hook after WebUI mutations (provider/service/routing/mission actions).
+
+### Changed
+- Removed non-gemma local Ollama models from host runtime (`qwen-stable:latest`, `qwen2.5:1.5b`).
+- Provider/model stack now includes explicit `xiaomimimo` base URL/API key in config + auth catalog flows.
+- Updated provider order contracts and smoke checks to the new matrix:
+  - `ollama-local`, `ollama-cloud`, `nvidia`, `openrouter`, `xiaomimimo`, `openai`.
+- Stabilized phase e2e port defaults (dynamic by PID) for `phase10`/`phase11`.
+
+### Previously Added In 2.3.0
 - Final phases closure report:
   - `docs/PHASES_COMPLETION_REPORT_2026-04-08.md`
 - `NEXT_TASKS.md` pointer file restored for docs index continuity.

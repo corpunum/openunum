@@ -14,9 +14,9 @@ function baseConfig() {
       }
     },
     model: {
-      provider: 'ollama',
+      provider: 'ollama-cloud',
       providerModels: {
-        ollama: 'ollama/qwen3.5:9b-64k',
+        'ollama-cloud': 'ollama-cloud/minimax-m2.7:cloud',
         openrouter: 'openrouter/openai/gpt-4o-mini'
       },
       routing: {

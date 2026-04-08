@@ -254,7 +254,7 @@ function deriveRuntimeHints(mission, recentToolRuns = [], memoryStore = null) {
 function deriveProviderHint(currentModel) {
   const provider = String(currentModel?.activeProvider || currentModel?.provider || '').toLowerCase();
   const model = String(currentModel?.activeModel || currentModel?.model || '').toLowerCase();
-  if (provider === 'ollama') {
+  if (provider === 'ollama-local' || provider === 'ollama-cloud' || provider === 'ollama') {
     return 'For local Ollama verification, prefer the local HTTP/JSON API over interactive `ollama run` if both are available, and use the `http_request` tool instead of `shell_run` with curl when possible.';
   }
   if (provider === 'nvidia' || provider === 'openrouter' || provider === 'openai') {

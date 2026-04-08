@@ -5,7 +5,8 @@ import path from 'node:path';
 import { startServer, stopServer, jget, jpost } from './_helpers.mjs';
 
 let proc;
-const TEST_PORT = Number(process.env.OPENUNUM_TEST_PORT || 18881);
+const DEFAULT_DYNAMIC_PORT = 18000 + (process.pid % 2000);
+const TEST_PORT = Number(process.env.OPENUNUM_TEST_PORT || DEFAULT_DYNAMIC_PORT);
 const TEST_HOME = path.join(os.tmpdir(), `openunum-test-home-${TEST_PORT}`);
 
 try {
@@ -14,14 +15,14 @@ try {
   const caps = await jget('/api/capabilities');
   assert.equal(caps.status, 200);
   assert.deepEqual(caps.json.menu, ['chat', 'missions', 'trace', 'runtime', 'settings']);
-  assert.deepEqual(caps.json.provider_order, ['ollama', 'nvidia', 'openrouter', 'xiaomimimo', 'openai']);
+  assert.deepEqual(caps.json.provider_order, ['ollama-local', 'ollama-cloud', 'nvidia', 'openrouter', 'xiaomimimo', 'openai']);
 
   const catalog = await jget('/api/model-catalog');
   assert.equal(catalog.status, 200);
   assert.equal(catalog.json.contract_version, '2026-04-01.model-catalog.v1');
-  assert.deepEqual(catalog.json.provider_order, ['ollama', 'nvidia', 'openrouter', 'xiaomimimo', 'openai']);
+  assert.deepEqual(catalog.json.provider_order, ['ollama-local', 'ollama-cloud', 'nvidia', 'openrouter', 'xiaomimimo', 'openai']);
   assert.equal(Array.isArray(catalog.json.providers), true);
-  assert.equal(catalog.json.providers.length, 5);
+  assert.equal(catalog.json.providers.length, 6);
   assert.equal(Boolean(catalog.json.selected?.canonical_key), true);
   assert.equal(Boolean(catalog.json.fallback?.canonical_key), true);
 
@@ -45,7 +46,7 @@ try {
   const authCatalog = await jget('/api/auth/catalog');
   assert.equal(authCatalog.status, 200);
   assert.equal(authCatalog.json.contract_version, '2026-04-01.auth-catalog.v1');
-  assert.deepEqual(authCatalog.json.provider_order, ['ollama', 'nvidia', 'openrouter', 'xiaomimimo', 'openai']);
+  assert.deepEqual(authCatalog.json.provider_order, ['ollama-local', 'ollama-cloud', 'nvidia', 'openrouter', 'xiaomimimo', 'openai']);
   assert.equal(Array.isArray(authCatalog.json.providers), true);
   assert.equal(Array.isArray(authCatalog.json.auth_methods), true);
   assert.equal(Boolean(authCatalog.json.secret_store_path), true);
@@ -84,8 +85,10 @@ try {
   assert.equal(savedAuth.json.catalog.providers.some((row) => row.provider === 'openrouter' && row.stored === true), true);
 
   const configFile = fs.readFileSync(path.join(TEST_HOME, 'openunum.json'), 'utf8');
-  const secretFilePath = path.join(TEST_HOME, 'secrets.json');
-  const secretFile = fs.readFileSync(secretFilePath, 'utf8');
+  const secretFilePath = authCatalog.json.secret_store_path || path.join(TEST_HOME, 'secrets.json');
+  const fallbackSecretFilePath = path.join(TEST_HOME, 'secrets.json');
+  const readableSecretPath = fs.existsSync(secretFilePath) ? secretFilePath : fallbackSecretFilePath;
+  const secretFile = fs.readFileSync(readableSecretPath, 'utf8');
   assert.equal(configFile.includes('sk-or-phase10-secret'), false);
   assert.equal(configFile.includes('nvapi-phase10-secret'), false);
   assert.equal(configFile.includes('ghp_phase10_secret'), false);
@@ -93,7 +96,7 @@ try {
   assert.equal(secretFile.includes('ghp_phase10_secret'), true);
   assert.equal(secretFile.includes('google-client-id-phase10.apps.googleusercontent.com'), true);
   assert.equal(secretFile.includes('google-client-secret-phase10'), true);
-  assert.equal((fs.statSync(secretFilePath).mode & 0o777), 0o600);
+  assert.equal((fs.statSync(readableSecretPath).mode & 0o777), 0o600);
 
   const prefill = await jpost('/api/auth/prefill-local', { overwriteBaseUrls: false });
   assert.equal(prefill.status, 200);

@@ -78,18 +78,22 @@ function isModelInfoQuestion(text) {
 }
 
 function normalizeModelForProvider(provider, model) {
-  const normalizedProvider = String(provider || 'ollama').trim().toLowerCase() === 'generic' ? 'openai' : String(provider || 'ollama').trim().toLowerCase();
-  const raw = String(model || '').replace(/^(ollama|openrouter|nvidia|generic|openai)\//, '');
+  const providerRaw = String(provider || 'ollama-cloud').trim().toLowerCase();
+  const normalizedProvider = providerRaw === 'generic' ? 'openai' : (providerRaw === 'ollama' ? 'ollama-cloud' : providerRaw);
+  const raw = String(model || '').replace(/^(ollama-local|ollama-cloud|ollama|openrouter|nvidia|xiaomimimo|generic|openai)\//, '');
   return `${normalizedProvider}/${raw}`;
 }
 
 function providerModelLabel(provider, model) {
-  const p = String(provider || '').trim().toLowerCase() === 'generic' ? 'openai' : String(provider || '').trim();
+  const rawProvider = String(provider || '').trim().toLowerCase();
+  const p = rawProvider === 'generic' ? 'openai' : (rawProvider === 'ollama' ? 'ollama-cloud' : rawProvider);
   const m = String(model || '').trim();
   if (!p) return m;
   if (!m) return p;
   if (m.startsWith(`${p}/`)) return m;
-  if (/^(ollama|openrouter|nvidia|generic|openai)\//.test(m)) return m.replace(/^generic\//, 'openai/');
+  if (/^(ollama-local|ollama-cloud|ollama|openrouter|nvidia|xiaomimimo|generic|openai)\//.test(m)) {
+    return m.replace(/^generic\//, 'openai/').replace(/^ollama\//, `${p}/`);
+  }
   return `${p}/${m}`;
 }
 
@@ -209,7 +213,7 @@ function extractAutomaticFacts({ message = '', reply = '', model = null, trace =
 
   const preferencePatterns = [
     { regex: /\bi prefer\s+([^.\n]{2,80})/i, key: 'owner.preference.general' },
-    { regex: /\buse\s+(ollama|openai|openrouter|nvidia)\b/i, key: 'owner.preference.provider' },
+    { regex: /\buse\s+(ollama|ollama-local|ollama-cloud|openai|openrouter|nvidia|xiaomimimo)\b/i, key: 'owner.preference.provider' },
     { regex: /\b(?:avoid|don\'t use|do not use)\s+(browser|shell|telegram|email)\b/i, key: 'owner.preference.avoid_surface' }
   ];
   for (const pattern of preferencePatterns) {
@@ -314,7 +318,7 @@ function buildPivotHints({ executedTools = [], permissionDenials = [], timedOut 
 
 const EXECUTION_PROFILES = [
   {
-    match: ({ provider, model }) => provider === 'ollama' && /kimi|minimax|cloud/.test(model),
+    match: ({ provider, model }) => (provider === 'ollama-cloud' || provider === 'ollama') && /kimi|minimax|cloud/.test(model),
     name: 'strict-shell-cloud',
     turnBudgetMs: 60000,
     maxIters: 3,
@@ -335,7 +339,7 @@ const EXECUTION_PROFILES = [
     ]
   },
   {
-    match: ({ provider, model }) => provider === 'ollama' && /qwen|llama|coder|8b|9b|14b/.test(model),
+    match: ({ provider, model }) => provider === 'ollama-local' || ((provider === 'ollama-cloud' || provider === 'ollama') && /qwen|llama|coder|8b|9b|14b/.test(model)),
     name: 'local-tool-runner',
     turnBudgetMs: 180000,
     maxIters: 6,
@@ -761,7 +765,9 @@ export class OpenUnumAgent {
   }
 
   switchModel(provider, model) {
-    provider = String(provider || 'ollama').trim().toLowerCase() === 'generic' ? 'openai' : String(provider || 'ollama').trim().toLowerCase();
+    provider = String(provider || 'ollama-cloud').trim().toLowerCase();
+    if (provider === 'generic') provider = 'openai';
+    if (provider === 'ollama') provider = 'ollama-cloud';
     this.config.model.provider = provider;
     this.config.model.model = providerModelLabel(provider, model);
     this.config.model.providerModels = this.config.model.providerModels || {};
@@ -1052,8 +1058,9 @@ export class OpenUnumAgent {
       )
     );
     const baseTurnBudgetMs = executionProfile.turnBudgetMs || this.config.runtime?.agentTurnTimeoutMs || 420000;
-    const isCloudController = ['nvidia', 'openrouter', 'openai'].includes(String(provider || '').toLowerCase()) ||
-      (String(provider || '').toLowerCase() === 'ollama' && /cloud/.test(String(model || '').toLowerCase()));
+    const normalizedProvider = String(provider || '').toLowerCase();
+    const isCloudController = ['nvidia', 'openrouter', 'openai', 'ollama-cloud'].includes(normalizedProvider) ||
+      (normalizedProvider === 'ollama' && /cloud/.test(String(model || '').toLowerCase()));
     const turnBudgetMs = localRuntimeTask && !isCloudController
       ? Math.max(baseTurnBudgetMs, 180000)
       : uiCodeEditTask && !isCloudController
@@ -1566,7 +1573,7 @@ export class OpenUnumAgent {
               sessionId,
               'proof_check',
               `Verify completion claims. Proof score was ${proofScore.totalScore.toFixed(2)} (threshold 0.6). Review tool results and final answer. Confirm if task is actually complete or what's missing.`,
-              { timeoutMs: 3 * 60 * 1000, modelOverride: 'ollama/qwen3.5:397b-cloud' }
+              { timeoutMs: 3 * 60 * 1000, modelOverride: 'ollama-cloud/qwen3.5:397b-cloud' }
             );
             const questResult = await this.sideQuestManager.executeQuest(questId);
             if (questResult.status === 'completed' && questResult.summary) {

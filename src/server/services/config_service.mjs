@@ -13,7 +13,9 @@ export function createConfigService({ config, PROVIDER_ORDER, reloadConfigSecret
     config.model.openaiApiKey = config.model.openaiApiKey || config.model.genericApiKey || '';
     config.model.genericBaseUrl = config.model.openaiBaseUrl;
     config.model.genericApiKey = config.model.openaiApiKey;
-    config.model.model = String(config.model.model || '').replace(/^generic\//, 'openai/');
+    config.model.model = String(config.model.model || '')
+      .replace(/^generic\//, 'openai/')
+      .replace(/^ollama\//, `${config.model.provider}/`);
     config.model.routing = config.model.routing || {};
     config.model.routing.fallbackProviders = (config.model.routing.fallbackProviders || PROVIDER_ORDER)
       .map((provider) => normalizeProviderId(provider))
@@ -22,7 +24,7 @@ export function createConfigService({ config, PROVIDER_ORDER, reloadConfigSecret
   }
 
   function behaviorOverrideKey(provider, model) {
-    const p = normalizeProviderId(provider || 'ollama');
+    const p = normalizeProviderId(provider || 'ollama-cloud');
     const m = String(model || '').trim().toLowerCase();
     return `${p}::${m}`;
   }
@@ -32,10 +34,12 @@ export function createConfigService({ config, PROVIDER_ORDER, reloadConfigSecret
       ollamaBaseUrl: config.model.ollamaBaseUrl,
       openrouterBaseUrl: config.model.openrouterBaseUrl,
       nvidiaBaseUrl: config.model.nvidiaBaseUrl,
+      xiaomimimoBaseUrl: config.model.xiaomimimoBaseUrl,
       openaiBaseUrl: config.model.openaiBaseUrl || config.model.genericBaseUrl,
       genericBaseUrl: config.model.openaiBaseUrl || config.model.genericBaseUrl,
       hasOpenrouterApiKey: Boolean(config.model.openrouterApiKey),
       hasNvidiaApiKey: Boolean(config.model.nvidiaApiKey),
+      hasXiaomimimoApiKey: Boolean(config.model.xiaomimimoApiKey),
       hasOpenaiApiKey: Boolean(config.model.openaiApiKey || config.model.genericApiKey),
       hasGenericApiKey: Boolean(config.model.openaiApiKey || config.model.genericApiKey)
     };

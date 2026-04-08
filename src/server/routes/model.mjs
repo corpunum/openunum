@@ -8,7 +8,7 @@ export async function handleModelRoute({ req, res, url, ctx }) {
 
   if (req.method === 'GET' && url.pathname === '/api/models') {
     ctx.normalizeModelSettings();
-    const provider = ctx.normalizeProviderId(url.searchParams.get('provider') || ctx.config.model.provider || 'ollama');
+    const provider = ctx.normalizeProviderId(url.searchParams.get('provider') || ctx.config.model.provider || 'ollama-cloud');
     if (!ctx.PROVIDER_ORDER.includes(provider)) {
       ctx.sendJson(res, 400, { error: `unsupported_provider:${provider}` });
       return true;
@@ -37,4 +37,3 @@ export async function handleModelRoute({ req, res, url, ctx }) {
 
   return false;
 }
-

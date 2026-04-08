@@ -118,16 +118,20 @@ export function createAuthService({ config, PROVIDER_ORDER, reloadConfigSecrets 
   }
 
   const PROVIDER_SECRET_FIELD = {
-    ollama: null,
+    'ollama-local': null,
+    'ollama-cloud': null,
     nvidia: 'nvidiaApiKey',
     openrouter: 'openrouterApiKey',
+    xiaomimimo: 'xiaomimimoApiKey',
     openai: 'openaiApiKey'
   };
 
   const PROVIDER_BASE_FIELD = {
-    ollama: 'ollamaBaseUrl',
+    'ollama-local': 'ollamaBaseUrl',
+    'ollama-cloud': 'ollamaBaseUrl',
     nvidia: 'nvidiaBaseUrl',
     openrouter: 'openrouterBaseUrl',
+    xiaomimimo: 'xiaomimimoBaseUrl',
     openai: 'openaiBaseUrl'
   };
 
@@ -160,9 +164,10 @@ export function createAuthService({ config, PROVIDER_ORDER, reloadConfigSecrets 
   async function testProviderConnection({ provider, baseUrl, apiKey }) {
     const normalized = normalizeProviderId(provider);
     let models = [];
-    if (normalized === 'ollama') models = await fetchOllamaModels(baseUrl);
+    if (normalized === 'ollama-local' || normalized === 'ollama-cloud') models = await fetchOllamaModels(baseUrl, normalized);
     else if (normalized === 'nvidia') models = await fetchNvidiaModels(baseUrl, apiKey);
     else if (normalized === 'openrouter') models = await fetchOpenRouterModels(baseUrl, apiKey);
+    else if (normalized === 'xiaomimimo') models = await fetchOpenAIModels(baseUrl, apiKey);
     else models = await fetchOpenAIModels(baseUrl, apiKey);
     return {
       ok: true,
@@ -354,7 +359,7 @@ export function createAuthService({ config, PROVIDER_ORDER, reloadConfigSecrets 
         return {
           provider: provider.provider,
           display_name: provider.display_name,
-          auth_kind: provider.provider === 'ollama' ? 'none' : 'api_key',
+          auth_kind: provider.provider.startsWith('ollama-') ? 'none' : 'api_key',
           selected: catalog.selected?.provider === provider.provider,
           disabled: disabledProviders.includes(provider.provider),
           status: provider.status,
@@ -368,14 +373,14 @@ export function createAuthService({ config, PROVIDER_ORDER, reloadConfigSecrets 
           stored_preview: secretPreview(storedValue),
           discovered: Boolean(discoveredValue),
           discovered_source: keyField ? (scan.sourceMap?.[keyField] || null) : null,
-          auth_ready: provider.provider === 'ollama'
+          auth_ready: provider.provider.startsWith('ollama-')
             ? true
             : provider.provider === 'openai'
               ? Boolean(config.model?.[keyField] || effectiveOpenAiOauth.active)
               : Boolean(config.model?.[keyField]),
           auth_mode: provider.provider === 'openai' && effectiveOpenAiOauth.active && !config.model?.[keyField]
             ? 'oauth'
-            : (provider.provider === 'ollama' ? 'none' : 'api_key')
+            : (provider.provider.startsWith('ollama-') ? 'none' : 'api_key')
         };
       }),
       auth_methods: buildAuthMethodRows(store, scan, cliStatus)

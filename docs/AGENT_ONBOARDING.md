@@ -58,8 +58,14 @@ This guide will help you understand:
 - `pnpm test:smoke` — Isolated smoke suite (self-starting temp server/home)
 - `pnpm test:smoke:live` — Smoke against current running service (deployment verification)
 - `pnpm test:imitation` — Session-imitation regression replay from real chat patterns
+- `pnpm phase10:e2e && pnpm phase11:e2e` — WebUI/provider-contract checks (provider matrix + required UI markers)
 - `GET /api/runtime/state-contract` — Returns canonical runtime packet + validation status
 - `GET /api/runtime/config-parity` — Returns provider matrix + warnings/errors
+
+**Provider/Routing baseline (current):**
+- `ollama-local` = local CPU lane (gemma4 + embeddings only)
+- `ollama-cloud` = cloud model lane
+- Full provider order: `ollama-local`, `ollama-cloud`, `nvidia`, `openrouter`, `xiaomimimo`, `openai`
 
 ---
 

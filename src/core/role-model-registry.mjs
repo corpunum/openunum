@@ -6,37 +6,37 @@
 export const roleModelRegistry = {
   research: {
     minTier: 'balanced',
-    recommended: ['ollama/qwen3.5:397b-cloud', 'nvidia/llama-3.3-nemotron-super-49b-v1'],
-    blocked: ['ollama/qwen3.5:9b-64k'],
+    recommended: ['ollama-cloud/qwen3.5:397b-cloud', 'nvidia/llama-3.3-nemotron-super-49b-v1'],
+    blocked: ['ollama-local/gemma4:cpu'],
     description: 'Research tasks requiring synthesis and reasoning'
   },
   code_gen: {
     minTier: 'full',
-    recommended: ['openai-codex/gpt-5.4', 'ollama/qwen3.5:397b-cloud'],
+    recommended: ['openai-codex/gpt-5.4', 'ollama-cloud/qwen3.5:397b-cloud'],
     blocked: [],
     description: 'Code generation requiring full capability'
   },
   code_review: {
     minTier: 'balanced',
-    recommended: ['ollama/qwen3.5:397b-cloud', 'nvidia/llama-3.3-nemotron-super-49b-v1'],
+    recommended: ['ollama-cloud/qwen3.5:397b-cloud', 'nvidia/llama-3.3-nemotron-super-49b-v1'],
     blocked: [],
     description: 'Code review and analysis'
   },
   file_ops: {
     minTier: 'compact',
-    recommended: ['ollama/qwen3.5:9b-64k'],
+    recommended: ['ollama-local/gemma4:cpu'],
     blocked: [],
     description: 'Simple file operations'
   },
   browser_automation: {
     minTier: 'balanced',
-    recommended: ['ollama/qwen3.5:397b-cloud'],
+    recommended: ['ollama-cloud/qwen3.5:397b-cloud'],
     blocked: [],
     description: 'Browser automation tasks'
   },
   chat: {
     minTier: 'compact',
-    recommended: ['ollama/qwen3.5:9b-64k', 'ollama/qwen3.5:397b-cloud'],
+    recommended: ['ollama-local/gemma4:cpu', 'ollama-cloud/qwen3.5:397b-cloud'],
     blocked: [],
     description: 'General conversation'
   }
@@ -65,7 +65,7 @@ export class RoleModelResolver {
       // Default fallback for unknown roles
       return {
         minTier: 'compact',
-        recommended: ['ollama/qwen3.5:9b-64k'],
+        recommended: ['ollama-local/gemma4:cpu'],
         blocked: [],
         description: `Unknown role: ${role} (using defaults)`
       };
@@ -76,7 +76,7 @@ export class RoleModelResolver {
   /**
    * Check if a model is allowed for a given role
    * @param {string} role - Role name
-   * @param {string} modelRef - Model reference (e.g., 'ollama/qwen3.5:9b-64k')
+   * @param {string} modelRef - Model reference (e.g., 'ollama-cloud/qwen3.5:397b-cloud')
    * @returns {{allowed: boolean, reason: string}}
    */
   isModelAllowed(role, modelRef) {

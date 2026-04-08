@@ -11,8 +11,9 @@ import {
 dotenv.config();
 
 function normalizeProviderId(rawProvider) {
-  const provider = String(rawProvider || 'ollama').trim().toLowerCase();
+  const provider = String(rawProvider || 'ollama-cloud').trim().toLowerCase();
   if (provider === 'generic') return 'openai';
+  if (provider === 'ollama') return 'ollama-cloud';
   return provider;
 }
 
@@ -20,7 +21,7 @@ function normalizeModelRef(provider, model) {
   const normalizedProvider = normalizeProviderId(provider);
   const raw = String(model || '').trim();
   if (!raw) return raw;
-  return raw.replace(/^(ollama|openrouter|nvidia|generic|openai)\//, `${normalizedProvider}/`);
+  return raw.replace(/^(ollama-local|ollama-cloud|ollama|openrouter|nvidia|xiaomimimo|generic|openai)\//, `${normalizedProvider}/`);
 }
 
 function normalizeModelConfig(model = {}) {
@@ -36,7 +37,7 @@ function normalizeModelConfig(model = {}) {
   }
   delete contextHints['generic/gpt-4o-mini'];
 
-  const provider = normalizeProviderId(model.provider || 'ollama');
+  const provider = normalizeProviderId(model.provider || 'ollama-cloud');
   const currentModel = normalizeModelRef(provider, model.model || providerModels[provider] || '');
   const fallbackProviders = (model.routing?.fallbackProviders || [])
     .map((item) => normalizeProviderId(item))
@@ -181,35 +182,38 @@ export function defaultConfig() {
       }
     },
     model: {
-      provider: 'ollama',
-      model: 'ollama/minimax-m2.7:cloud',
+      provider: 'ollama-cloud',
+      model: 'ollama-cloud/minimax-m2.7:cloud',
       providerModels: {
-        ollama: 'ollama/minimax-m2.7:cloud',
+        'ollama-cloud': 'ollama-cloud/minimax-m2.7:cloud',
+        'ollama-local': 'ollama-local/gemma4:cpu',
         openrouter: 'openrouter/openai/gpt-4o-mini',
         nvidia: 'nvidia/qwen/qwen3-coder-480b-a35b-instruct',
+        xiaomimimo: 'xiaomimimo/gpt-4o-mini',
         openai: 'openai/gpt-4o-mini'
       },
       contextHints: {
-        'ollama/qwen3.5:9b-64k': 64000,
-        'ollama/qwen3.5-9b-uncensored-aggressive:latest': 16384,
-        'ollama/qwen3.5-9b-uncensored-local:latest': 16384,
-        'ollama/minimax-m2.7:cloud': 32768,
+        'ollama-cloud/minimax-m2.7:cloud': 32768,
+        'ollama-local/gemma4:cpu': 32768,
+        'ollama-local/nomic-embed-text:latest': 8192,
         'openrouter/openai/gpt-4o-mini': 128000,
         'openai/gpt-4o-mini': 128000
       },
       routing: {
         fallbackEnabled: true,
-        fallbackProviders: ['ollama', 'nvidia', 'openrouter', 'openai'],
+        fallbackProviders: ['ollama-cloud', 'nvidia', 'openrouter', 'openai'],
         forcePrimaryProvider: false
       },
       behaviorOverrides: {},
       ollamaBaseUrl: process.env.OLLAMA_BASE_URL || 'http://127.0.0.1:11434',
       openrouterBaseUrl: process.env.OPENROUTER_BASE_URL || 'https://openrouter.ai/api/v1',
       nvidiaBaseUrl: process.env.NVIDIA_BASE_URL || 'https://integrate.api.nvidia.com/v1',
+      xiaomimimoBaseUrl: process.env.XIAOMIMIMO_BASE_URL || 'https://api.x.ai/v1',
       openaiBaseUrl: process.env.OPENAI_BASE_URL || process.env.GENERIC_BASE_URL || 'https://api.openai.com/v1',
       genericBaseUrl: process.env.GENERIC_BASE_URL || process.env.OPENAI_BASE_URL || 'https://api.openai.com/v1',
       openrouterApiKey: '',
       nvidiaApiKey: '',
+      xiaomimimoApiKey: '',
       openaiApiKey: '',
       genericApiKey: ''
     },
@@ -289,7 +293,7 @@ export function loadConfig() {
   config = applySecretsToConfig(config);
   config.model = normalizeModelConfig(config.model);
   if (!config.model.routing.fallbackProviders?.length) {
-    config.model.routing.fallbackProviders = ['ollama', 'nvidia', 'openrouter', 'openai'];
+    config.model.routing.fallbackProviders = ['ollama-cloud', 'nvidia', 'openrouter', 'openai'];
   }
   return config;
 }

@@ -282,7 +282,7 @@ async function testCapabilitiesContract() {
   try {
     const res = await httpGet('/api/capabilities');
     const expectedMenu = ['chat', 'missions', 'trace', 'runtime', 'settings'];
-    const expectedProviders = ['ollama', 'nvidia', 'openrouter', 'xiaomimimo', 'openai'];
+    const expectedProviders = ['ollama-local', 'ollama-cloud', 'nvidia', 'openrouter', 'xiaomimimo', 'openai'];
     if (
       res.status === 200 &&
       JSON.stringify(res.data.menu) === JSON.stringify(expectedMenu) &&
@@ -304,7 +304,7 @@ async function testModelCatalogContract() {
     const res = await httpGet('/api/model-catalog');
     const providers = res.data?.provider_order || [];
     const selected = res.data?.selected?.canonical_key;
-    if (res.status === 200 && providers.join(',') === 'ollama,nvidia,openrouter,xiaomimimo,openai' && selected) {
+    if (res.status === 200 && providers.join(',') === 'ollama-local,ollama-cloud,nvidia,openrouter,xiaomimimo,openai' && selected) {
       log('Model Catalog Contract', 'PASS', { selected });
       return true;
     }
