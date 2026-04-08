@@ -9,6 +9,7 @@ import {
   normalizeHiddenRows as normalizeHiddenRowsForVisibility,
   buildAddRowSelectMarkup
 } from './modules/visibility.js';
+import { buildMissionTimelineView } from './modules/missions.js';
 import {
   sortSessionsByRecency,
   renderSessionListView
@@ -1623,42 +1624,11 @@ function renderMissionTimeline() {
   if (!out) return;
   const filter = q('missionTimelineFilter')?.value || 'all';
   const search = String(q('missionTimelineSearch')?.value || '').trim().toLowerCase();
-  const match = (text) => !search || String(text || '').toLowerCase().includes(search);
-
-  q('missionTimelineSummary').textContent =
-    `status=${out.mission.status} step=${out.mission.step}/${out.mission.hardStepCap || out.mission.maxSteps} retries=${Number(out.mission.retries || 0)} session=${out.mission.sessionId}`;
-
-  const logItems = (out.log || []).slice(-8).reverse()
-    .filter((item) => match(`${item.at} ${item.reply || ''} ${item.selfPoke || ''}`))
-    .map((item) => `<div class="ledger-item">step ${Number(item.step || 0)} | ${escapeHtml(item.at || '')} | ${escapeHtml(String(item.reply || item.selfPoke || '').slice(0, 180))}</div>`)
-    .join('');
-  q('missionTimelineLog').innerHTML = (filter === 'all' || filter === 'log')
-    ? `<strong>Mission log</strong>${logItems || '<div class="ledger-item">No mission log entries match.</div>'}`
-    : '';
-
-  const toolItems = (out.toolRuns || []).slice(-8).reverse()
-    .filter((item) => match(`${item.toolName} ${item.createdAt} ${JSON.stringify(item.result || {})}`))
-    .map((item) => `<div class="ledger-item">tool ${escapeHtml(item.toolName)} | ok=${escapeHtml(String(item.ok))} | ${escapeHtml(item.createdAt || '')}</div>`)
-    .join('');
-  const strategyItems = (out.recentStrategies || []).slice(0, 6)
-    .filter((item) => match(`${item.strategy} ${item.evidence} ${item.goal}`))
-    .map((item) => `<div class="ledger-item">${escapeHtml(item.success ? 'SUCCESS' : 'FAIL')} | ${escapeHtml(item.strategy)} | ${escapeHtml(String(item.evidence || '').slice(0, 100))}</div>`)
-    .join('');
-  const compactionItems = (out.compactions || []).slice(0, 5)
-    .filter((item) => match(`${item.model} ${item.createdAt} ${JSON.stringify(item.summary || {})}`))
-    .map((item) => `<div class="ledger-item">compaction | ${escapeHtml(item.model)} | pre=${Number(item.preTokens || 0)} post=${Number(item.postTokens || 0)} | ${escapeHtml(item.createdAt || '')}</div>`)
-    .join('');
-  q('missionTimelineTools').innerHTML = (filter === 'all' || filter === 'tools' || filter === 'strategies' || filter === 'compactions')
-    ? `<strong>Tool and strategy trail</strong>${filter === 'all' || filter === 'tools' ? (toolItems || '') : ''}${filter === 'all' || filter === 'strategies' ? (strategyItems || '') : ''}${filter === 'all' || filter === 'compactions' ? (compactionItems || '') : ''}${toolItems || strategyItems || compactionItems ? '' : '<div class="ledger-item">No matching trail entries.</div>'}`
-    : '';
-
-  const artifactItems = (out.artifacts || []).slice(0, 8)
-    .filter((item) => match(`${item.type} ${item.content} ${item.sourceRef || ''}`))
-    .map((item, index) => `<button type="button" class="menu-btn" data-artifact-index="${index}" style="width:100%;margin:4px 0;text-align:left;">${escapeHtml(item.type)} | ${escapeHtml(String(item.content || '').slice(0, 90))}</button>`)
-    .join('');
-  q('missionTimelineArtifacts').innerHTML = (filter === 'all' || filter === 'artifacts')
-    ? `<strong>Artifacts</strong>${artifactItems || '<div class="ledger-item">No matching artifacts.</div>'}`
-    : '';
+  const view = buildMissionTimelineView(out, { filter, search, escapeHtml });
+  q('missionTimelineSummary').textContent = view.summaryText;
+  q('missionTimelineLog').innerHTML = view.logHtml;
+  q('missionTimelineTools').innerHTML = view.toolsHtml;
+  q('missionTimelineArtifacts').innerHTML = view.artifactsHtml;
   q('missionTimelineArtifacts').querySelectorAll('[data-artifact-index]').forEach((btn) => {
     btn.addEventListener('click', () => {
       const item = out.artifacts?.[Number(btn.dataset.artifactIndex)];

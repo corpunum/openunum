@@ -4,6 +4,21 @@ All notable changes to OpenUnum are documented in this file.
 
 ---
 
+## [2.3.25] - 2026-04-08
+
+### Changed
+- Continued WebUI modularization for the missions domain:
+  - extracted mission timeline view synthesis to `src/ui/modules/missions.js`
+  - `src/ui/app.js` now consumes module output for mission summary/log/tools/artifacts sections.
+- Fixed mission artifact click targeting in filtered timelines by preserving source artifact indices.
+
+### Added
+- Unit tests for mission timeline rendering helpers in `tests/unit/ui-missions.test.mjs`.
+- New browser regression phase `phase46.webui-mission-create-open.e2e.mjs` for mission create/load/open-session flows.
+- CI and `pnpm e2e` now include `phase46:e2e`.
+
+---
+
 ## [2.3.24] - 2026-04-08
 
 ### Changed
