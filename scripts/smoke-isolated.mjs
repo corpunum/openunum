@@ -72,6 +72,7 @@ async function main() {
     await runNodeScript('smoke-audit.mjs', env);
     await runNodeScript('smoke-verifier.mjs', env);
     await runNodeScript('smoke-memory.mjs', env);
+    await runNodeScript('smoke-chat-stream.mjs', env);
     await runNodeScript('smoke-roles-approvals.mjs', env);
     console.log(`✅ Isolated smoke suite passed on ${baseUrl}`);
   } finally {

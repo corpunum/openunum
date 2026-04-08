@@ -77,6 +77,7 @@ Quick health checks for API endpoints:
 | `smoke-audit.mjs` | `/api/audit/stats`, `/api/audit/log` |
 | `smoke-verifier.mjs` | `/api/verifier/stats`, `/api/verifier/check` |
 | `smoke-memory.mjs` | `/api/memory/freshness`, `/api/memory/stale`, `/api/memory/refresh/:id` |
+| `smoke-chat-stream.mjs` | `/api/chat/stream` SSE contract (`sessionId`, `pending`, `toolRuns`, `messages`) |
 | `smoke-roles-approvals.mjs` | `/api/roles`, `/api/approvals/*` lifecycle (`request`, `pending`, `approve`, `stats`) |
 
 **Location:** `scripts/*.mjs`  
