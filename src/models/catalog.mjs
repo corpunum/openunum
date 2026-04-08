@@ -31,7 +31,6 @@ const MODEL_SEEDS = {
     seedModel('ollama-cloud', 'qwen3.5:32b-cloud', 'Qwen 3.5 32B Cloud', 262144, 88, 'medium', 'low', true, false, true)
   ],
   'ollama-local': [
-    seedModel('ollama-local', 'gemma4:latest', 'Gemma 4 CPU', 32768, 76, 'low', 'low', true, false, true),
     seedModel('ollama-local', 'gemma4:cpu', 'Gemma 4 CPU', 32768, 76, 'low', 'low', true, false, true),
     seedModel('ollama-local', 'nomic-embed-text:latest', 'Nomic Embed Text', 8192, 72, 'low', 'low', false, false, false),
     seedModel('ollama-local', 'mxbai-embed-large:latest', 'MXBAI Embed Large', 8192, 71, 'low', 'low', false, false, false),
@@ -186,7 +185,7 @@ function isCloudModelId(modelId = '') {
 function isAllowedLocalOllamaModel(modelId = '') {
   const id = String(modelId || '').toLowerCase();
   if (!id) return false;
-  if (id.includes('gemma4')) return true;
+  if (id === 'gemma4:cpu') return true;
   if (id.includes('embed')) return true;
   if (id.includes('nomic-embed')) return true;
   if (id.includes('mxbai-embed')) return true;

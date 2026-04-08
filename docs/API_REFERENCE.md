@@ -18,9 +18,9 @@ Returns:
 
 - `GET /api/audit/stats` — Audit log statistics
 - `GET /api/audit/log?limit=100&offset=0` — Retrieve audit log entries
-- `GET /api/audit/log/:id` — Get specific audit entry
-- `POST /api/audit/verify` — Verify HMAC chain integrity
-- `GET /api/audit/export?from=ISO&to=ISO` — Export audit log for external review
+- `GET /api/audit/verify` — Verify HMAC chain integrity
+- `GET /api/audit/root` — Current Merkle root snapshot
+- `POST /api/audit/log` — Append audit event
 
 Returns:
 ```json
@@ -71,8 +71,7 @@ Response:
 
 - `GET /api/memory/freshness` — Get freshness scores for memories
 - `GET /api/memory/stale?threshold=0.3` — List stale memories below threshold
-- `POST /api/memory/refresh` — Manually refresh specific memories
-- `GET /api/memory/stats` — Memory statistics with decay info
+- `POST /api/memory/refresh/:id` — Manually refresh specific memory by id
 
 Returns:
 ```json
@@ -85,76 +84,28 @@ Returns:
 }
 ```
 
-## Replay (NEW - Phase 4)
+## Planned But Not Yet Implemented
 
-- `GET /api/replay/status` — Hippocampal replay status
-- `POST /api/replay/trigger` — Manually trigger consolidation
-- `GET /api/replay/patterns?limit=50` — List extracted patterns
-- `GET /api/replay/pattern/:id` — Get specific pattern details
-
-Returns:
-```json
-{
-  "patterns": [
-    {
-      "patternId": "pattern_001",
-      "type": "success",
-      "description": "Browser navigation succeeds after retry on timeout",
-      "occurrences": 5,
-      "heuristic": "Retry browser.navigate with 2s timeout on first failure"
-    }
-  ],
-  "lastConsolidation": "2026-04-07T02:00:00Z",
-  "nextScheduled": "2026-04-08T02:00:00Z"
-}
-```
-
-## ODD (Operational Design Domain) (NEW - Phase 4)
-
-- `GET /api/odd/status` — Current ODD enforcement status
-- `GET /api/odd/tiers` — Execution tier definitions
-- `POST /api/odd/override` — Request ODD override (requires approval)
-- `GET /api/odd/gates` — Active confidence gates
-
-Returns:
-```json
-{
-  "tiers": {
-    "compact": {
-      "maxConfidenceRequired": 0.7,
-      "allowedTools": ["file_read", "http_request"],
-      "blockedTools": ["file_write", "shell_run"]
-    },
-    "balanced": { ... },
-    "full": { ... }
-  },
-  "currentTier": "balanced",
-  "activeGates": 3
-}
-```
-
-## WebUI - SSE Endpoints (NEW - Phase 3)
-
-- `GET /api/ui/sse` — Server-sent events for live updates
-- `GET /api/ui/trace/:sessionId` — Live execution trace stream
-- `GET /api/ui/pending/:sessionId` — Pending operation status stream
-
-SSE Event Types:
-```
-event: trace_update
-data: {"sessionId": "abc", "step": 3, "tool": "file_write", "status": "running"}
-
-event: pending_status
-data: {"sessionId": "abc", "status": "Executing tools", "progress": 0.6}
-
-event: complete
-data: {"sessionId": "abc", "success": true}
-```
+The following surfaces are architectural targets and are not currently exposed by the active runtime:
+- Replay API (`/api/replay/*`)
+- ODD API (`/api/odd/*`)
+- WebUI SSE streaming endpoints (`/api/ui/sse`, `/api/ui/trace/:sessionId`, `/api/ui/pending/:sessionId`)
 
 ## Config
 
 - `GET /api/config`
 - `POST /api/config`
+
+## Providers
+
+- `GET /api/providers` — Provider health snapshot
+- `GET /api/providers/health` — Alias for provider health snapshot
+- `POST /api/providers/:provider/reset` — Reset provider health tracker state
+
+## State
+
+- `POST /api/state/diff` — Compute deterministic state diff for two payloads
+- `GET /api/state/root` — Return Merkle root snapshot (empty set baseline unless extended by caller path)
 
 `GET /api/config` now also returns:
 - `capabilities`
@@ -411,7 +362,7 @@ Returns:
 {
   "contract_version": "2026-04-02.webui-capabilities.v2",
   "menu": ["chat", "missions", "trace", "runtime", "settings"],
-  "provider_order": ["ollama", "nvidia", "openrouter", "openai"],
+  "provider_order": ["ollama-local", "ollama-cloud", "nvidia", "openrouter", "openai"],
   "tool_catalog": {
     "contract_version": "2026-04-02.tool-catalog.v1",
     "tools": []
@@ -532,7 +483,7 @@ Returns a WebUI-oriented flagship summary:
 - `POST /api/service/connect`
 - `GET /api/auth/job?id=...`
 - `POST /api/auth/job/input`
-- `GET /api/models?provider=ollama|nvidia|openrouter|xiaomimimo|openai`
+- `GET /api/models?provider=ollama-local|ollama-cloud|nvidia|openrouter|xiaomimimo|openai`
 - `GET /api/model-catalog`
 
 Credential visibility rules:
@@ -551,11 +502,11 @@ Credential visibility rules:
 ```json
 {
   "contract_version": "2026-04-01.model-catalog.v1",
-  "provider_order": ["ollama", "nvidia", "openrouter", "xiaomimimo", "openai"],
+  "provider_order": ["ollama-local", "ollama-cloud", "nvidia", "openrouter", "xiaomimimo", "openai"],
   "selected": {
-    "provider": "ollama",
+    "provider": "ollama-cloud",
     "model_id": "kimi-k2.5:cloud",
-    "canonical_key": "ollama/kimi-k2.5:cloud"
+    "canonical_key": "ollama-cloud/kimi-k2.5:cloud"
   },
   "fallback": {
     "provider": "nvidia",
@@ -574,7 +525,7 @@ Credential visibility rules:
     "backend": "plaintext",
     "locked": false
   },
-  "provider_order": ["ollama", "nvidia", "openrouter", "xiaomimimo", "openai"],
+  "provider_order": ["ollama-local", "ollama-cloud", "nvidia", "openrouter", "xiaomimimo", "openai"],
   "providers": [
     {
       "provider": "openrouter",
@@ -761,7 +712,7 @@ OpenAI runtime routing rules:
 
 Switch payload:
 ```json
-{"provider":"ollama","model":"ollama/qwen3.5:397b-cloud"}
+{"provider":"ollama-cloud","model":"ollama-cloud/qwen3.5:397b-cloud"}
 ```
 
 ## Chat

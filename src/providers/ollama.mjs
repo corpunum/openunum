@@ -6,7 +6,9 @@ export class OllamaProvider {
   }
 
   static normalizeModelRef(model) {
-    return String(model || '').trim().replace(/^ollama\//, '');
+    return String(model || '')
+      .trim()
+      .replace(/^(ollama-local|ollama-cloud|ollama|openrouter|nvidia|xiaomimimo|generic|openai)\//, '');
   }
 
   static normalizeToolArguments(raw) {
@@ -106,18 +108,24 @@ export class OllamaProvider {
       : this.timeoutMs;
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(new Error('provider_timeout')), effectiveTimeout);
-    const requestedModel = OllamaProvider.normalizeModelRef(this.model);
+    const rawModel = String(this.model || '').trim();
+    const modelPrefixMatch = rawModel.match(/^([a-z0-9-]+)\//i);
+    const modelPrefix = modelPrefixMatch ? String(modelPrefixMatch[1] || '').toLowerCase() : '';
+    const requestedModel = OllamaProvider.normalizeModelRef(rawModel);
+    const forceCpu = modelPrefix === 'ollama-local' || /:cpu$/i.test(requestedModel);
+    const requestBody = {
+      model: requestedModel,
+      messages: OllamaProvider.normalizeMessages(messages),
+      stream: false,
+      tools: tools.length > 0 ? tools : undefined,
+      options: forceCpu ? { num_gpu: 0 } : undefined
+    };
     let res;
     try {
       res = await fetch(`${this.baseUrl}/api/chat`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          model: requestedModel,
-          messages: OllamaProvider.normalizeMessages(messages),
-          stream: false,
-          tools: tools.length > 0 ? tools : undefined
-        }),
+        body: JSON.stringify(requestBody),
         signal: controller.signal
       });
     } catch (error) {
@@ -150,12 +158,13 @@ export class OllamaProvider {
                 model: fallbackModel,
                 messages: OllamaProvider.normalizeMessages(messages),
                 stream: false,
-                tools: tools.length > 0 ? tools : undefined
+                tools: tools.length > 0 ? tools : undefined,
+                options: (forceCpu || /:cpu$/i.test(fallbackModel)) ? { num_gpu: 0 } : undefined
               }),
               signal: retryController.signal
             });
             if (retry.ok) {
-              this.model = `ollama/${fallbackModel}`;
+              this.model = modelPrefix ? `${modelPrefix}/${fallbackModel}` : `ollama/${fallbackModel}`;
               const json = await retry.json();
               const toolCalls = (json?.message?.tool_calls || []).map((tc, idx) => ({
                 id: tc.id || `ollama-${idx}`,

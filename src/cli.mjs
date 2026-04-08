@@ -109,7 +109,7 @@ async function main() {
 
   if (cmd === 'ollama' && args[1] === 'use') {
     const model = getArg('--model', 'minimax-m2.7:cloud');
-    const out = agent.switchModel('ollama', `ollama/${model}`);
+    const out = agent.switchModel('ollama-cloud', `ollama-cloud/${model}`);
     saveConfig(config);
     console.log(JSON.stringify(out));
     return;
@@ -139,7 +139,7 @@ async function main() {
     return;
   }
 
-  console.log(`openunum commands:\n  health\n  serve\n  chat --message <text> [--session <id>]\n  context status --session <id>\n  context compact --session <id> [--dry-run]\n  context artifacts --session <id> [--limit <n>]\n  model switch --provider <p> --model <m>\n  ollama use --model <id>\n  browser status\n  telegram poll-once\n  telegram run\n  command <slash-command>`);
+  console.log(`openunum commands:\n  health\n  serve\n  chat --message <text> [--session <id>]\n  context status --session <id>\n  context compact --session <id> [--dry-run]\n  context artifacts --session <id> [--limit <n>]\n  model switch --provider <p> --model <m>\n  ollama use --model <id>  # compatibility alias for ollama-cloud\n  browser status\n  telegram poll-once\n  telegram run\n  command <slash-command>`);
 }
 
 main().catch((error) => {

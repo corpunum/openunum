@@ -92,6 +92,8 @@ import { handleConfigRoute } from './server/routes/config.mjs';
 import { handleAutonomyRoute } from './server/routes/autonomy.mjs';
 import { handleChatToolsRoute } from './server/routes/chat_tools.mjs';
 import { handleSkillsResearchRoute } from './server/routes/skills_research.mjs';
+import { handleProvidersRoute } from './server/routes/providers.mjs';
+import { handleStateRoute } from './server/routes/state.mjs';
 import { handleCommandRoute, handleCommandsListRoute } from './server/routes/commands.mjs';
 import { loadBuiltinCommands } from './commands/loader.mjs';
 import { createConfigService } from './server/services/config_service.mjs';
@@ -583,14 +585,41 @@ async function runSelfHeal(dryRun = false) {
   return result;
 }
 
+const MUTATING_HTTP_METHODS = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
+
+function isAllowedLocalOrigin(origin) {
+  const raw = String(origin || '').trim();
+  if (!raw) return false;
+  try {
+    const parsed = new URL(raw);
+    if (!['http:', 'https:'].includes(parsed.protocol)) return false;
+    const host = parsed.hostname.toLowerCase();
+    return host === '127.0.0.1' || host === 'localhost' || host === '::1';
+  } catch {
+    return false;
+  }
+}
+
 const server = http.createServer(async (req, res) => {
   try {
     const url = new URL(req.url || '/', `http://${req.headers.host || '127.0.0.1'}`);
+    const requestOrigin = String(req.headers.origin || '').trim();
+    const corsOrigin = isAllowedLocalOrigin(requestOrigin) ? requestOrigin : null;
+    const parseRequestBody = (request) => parseBody(request, {
+      maxBytes: Number(config.runtime?.maxRequestBodyBytes || 1024 * 1024)
+    });
 
     if (req.method === 'OPTIONS') {
-      res.writeHead(204, noCacheHeaders('text/plain'));
+      if (requestOrigin && !corsOrigin) {
+        return sendApiError(res, 403, 'origin_not_allowed', 'Browser origin is not allowed for this local control plane');
+      }
+      res.writeHead(204, noCacheHeaders('text/plain', { corsOrigin }));
       res.end();
       return;
+    }
+
+    if (MUTATING_HTTP_METHODS.has(String(req.method || '').toUpperCase()) && requestOrigin && !corsOrigin) {
+      return sendApiError(res, 403, 'origin_not_allowed', 'Browser origin is not allowed for mutating local control-plane requests');
     }
 
     if (await handleHealthRoute({
@@ -601,7 +630,7 @@ const server = http.createServer(async (req, res) => {
         config,
         agent,
         pendingChats,
-        parseBody,
+        parseBody: parseRequestBody,
         sendJson,
         runHealthCheck,
         runSelfHeal,
@@ -637,7 +666,7 @@ const server = http.createServer(async (req, res) => {
     }
 
     if (req.method === 'POST' && url.pathname === '/api/verifier/check') {
-      const body = await parseBody(req);
+      const body = await parseRequestBody(req);
       const type = String(body?.type || 'state').trim().toLowerCase();
       if (type === 'tool') {
         const out = await verifier.verifyToolResult(String(body?.toolName || ''), body?.args || {}, body?.after || body?.result || {});
@@ -667,7 +696,7 @@ const server = http.createServer(async (req, res) => {
     }
 
     if (req.method === 'POST' && url.pathname === '/api/audit/log') {
-      const body = await parseBody(req);
+      const body = await parseRequestBody(req);
       const requested = String(body?.eventType || '').trim();
       const eventType = AUDIT_EVENT_TYPES.includes(requested)
         ? requested
@@ -797,7 +826,7 @@ const server = http.createServer(async (req, res) => {
 
     // PHASE 3: Task Orchestrator - Run Task
     if (req.method === 'POST' && url.pathname === '/api/autonomy/tasks/run') {
-      const body = await parseBody(req);
+      const body = await parseRequestBody(req);
       const result = await agent.taskOrchestrator?.runTask(body || {}) || { ok: false, error: 'task_orchestrator_not_initialized' };
       return sendJson(res, result.ok ? 200 : 400, result);
     }
@@ -811,21 +840,21 @@ const server = http.createServer(async (req, res) => {
 
     // PHASE 3: Worker Orchestrator - Start Worker
     if (req.method === 'POST' && url.pathname === '/api/autonomy/workers/start') {
-      const body = await parseBody(req);
+      const body = await parseRequestBody(req);
       const result = agent.workerOrchestrator?.startWorker(body || {}) || { ok: false, error: 'worker_orchestrator_not_initialized' };
       return sendJson(res, result.ok ? 200 : 400, result);
     }
 
     // PHASE 3: Worker Orchestrator - Stop Worker
     if (req.method === 'POST' && url.pathname === '/api/autonomy/workers/stop') {
-      const body = await parseBody(req);
+      const body = await parseRequestBody(req);
       const result = agent.workerOrchestrator?.stopWorker(body?.id) || { ok: false, error: 'worker_orchestrator_not_initialized' };
       return sendJson(res, result.ok ? 200 : 404, result);
     }
 
     // PHASE 3: Worker Orchestrator - Tick Worker
     if (req.method === 'POST' && url.pathname === '/api/autonomy/workers/tick') {
-      const body = await parseBody(req);
+      const body = await parseRequestBody(req);
       const result = await agent.workerOrchestrator?.tickWorker(body?.id) || { ok: false, error: 'worker_orchestrator_not_initialized' };
       return sendJson(res, result.ok ? 200 : 404, result);
     }
@@ -847,7 +876,7 @@ const server = http.createServer(async (req, res) => {
     }
 
     if (req.method === 'POST' && url.pathname === '/api/controller/behavior/reset') {
-      const body = await parseBody(req);
+      const body = await parseRequestBody(req);
       const providerRaw = String(body?.provider || '').trim();
       const provider = normalizeProviderId(providerRaw);
       const model = String(body?.model || '').trim().toLowerCase();
@@ -862,7 +891,7 @@ const server = http.createServer(async (req, res) => {
     }
 
     if (req.method === 'POST' && url.pathname === '/api/controller/behavior/override') {
-      const body = await parseBody(req);
+      const body = await parseRequestBody(req);
       const providerRaw = String(body?.provider || '').trim();
       const provider = normalizeProviderId(providerRaw);
       const model = String(body?.model || '').trim().toLowerCase();
@@ -884,7 +913,7 @@ const server = http.createServer(async (req, res) => {
     }
 
     if (req.method === 'POST' && url.pathname === '/api/controller/behavior/override/remove') {
-      const body = await parseBody(req);
+      const body = await parseRequestBody(req);
       const providerRaw = String(body?.provider || '').trim();
       const provider = normalizeProviderId(providerRaw);
       const model = String(body?.model || '').trim().toLowerCase();
@@ -905,7 +934,7 @@ const server = http.createServer(async (req, res) => {
         config,
         agent,
         memoryStore: memory,
-        parseBody,
+        parseBody: parseRequestBody,
         sendJson,
         saveConfig,
         buildModelCatalog,
@@ -924,7 +953,7 @@ const server = http.createServer(async (req, res) => {
         config,
         agent,
         memoryStore: memory,
-        parseBody,
+        parseBody: parseRequestBody,
         sendJson,
         noCacheHeaders,
         sanitizeHtml,
@@ -957,7 +986,7 @@ const server = http.createServer(async (req, res) => {
         config,
         agent,
         memoryStore: memory,
-        parseBody,
+        parseBody: parseRequestBody,
         sendJson,
         saveConfig,
         normalizeModelSettings,
@@ -975,6 +1004,25 @@ const server = http.createServer(async (req, res) => {
       }
     })) return;
 
+    if (await handleProvidersRoute({
+      req,
+      res,
+      url,
+      ctx: {
+        sendJson
+      }
+    })) return;
+
+    if (await handleStateRoute({
+      req,
+      res,
+      url,
+      ctx: {
+        parseBody: parseRequestBody,
+        sendJson
+      }
+    })) return;
+
     if (await handleAutonomyRoute({
       req,
       res,
@@ -984,7 +1032,7 @@ const server = http.createServer(async (req, res) => {
         agent,
         memory,
         missions,
-        parseBody,
+        parseBody: parseRequestBody,
         sendJson,
         saveConfig,
         applyAutonomyMode,
@@ -1001,7 +1049,7 @@ const server = http.createServer(async (req, res) => {
         agent,
         memory,
         missions,
-        parseBody,
+        parseBody: parseRequestBody,
         sendJson,
         pendingChats,
         getOrStartChat,
@@ -1016,14 +1064,14 @@ const server = http.createServer(async (req, res) => {
       url,
       ctx: {
         agent,
-        parseBody,
+        parseBody: parseRequestBody,
         sendJson
       }
     })) return;
 
     // Command system routes (before sessions to handle /api/command)
     if (req.method === 'POST' && url.pathname === '/api/command') {
-      const body = await parseBody(req);
+      const body = await parseRequestBody(req);
       if (!body?.message) return sendJson(res, 400, { error: 'message field is required' });
       const registry = (await import('./commands/registry.mjs')).getRegistry();
       const result = await registry.route(body.message, {
@@ -1047,7 +1095,7 @@ const server = http.createServer(async (req, res) => {
       ctx: {
         memory,
         pendingChats,
-        parseBody,
+        parseBody: parseRequestBody,
         sendJson,
         sendApiError,
         prunePendingChats,
@@ -1064,7 +1112,7 @@ const server = http.createServer(async (req, res) => {
       ctx: {
         config,
         missions,
-        parseBody,
+        parseBody: parseRequestBody,
         sendJson,
         buildMissionTimeline,
         buildRuntimeStateAttachment
@@ -1078,7 +1126,7 @@ const server = http.createServer(async (req, res) => {
       ctx: {
         config,
         agent,
-        parseBody,
+        parseBody: parseRequestBody,
         sendJson,
         saveConfig,
         CDPBrowser,
@@ -1094,7 +1142,7 @@ const server = http.createServer(async (req, res) => {
       url,
       ctx: {
         config,
-        parseBody,
+        parseBody: parseRequestBody,
         sendJson,
         saveConfig,
         reloadConfigSecrets,
@@ -1118,6 +1166,9 @@ const server = http.createServer(async (req, res) => {
     logError('request_failed', { error: String(error.message || error) });
     if (String(error?.code || '') === 'invalid_json') {
       return sendApiError(res, 400, 'invalid_json', 'Request body must be valid JSON');
+    }
+    if (String(error?.code || '') === 'payload_too_large') {
+      return sendApiError(res, 413, 'payload_too_large', 'Request body exceeds configured size limit');
     }
     return sendApiError(res, 500, 'internal_error', String(error.message || error));
   }

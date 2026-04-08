@@ -1,18 +1,28 @@
-export function noCacheHeaders(contentType) {
-  return {
+function normalizeCorsOrigin(origin) {
+  const value = String(origin || '').trim();
+  return value || null;
+}
+
+export function noCacheHeaders(contentType, options = {}) {
+  const corsOrigin = normalizeCorsOrigin(options.corsOrigin);
+  const headers = {
     'Content-Type': contentType,
     'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
     'Pragma': 'no-cache',
     'Expires': '0',
     'Surrogate-Control': 'no-store',
-    'Access-Control-Allow-Origin': '*',
     'Access-Control-Allow-Methods': 'GET, POST, OPTIONS, PUT, DELETE, PATCH',
-    'Access-Control-Allow-Headers': 'Content-Type, Authorization'
+    'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-OpenUnum-Request'
   };
+  if (corsOrigin) {
+    headers['Access-Control-Allow-Origin'] = corsOrigin;
+    headers.Vary = 'Origin';
+  }
+  return headers;
 }
 
-export function sendJson(res, code, obj) {
-  res.writeHead(code, noCacheHeaders('application/json'));
+export function sendJson(res, code, obj, options = {}) {
+  res.writeHead(code, noCacheHeaders('application/json', options));
   res.end(JSON.stringify(obj));
 }
 
@@ -26,10 +36,27 @@ export function sendApiError(res, status, code, message, details = {}, contractV
   });
 }
 
-export async function parseBody(req) {
+export async function parseBody(req, options = {}) {
+  const maxBytes = Number.isFinite(options?.maxBytes) ? Number(options.maxBytes) : 1024 * 1024;
   return new Promise((resolve, reject) => {
     const chunks = [];
+    let totalBytes = 0;
+    const declaredLength = Number(req.headers['content-length'] || 0);
+    if (Number.isFinite(declaredLength) && declaredLength > maxBytes) {
+      const error = new Error('request_too_large');
+      error.code = 'payload_too_large';
+      reject(error);
+      return;
+    }
     req.on('data', (c) => chunks.push(c));
+    req.on('data', (c) => {
+      totalBytes += c.length;
+      if (totalBytes > maxBytes) {
+        const error = new Error('request_too_large');
+        error.code = 'payload_too_large';
+        req.destroy(error);
+      }
+    });
     req.on('end', () => {
       try {
         const raw = Buffer.concat(chunks).toString('utf8');
@@ -39,7 +66,12 @@ export async function parseBody(req) {
         reject(e);
       }
     });
-    req.on('error', reject);
+    req.on('error', (error) => {
+      if (String(error?.code || '') === 'payload_too_large') {
+        reject(error);
+        return;
+      }
+      reject(error);
+    });
   });
 }
-

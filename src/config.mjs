@@ -24,12 +24,26 @@ function normalizeModelRef(provider, model) {
   return raw.replace(/^(ollama-local|ollama-cloud|ollama|openrouter|nvidia|xiaomimimo|generic|openai)\//, `${normalizedProvider}/`);
 }
 
+function normalizeOllamaLocalModelRef(modelRef) {
+  const raw = String(modelRef || '').trim().replace(/^ollama-local\//, '');
+  if (!raw) return 'ollama-local/gemma4:cpu';
+  if (raw === 'gemma4:latest' || raw === 'gemma4') return 'ollama-local/gemma4:cpu';
+  if (raw === 'gemma4:cpu') return 'ollama-local/gemma4:cpu';
+  return 'ollama-local/gemma4:cpu';
+}
+
 function normalizeModelConfig(model = {}) {
   const providerModels = { ...(model.providerModels || {}) };
   if (providerModels.generic && !providerModels.openai) {
     providerModels.openai = normalizeModelRef('openai', providerModels.generic);
   }
   delete providerModels.generic;
+
+  if (providerModels['ollama-local']) {
+    providerModels['ollama-local'] = normalizeOllamaLocalModelRef(providerModels['ollama-local']);
+  } else {
+    providerModels['ollama-local'] = 'ollama-local/gemma4:cpu';
+  }
 
   const contextHints = { ...(model.contextHints || {}) };
   if (Object.prototype.hasOwnProperty.call(contextHints, 'generic/gpt-4o-mini') && !Object.prototype.hasOwnProperty.call(contextHints, 'openai/gpt-4o-mini')) {
@@ -38,7 +52,10 @@ function normalizeModelConfig(model = {}) {
   delete contextHints['generic/gpt-4o-mini'];
 
   const provider = normalizeProviderId(model.provider || 'ollama-cloud');
-  const currentModel = normalizeModelRef(provider, model.model || providerModels[provider] || '');
+  let currentModel = normalizeModelRef(provider, model.model || providerModels[provider] || '');
+  if (provider === 'ollama-local') {
+    currentModel = normalizeOllamaLocalModelRef(currentModel);
+  }
   const fallbackProviders = (model.routing?.fallbackProviders || [])
     .map((item) => normalizeProviderId(item))
     .filter((item, index, arr) => item && arr.indexOf(item) === index);
@@ -98,6 +115,7 @@ export function defaultConfig() {
       executorRetryBackoffMs: 700,
       providerRequestTimeoutMs: 120000,
       agentTurnTimeoutMs: 420000,
+      maxRequestBodyBytes: 1048576,
       autonomyMode: 'autonomy-first',
       missionDefaultContinueUntilDone: true,
       missionDefaultHardStepCap: 120,

@@ -5,7 +5,7 @@ This map is implementation-accurate as of 2026-04-07.
 ## Top-Level Structure
 
 - `src/server.mjs`: HTTP API server and Web UI host
-- `src/server/routes/*.mjs`: extracted route handlers (health, ui, sessions, missions, model, auth, config, autonomy, chat/tools, browser, telegram, research, **audit**, **verifier**, **memory**, **state**)
+- `src/server/routes/*.mjs`: extracted route handlers (health, ui, sessions, missions, model, auth, config, autonomy, chat/tools, browser, telegram, research, **providers**, **state**)
 - `src/server/services/*.mjs`: extracted runtime helpers (chat, auth jobs, browser runtime, telegram runtime, research runtime, config service, auth service)
 - `src/core/agent.mjs`: provider chat loop, tool-call execution, trace generation
 - `src/core/missions.mjs`: autonomous mission runner with proof-aware completion
@@ -31,7 +31,6 @@ This map is implementation-accurate as of 2026-04-07.
 - `src/core/sleep-cycle.mjs`: **NEW** — Idle-triggered aggressive compaction
 - `src/core/finality.mjs`: **NEW** — Explicit finality after N successful tool runs
 - `src/core/role-model-registry.mjs`: **NEW** — Task-type to model-tier mapping
-- `src/core/attention.mjs`: **NEW** — Dynamic salience-based attention weighting
 - `src/core/turn-recovery-summary.mjs`: bounded evidence-based summaries on tool failures
 - `src/tools/runtime.mjs`: unified tool schema + execution routing
 - `src/tools/executor-daemon.mjs`: retry/backoff executor with JSONL logs
@@ -49,16 +48,11 @@ This map is implementation-accurate as of 2026-04-07.
 - `src/ui/index.html`: menu-driven Web UI and chat trace renderer
 - `src/channels/telegram.mjs`: Telegram poll/send loop
 - `src/cli.mjs`: command-line entry
-- `src/webui/`: **NEW** — WebUI components and SSE endpoints (Phase 3)
 
-## New Directories (Phase 1-3)
+## Runtime Notes
 
-| Directory | Purpose | Key Files |
-|-----------|---------|----------|
-| `src/audit/` | Tamper-evident audit logging | `audit-log.mjs`, `hmac-chain.mjs` |
-| `src/verifier/` | Independent validation | `verifier.mjs`, `validation-contracts.mjs` |
-| `src/webui/` | WebUI components + SSE | `sse-broker.mjs`, `live-trace.mjs` |
-| `src/memory/` | Enhanced memory systems | `store.mjs` (decay), `consolidator.mjs` (replay) |
+- Audit, verifier, and memory freshness APIs are served by the active `src/server.mjs` runtime path.
+- Web UI currently uses polling-based pending/trace updates in `src/ui/index.html` (no SSE runtime endpoints).
 
 ## Request Flow (Chat)
 

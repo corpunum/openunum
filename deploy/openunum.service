@@ -1,14 +1,17 @@
 [Unit]
 Description=OpenUnum Assistant Service
 After=network-online.target
+StartLimitIntervalSec=120
+StartLimitBurst=5
 
 [Service]
 Type=simple
 WorkingDirectory=%h/openunum
 Environment=NODE_ENV=production
 ExecStart=/usr/bin/env node %h/openunum/src/server.mjs
-Restart=always
-RestartSec=2
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=20
 
 [Install]
 WantedBy=default.target

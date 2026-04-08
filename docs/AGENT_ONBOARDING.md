@@ -27,8 +27,8 @@ This guide will help you understand:
 1. [INDEX.md](INDEX.md) — Docs navigation
 2. [BRAIN.MD](../BRAIN.MD) — Core operating principles (9 principles)
 3. [AGENT_ONBOARDING.md](AGENT_ONBOARDING.md) — This guide
-4. [COUNCIL_ARCHITECTURE.md](COUNCIL_ARCHITECTURE.md) — 7-member council validation framework
-5. [PHASE4_PLAN.md](PHASE4_PLAN.md) — Current remediation roadmap
+4. [COUNCIL_ARCHITECTURE.md](COUNCIL_ARCHITECTURE.md) — 6-member council validation framework
+5. [PHASES_MASTER_PLAN_2026-04-08.md](PHASES_MASTER_PLAN_2026-04-08.md) — Canonical phases execution record
 6. [CODEBASE_MAP.md](CODEBASE_MAP.md) — File/folder structure
 7. [API_REFERENCE.md](API_REFERENCE.md) — All API endpoints
 8. [TESTING.md](TESTING.md) — Test suites and how to run them

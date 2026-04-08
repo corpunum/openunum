@@ -102,6 +102,21 @@ systemctl --user restart openunum.service
 journalctl --user -u openunum.service -n 200 --no-pager
 ```
 
+Crash-loop triage (`EADDRINUSE` / port conflicts):
+```bash
+ss -ltnp | rg 18880
+journalctl --user -u openunum.service --since "15 min ago" --no-pager | rg -n "EADDRINUSE|listen|Failed|restart"
+systemctl --user reset-failed openunum.service
+```
+
+Notes:
+- The shipped unit file is restart-rate-limited to avoid infinite restart storms on repeated failures.
+- Do not run another long-lived server on `127.0.0.1:18880` while `openunum.service` is enabled.
+- If the desktop session resets unexpectedly, check for AMD GPU reset loops caused by Ollama GPU offload:
+  - `journalctl -k -b --since "30 min ago" | rg -n "amdgpu|GPU reset|MES failed|device wedged|failed to halt cp gfx"`
+  - `journalctl -b --since "30 min ago" | rg -n "GNOME Shell crashed|Connection reset by peer|Broken pipe|ollama\\["`
+  - OpenUnum now forces CPU mode (`num_gpu=0`) for `ollama-local/*` requests.
+
 ## 6. Deployment Gate Instructions
 
 **Before deploying any changes:**

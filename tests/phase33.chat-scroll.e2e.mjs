@@ -6,7 +6,8 @@ import { spawn } from 'node:child_process';
 import { startServer, stopServer, jpost } from './_helpers.mjs';
 import { CDPBrowser } from '../src/browser/cdp.mjs';
 
-const TEST_PORT = Number(process.env.OPENUNUM_TEST_PORT || 18881);
+const DEFAULT_DYNAMIC_PORT = 18000 + (process.pid % 2000);
+const TEST_PORT = Number(process.env.OPENUNUM_TEST_PORT || DEFAULT_DYNAMIC_PORT);
 
 function resolveChromeBin() {
   const candidates = ['/snap/bin/chromium', '/usr/bin/chromium', '/usr/bin/google-chrome', '/usr/bin/chromium-browser'];

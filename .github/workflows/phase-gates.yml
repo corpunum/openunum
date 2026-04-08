@@ -34,6 +34,18 @@ jobs:
       - name: Unit Tests
         run: pnpm test:unit
 
+      - name: Smoke Tests (isolated)
+        run: pnpm test:smoke
+
+      - name: UI Smoke (no oauth)
+        run: pnpm smoke:ui:noauth
+
+      - name: Session Imitation Regression
+        run: pnpm test:imitation
+
+      - name: Core E2E Contracts
+        run: pnpm phase0:e2e && pnpm phase6:e2e && pnpm phase10:e2e && pnpm phase11:e2e
+
       - name: Phase0 Foundation Check
         run: pnpm phase0:check
 

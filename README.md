@@ -3,8 +3,7 @@
 OpenUnum is an Ubuntu-first autonomous assistant framework focused on high tool reliability, strict model control, and agent-operable runtime behavior.
 
 **Current State (2026-04-08):**
-- ✅ **Phase 1-3 Complete** — Working memory, context compaction, model behavior registry, execution envelopes, council validation
-- 🟡 **Phase 4 Planned** — Remediation roadmap (audit logging, independent verifier, hippocampal replay, ODD, freshness decay)
+- ✅ **Phase 1-4 Complete** — Working memory, context compaction, model behavior registry, execution envelopes, council remediation
 - Web UI with Gemini-inspired glass styling while preserving full backend feature coverage
 - Visible/traceable tool execution from chat (expand/collapse execution traces)
 - Multi-provider model handling with strict primary-provider lock option
@@ -19,7 +18,7 @@ OpenUnum is an Ubuntu-first autonomous assistant framework focused on high tool 
 - Pending chat handling (`/api/chat` + `/api/chat/pending`) to avoid "stuck loading"
 - Session-aware pending handling in UI to prevent cross-session reply bleed when switching chats
 - Local session history persistence in SQLite until user clicks `New Chat`
-- **Council Validation Framework** — 6 domain experts, 35 dimensions assessed (Amber maturity: 60%)
+- **Council Validation Framework** — 6 domain experts, latest consolidated maturity tracked in `OPENUNUM_EXPLAINED.md`
 - **Phase 0 Runtime Foundations** — Canonical runtime-state contract + config parity diagnostics (`/api/runtime/state-contract`, `/api/runtime/config-parity`)
 
 ## Fast Start
@@ -69,8 +68,8 @@ Read in this exact order:
 1. [docs/INDEX.md](docs/INDEX.md)
 2. [docs/AGENT_ONBOARDING.md](docs/AGENT_ONBOARDING.md)
 3. [BRAIN.MD](BRAIN.MD) — Core Operating Principles (9 principles)
-4. [docs/COUNCIL_ARCHITECTURE.md](docs/COUNCIL_ARCHITECTURE.md) — 7-member council validation framework
-5. [docs/PHASE4_PLAN.md](docs/PHASE4_PLAN.md) — Current remediation roadmap
+4. [docs/COUNCIL_ARCHITECTURE.md](docs/COUNCIL_ARCHITECTURE.md) — Council validation framework
+5. [docs/PHASES_MASTER_PLAN_2026-04-08.md](docs/PHASES_MASTER_PLAN_2026-04-08.md) — Canonical phases execution record
 6. [docs/CODEBASE_MAP.md](docs/CODEBASE_MAP.md)
 7. [docs/API_REFERENCE.md](docs/API_REFERENCE.md)
 8. [docs/AUTONOMY_AND_MEMORY.md](docs/AUTONOMY_AND_MEMORY.md)
@@ -78,9 +77,9 @@ Read in this exact order:
 10. [docs/TESTING.md](docs/TESTING.md)
 
 **Quick Reference:**
-- **Phase 1-3 Status:** ✅ Complete (12 systems validated)
-- **Council Maturity:** 🟡 Amber (60% of ideal patterns)
-- **Next Milestone:** Phase 4 remediation (6 weeks, starts 2026-04-08)
+- **Phase 1-4 Status:** ✅ Complete
+- **Council Maturity:** 🟡 Amber (see latest report links in docs index)
+- **Next Milestone:** production hardening and runtime/API canonicalization
 - **Test Coverage:** 45+ unit, 37 E2E phases, 8 smoke scripts
 
 ## Commands
@@ -93,13 +92,14 @@ pnpm test:smoke:live
 pnpm smoke:ui:noauth
 node src/cli.mjs health
 node src/cli.mjs chat --message "hello"
-node src/cli.mjs model switch --provider ollama --model ollama/qwen3.5:397b-cloud
+node src/cli.mjs model switch --provider ollama-cloud --model ollama-cloud/minimax-m2.7:cloud
 ```
 
 ## Deployment
 
 - User service file: [deploy/openunum.service](/home/corp-unum/openunum/deploy/openunum.service)
 - Installer script: [scripts/install-systemd.sh](/home/corp-unum/openunum/scripts/install-systemd.sh)
+- Service restart policy is rate-limited (`StartLimitIntervalSec=120`, `StartLimitBurst=5`) to prevent restart storms on repeated bind failures.
 
 ## Security / Control Notes
 

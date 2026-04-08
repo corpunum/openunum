@@ -1,6 +1,9 @@
 import assert from 'node:assert/strict';
 import { startServer, stopServer, jpost } from './_helpers.mjs';
 
+const DEFAULT_DYNAMIC_PORT = 18000 + (process.pid % 2000);
+const TEST_PORT = Number(process.env.OPENUNUM_TEST_PORT || DEFAULT_DYNAMIC_PORT);
+
 let proc;
 
 try {
@@ -8,7 +11,7 @@ try {
 
   const runtimeGoal = await jpost('/api/autonomy/tasks/plan', {
     goal: 'search online for runtime health, inspect the host, and report proof',
-    baseUrl: `http://127.0.0.1:${process.env.OPENUNUM_TEST_PORT || 18881}`
+    baseUrl: `http://127.0.0.1:${TEST_PORT}`
   });
   assert.equal(runtimeGoal.status, 200);
   assert.equal(runtimeGoal.json.ok, true);

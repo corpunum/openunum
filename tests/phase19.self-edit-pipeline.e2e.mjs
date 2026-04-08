@@ -2,7 +2,8 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import { startServer, stopServer, jget, jpost } from './_helpers.mjs';
 
-const TEST_PORT = Number(process.env.OPENUNUM_TEST_PORT || 18881);
+const DEFAULT_DYNAMIC_PORT = 18000 + (process.pid % 2000);
+const TEST_PORT = Number(process.env.OPENUNUM_TEST_PORT || DEFAULT_DYNAMIC_PORT);
 const BASE_URL = `http://127.0.0.1:${TEST_PORT}`;
 const TEST_FILE = 'tmp/phase19-self-edit.txt';
 

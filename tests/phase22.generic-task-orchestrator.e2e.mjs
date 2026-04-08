@@ -3,7 +3,8 @@ import fs from 'node:fs';
 import { startServer, stopServer, jget, jpost } from './_helpers.mjs';
 
 const TASK_FILE = 'tmp/phase22-task.txt';
-const TEST_PORT = Number(process.env.OPENUNUM_TEST_PORT || 18881);
+const DEFAULT_DYNAMIC_PORT = 18000 + (process.pid % 2000);
+const TEST_PORT = Number(process.env.OPENUNUM_TEST_PORT || DEFAULT_DYNAMIC_PORT);
 
 let proc;
 

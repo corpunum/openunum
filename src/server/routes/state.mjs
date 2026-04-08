@@ -4,13 +4,19 @@ import { MerkleTree } from '../../core/merkle-tree.mjs';
 const diffEngine = new StateDiffEngine();
 const merkle = new MerkleTree();
 
-export default function stateRoutes(app) {
-  app.post('/api/state/diff', (req, res) => {
-    const result = diffEngine.computeDiff(req.body.before, req.body.after);
-    res.json(result);
-  });
-  app.get('/api/state/root', (req, res) => {
-    const root = merkle.computeRoot(req.body?.items || []);
-    res.json({ root });
-  });
+export async function handleStateRoute({ req, res, url, ctx }) {
+  if (req.method === 'POST' && url.pathname === '/api/state/diff') {
+    const body = await ctx.parseBody(req);
+    const result = diffEngine.computeDiff(body?.before || {}, body?.after || {});
+    ctx.sendJson(res, 200, result);
+    return true;
+  }
+
+  if (req.method === 'GET' && url.pathname === '/api/state/root') {
+    const root = merkle.computeRoot([]);
+    ctx.sendJson(res, 200, { root });
+    return true;
+  }
+
+  return false;
 }

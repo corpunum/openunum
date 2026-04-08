@@ -7,8 +7,8 @@ This folder is optimized for fast machine onboarding (fresh agent session, no pr
 **First-time onboarding:**
 1. [AGENT_ONBOARDING.md](AGENT_ONBOARDING.md) — Start here
 2. [BRAIN.MD](../BRAIN.MD) — Core Operating Principles (9 principles)
-3. [COUNCIL_ARCHITECTURE.md](COUNCIL_ARCHITECTURE.md) — 7-member council validation framework
-4. [PHASE4_PLAN.md](PHASE4_PLAN.md) — Current remediation roadmap
+3. [COUNCIL_ARCHITECTURE.md](COUNCIL_ARCHITECTURE.md) — 6-member council validation framework
+4. [PHASES_MASTER_PLAN_2026-04-08.md](PHASES_MASTER_PLAN_2026-04-08.md) — Canonical phases execution record
 5. [CODEBASE_MAP.md](CODEBASE_MAP.md) — File/folder structure
 6. [API_REFERENCE.md](API_REFERENCE.md) — All API endpoints
 7. [TESTING.md](TESTING.md) — Test suites and how to run them
@@ -41,6 +41,7 @@ This folder is optimized for fast machine onboarding (fresh agent session, no pr
 34. [OPENUNUM_AUDIT_STATUS_2026-04-08.md](OPENUNUM_AUDIT_STATUS_2026-04-08.md) — Verified consolidated audit checklist + cleanup/test phased plan
 35. [PHASES_MASTER_PLAN_2026-04-08.md](PHASES_MASTER_PLAN_2026-04-08.md) — Canonical remaining phases plan and execution status
 36. [PHASES_COMPLETION_REPORT_2026-04-08.md](PHASES_COMPLETION_REPORT_2026-04-08.md) — Final closure evidence for all post-audit phases
+37. [CURRENT_STATE_MATRIX.md](CURRENT_STATE_MATRIX.md) — Code/tests/docs/CI trust checkpoint
 
 ## Legacy Planning Docs
 
