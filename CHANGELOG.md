@@ -4,6 +4,18 @@ All notable changes to OpenUnum are documented in this file.
 
 ---
 
+## [2.3.27] - 2026-04-08
+
+### Changed
+- Continued WebUI modularization for provider action orchestration:
+  - extracted provider/service payload builders and status formatters into `src/ui/modules/provider-actions.js`
+  - `src/ui/app.js` provider vault action handlers now use module helpers for request shaping and response text generation.
+
+### Added
+- Unit coverage for provider action helpers in `tests/unit/ui-provider-actions.test.mjs`.
+
+---
+
 ## [2.3.26] - 2026-04-08
 
 ### Changed

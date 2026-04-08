@@ -14,6 +14,14 @@ import {
   providerSummaryText,
   serviceSummaryText
 } from './modules/provider-vault.js';
+import {
+  buildProviderAuthCatalogPayload,
+  buildProviderTestRequest,
+  buildServiceSavePayload,
+  buildServiceTestRequest,
+  formatProviderTestStatus,
+  formatServiceTestStatus
+} from './modules/provider-actions.js';
 import { buildMissionTimelineView } from './modules/missions.js';
 import {
   sortSessionsByRecency,
@@ -1354,12 +1362,13 @@ async function saveProviderRow(provider) {
   const baseField = PROVIDER_BASE_FIELD[provider];
   const secretInput = document.querySelector(`.provider-secret-input[data-provider="${provider}"]`);
   const baseInput = document.querySelector(`.provider-base-input[data-provider="${provider}"]`);
-  const providerBaseUrls = {};
-  if (baseField) providerBaseUrls[baseField] = baseInput?.value?.trim() || row.base_url || '';
-  const payload = {
-    providerBaseUrls,
-    secrets: secretField && secretInput?.value?.trim() ? { [secretField]: secretInput.value.trim() } : {}
-  };
+  const payload = buildProviderAuthCatalogPayload({
+    row,
+    secretField,
+    baseField,
+    baseInputValue: baseInput?.value,
+    secretInputValue: secretInput?.value
+  });
   await jpost('/api/auth/catalog', payload);
   setStatus('providerStatus', `saved ${provider}`, { type: 'success', title: 'Provider Vault' });
   await refreshProviderConfig();
@@ -1373,16 +1382,15 @@ async function testProviderRow(provider) {
   if (!row) return;
   const secretInput = document.querySelector(`.provider-secret-input[data-provider="${provider}"]`);
   const baseInput = document.querySelector(`.provider-base-input[data-provider="${provider}"]`);
-  const out = await jpost('/api/provider/test', {
+  const out = await jpost('/api/provider/test', buildProviderTestRequest({
     provider,
-    baseUrl: baseInput?.value?.trim() || row.base_url || '',
-    apiKey: secretInput?.value?.trim() || ''
-  });
+    row,
+    baseInputValue: baseInput?.value,
+    secretInputValue: secretInput?.value
+  }));
   setStatus(
     'providerStatus',
-    out.ok
-      ? `test ok ${provider} | models=${Number(out.modelCount || 0)} | top=${out.topModel || '-'}`
-      : `test failed ${provider} | ${out.error || 'unknown'}`,
+    formatProviderTestStatus(provider, out),
     { type: out.ok ? 'success' : 'error', title: 'Provider Test' }
   );
 }
@@ -1391,29 +1399,23 @@ async function saveServiceRow(service) {
   const authRow = authMethodById(service);
   if (!authRow) return;
   const secretField = SERVICE_SECRET_FIELD[service];
+  const payload = buildServiceSavePayload({
+    service,
+    secretField,
+    secret: document.querySelector(`.service-secret-input[data-service="${service}"]`)?.value,
+    clientId: document.querySelector(`.service-oauth-client-id[data-service="${service}"]`)?.value,
+    clientSecret: document.querySelector(`.service-oauth-client-secret[data-service="${service}"]`)?.value,
+    scopes: document.querySelector(`.service-oauth-scopes[data-service="${service}"]`)?.value
+  });
   if (service === 'google-workspace') {
-    const clientId = document.querySelector(`.service-oauth-client-id[data-service="${service}"]`)?.value?.trim() || '';
-    const clientSecret = document.querySelector(`.service-oauth-client-secret[data-service="${service}"]`)?.value?.trim() || '';
-    const scopes = document.querySelector(`.service-oauth-scopes[data-service="${service}"]`)?.value?.trim() || '';
-    const payload = {
-      oauthConfig: {
-        googleWorkspace: {
-          clientId,
-          scopes
-        }
-      }
-    };
-    if (clientSecret) payload.oauthConfig.googleWorkspace.clientSecret = clientSecret;
     await jpost('/api/auth/catalog', payload);
     setStatus('providerStatus', `saved ${service}`, { type: 'success', title: 'Service Vault' });
     await refreshAuthCatalog();
     await runWebuiWireValidation(`service_save:${service}`);
     return;
   }
-  if (!secretField) return;
-  const input = document.querySelector(`.service-secret-input[data-service="${service}"]`);
-  const secret = input?.value?.trim() || '';
-  await jpost('/api/auth/catalog', { secrets: { [secretField]: secret } });
+  if (!payload) return;
+  await jpost('/api/auth/catalog', payload);
   setStatus('providerStatus', `saved ${service}`, { type: 'success', title: 'Service Vault' });
   await refreshProviderConfig();
   await refreshRuntimeOverview();
@@ -1422,12 +1424,10 @@ async function saveServiceRow(service) {
 
 async function testServiceRow(service) {
   const input = document.querySelector(`.service-secret-input[data-service="${service}"]`);
-  const out = await jpost('/api/service/test', { service, secret: input?.value?.trim() || '' });
+  const out = await jpost('/api/service/test', buildServiceTestRequest({ service, secret: input?.value }));
   setStatus(
     'providerStatus',
-    out.ok
-      ? `test ok ${service}${out.account ? ` | ${out.account}` : ''}${out.modelCount ? ` | models=${Number(out.modelCount)}` : ''}`
-      : `test failed ${service} | ${out.error || out.detail || 'unknown'}`,
+    formatServiceTestStatus(service, out),
     { type: out.ok ? 'success' : 'error', title: 'Service Test' }
   );
 }
