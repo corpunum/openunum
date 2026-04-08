@@ -22,6 +22,13 @@ import {
   formatProviderTestStatus,
   formatServiceTestStatus
 } from './modules/provider-actions.js';
+import {
+  bindControlPlaneStaticActions,
+  buildResearchApproveBody,
+  buildModelScoutRunBody,
+  buildTaskRunBody,
+  parseControlPlaneBody
+} from './modules/control-plane.js';
 import { buildRuntimeOverviewView } from './modules/runtime-overview.js';
 import { buildMissionTimelineView } from './modules/missions.js';
 import {
@@ -2195,88 +2202,43 @@ async function runControlPlaneRequest(method, path, body = undefined) {
   }
 }
 
-q('cpSelfHealDry').onclick = () => runControlPlaneRequest('POST', '/api/self-heal', { dryRun: true });
-q('cpSelfHealFix').onclick = () => runControlPlaneRequest('POST', '/api/self-heal/fix', {});
-q('cpSelfHealStatus').onclick = () => runControlPlaneRequest('GET', '/api/selfheal/status');
+bindControlPlaneStaticActions(q, runControlPlaneRequest);
 
-q('cpMasterStatus').onclick = () => runControlPlaneRequest('GET', '/api/autonomy/master/status');
-q('cpMasterStart').onclick = () => runControlPlaneRequest('POST', '/api/autonomy/master/start', {});
-q('cpMasterStop').onclick = () => runControlPlaneRequest('POST', '/api/autonomy/master/stop', {});
-q('cpMasterCycle').onclick = () => runControlPlaneRequest('POST', '/api/autonomy/master/cycle', {});
-q('cpMasterImprove').onclick = () => runControlPlaneRequest('POST', '/api/autonomy/master/self-improve', {});
-q('cpMasterLearnSkills').onclick = () => runControlPlaneRequest('POST', '/api/autonomy/master/learn-skills', {});
-q('cpMasterSelfTest').onclick = () => runControlPlaneRequest('POST', '/api/autonomy/master/self-test', {});
-
-q('cpResearchRun').onclick = () => runControlPlaneRequest('POST', '/api/research/run', { simulate: false });
-q('cpResearchRecent').onclick = () => runControlPlaneRequest('GET', '/api/research/recent?limit=25');
-q('cpResearchQueue').onclick = () => runControlPlaneRequest('GET', '/api/research/queue?limit=50');
 q('cpResearchApprove').onclick = () =>
-  runControlPlaneRequest('POST', '/api/research/approve', {
-    url: q('cpResearchUrl').value.trim(),
-    note: q('cpResearchNote').value.trim()
-  });
+  runControlPlaneRequest(
+    'POST',
+    '/api/research/approve',
+    buildResearchApproveBody(q('cpResearchUrl').value, q('cpResearchNote').value)
+  );
 
-q('cpWorkersList').onclick = () => runControlPlaneRequest('GET', '/api/autonomy/workers?limit=50');
 q('cpWorkerStatus').onclick = () => {
   const id = q('cpWorkerId').value.trim();
   if (!id) return;
   runControlPlaneRequest('GET', `/api/autonomy/workers/status?id=${encodeURIComponent(id)}`);
 };
-q('cpSelfEditRuns').onclick = () => runControlPlaneRequest('GET', '/api/autonomy/self-edit?limit=25');
+
 q('cpSelfEditStatus').onclick = () => {
   const id = q('cpSelfEditId').value.trim();
   if (!id) return;
   runControlPlaneRequest('GET', `/api/autonomy/self-edit/status?id=${encodeURIComponent(id)}`);
 };
 q('cpModelScoutRun').onclick = () =>
-  runControlPlaneRequest('POST', '/api/autonomy/model-scout/run', {
-    query: q('cpModelScoutQuery').value.trim(),
-    monitorLocal: true
-  });
-q('cpModelScoutList').onclick = () => runControlPlaneRequest('GET', '/api/autonomy/model-scout?limit=20');
+  runControlPlaneRequest('POST', '/api/autonomy/model-scout/run', buildModelScoutRunBody(q('cpModelScoutQuery').value));
+
 q('cpModelScoutStatus').onclick = () => {
   const id = q('cpModelScoutId').value.trim();
   if (!id) return;
   runControlPlaneRequest('GET', `/api/autonomy/model-scout/status?id=${encodeURIComponent(id)}`);
 };
 q('cpTaskRun').onclick = () =>
-  runControlPlaneRequest('POST', '/api/autonomy/tasks/run', {
-    goal: q('cpTaskGoal').value.trim(),
-    plan: [
-      'Inspect current runtime state',
-      'Verify the service surface',
-      'Record monitoring evidence'
-    ],
-    steps: [
-      {
-        kind: 'tool',
-        label: 'inspect host',
-        tool: 'shell_run',
-        args: { cmd: 'uname -a' }
-      },
-      {
-        kind: 'tool',
-        label: 'verify health',
-        tool: 'http_request',
-        args: { url: `${location.origin}/api/health`, method: 'GET' }
-      }
-    ],
-    verify: [
-      { kind: 'step_ok', stepIndex: 0 },
-      { kind: 'http', url: `${location.origin}/api/health`, expectStatus: 200 }
-    ],
-    monitor: [
-      { kind: 'http', url: `${location.origin}/api/runtime/inventory`, expectStatus: 200 }
-    ]
-  });
-q('cpTaskList').onclick = () => runControlPlaneRequest('GET', '/api/autonomy/tasks?limit=20');
+  runControlPlaneRequest('POST', '/api/autonomy/tasks/run', buildTaskRunBody(q('cpTaskGoal').value, location.origin));
+
 q('cpTaskStatus').onclick = () => {
   const id = q('cpTaskId').value.trim();
   if (!id) return;
   runControlPlaneRequest('GET', `/api/autonomy/tasks/status?id=${encodeURIComponent(id)}`);
 };
 
-q('cpOpsRecent').onclick = () => runControlPlaneRequest('GET', '/api/operations/recent?limit=50');
 q('cpSessionDelete').onclick = () => {
   const sid = q('cpSessionDeleteId').value.trim();
   if (!sid) return;
@@ -2291,17 +2253,12 @@ q('cpRun').onclick = async () => {
   const method = q('cpMethod').value;
   const path = q('cpPath').value.trim();
   if (!path) return;
-  let body;
-  const raw = q('cpBody').value.trim();
-  if (method !== 'GET' && raw) {
-    try {
-      body = JSON.parse(raw);
-    } catch {
-      q('cpStatus').textContent = 'invalid JSON body';
-      return;
-    }
+  const parsed = parseControlPlaneBody(method, q('cpBody').value);
+  if (!parsed.ok) {
+    q('cpStatus').textContent = parsed.error;
+    return;
   }
-  await runControlPlaneRequest(method, path, body);
+  await runControlPlaneRequest(method, path, parsed.body);
 };
 
 q('send').onclick = async () => {

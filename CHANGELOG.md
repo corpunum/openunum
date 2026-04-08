@@ -4,6 +4,18 @@ All notable changes to OpenUnum are documented in this file.
 
 ---
 
+## [2.3.29] - 2026-04-08
+
+### Changed
+- Continued WebUI modularization for control-plane wiring:
+  - extracted control-plane static action registry, payload builders, and custom-body parser to `src/ui/modules/control-plane.js`
+  - `src/ui/app.js` now binds static control-plane buttons through module registry and uses shared builders for research/model-scout/task actions.
+
+### Added
+- Unit coverage for control-plane helpers in `tests/unit/ui-control-plane.test.mjs`.
+
+---
+
 ## [2.3.28] - 2026-04-08
 
 ### Changed
