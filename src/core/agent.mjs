@@ -549,6 +549,21 @@ function deterministicLightChatReply() {
   return 'Ready. Tell me what you want to do next.';
 }
 
+function isShortLowIntentTurn(text) {
+  const raw = String(text || '').toLowerCase().trim();
+  if (!raw) return false;
+  const normalized = raw.replace(/[^\w\s]/g, ' ').replace(/\s+/g, ' ').trim();
+  if (!normalized) return false;
+  const words = normalized.split(/\s+/).filter(Boolean);
+  if (words.length > 5) return false;
+  if (normalized.length > 36) return false;
+  const hasTaskSignal = /\b(what|how|why|where|when|which|who|can you|please|show|list|check|fix|create|build|run|install|open|search|find|write|read|explain|configure|debug|error|trace|stack|app|runtime|model|provider|continue|proceed|next|keep going|go on|grep|file|files|web|latest|news|today|current)\b/.test(normalized);
+  if (hasTaskSignal) return false;
+  const hasCodeLike = /[\\/`$={}[\]<>]/.test(raw) || /\d{2,}/.test(raw);
+  if (hasCodeLike) return false;
+  return true;
+}
+
 function touchedUiSourceFile(run) {
   const name = String(run?.name || '').trim();
   if (!['file_read', 'file_patch', 'file_write'].includes(name)) return false;
@@ -1980,9 +1995,10 @@ export class OpenUnumAgent {
     // Deterministic ultra-fast greeting path: skip provider call entirely.
     if (fastAwarenessResult?.category === 'greeting' || fastAwarenessResult?.category === 'light-chat') {
       const rawHistoryUserTurns = rawHistory.filter((m) => m.role === 'user').length;
+      const shortLowIntentTurn = isShortLowIntentTurn(message);
       const canFastReturn = fastAwarenessResult.category === 'greeting'
         ? true
-        : rawHistoryUserTurns <= 4;
+        : (rawHistoryUserTurns <= 4 || shortLowIntentTurn);
       const quick = !canFastReturn
         ? ''
         : (fastAwarenessResult.category === 'greeting'
