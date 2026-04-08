@@ -89,3 +89,15 @@ Source baseline: `/home/corp-unum/Downloads/OPENUNUM_CONSOLIDATED_AUDIT_KNOWLEDG
 
 3. Phase C (Hardening):
 - tighten 4B compact profile defaults and packet-size linting in CI
+
+## Progress Update (2026-04-08, continued)
+
+- ✅ Archived unlinked runtime surface:
+  - moved `src/core/autonomy-coordinator.mjs` -> `maintenance/autonomy-coordinator.legacy.mjs`
+- ✅ Archived stale/unlinked docs from active docs root:
+  - `agent-onboarding.md`
+  - `session-stuck-patterns.md`
+  - `LOCAL_RUNTIME_VALIDATION_2026-04-01.md`
+  - `MODULAR_AGENT_ARCHITECTURE_NICE_TO_HAVE.md`
+- ✅ Added archive index:
+  - `docs/archive/README.md`

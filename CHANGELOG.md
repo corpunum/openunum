@@ -4,6 +4,24 @@ All notable changes to OpenUnum are documented in this file.
 
 ---
 
+## [2.2.7] - 2026-04-08
+
+### Added
+- Canonical remaining phases execution plan: `docs/PHASES_MASTER_PLAN_2026-04-08.md`.
+- Docs archive index: `docs/archive/README.md`.
+
+### Changed
+- Archived stale/unlinked docs out of active docs root:
+  - `docs/archive/agent-onboarding.md`
+  - `docs/archive/session-stuck-patterns.md`
+  - `docs/archive/LOCAL_RUNTIME_VALIDATION_2026-04-01.md`
+  - `docs/archive/MODULAR_AGENT_ARCHITECTURE_NICE_TO_HAVE.md`
+- Archived dormant runtime surface:
+  - `src/core/autonomy-coordinator.mjs` moved to `maintenance/autonomy-coordinator.legacy.mjs`.
+- Updated docs index and audit status to reflect cleanup progress.
+
+---
+
 ## [2.2.6] - 2026-04-08
 
 ### Added

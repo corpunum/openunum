@@ -2,6 +2,17 @@
 
 Date: 2026-04-07
 
+## Phase Plan + Cleanup Kickoff (2026-04-08)
+
+**Status:** ✅ In progress (Phase 1 execution started)
+
+- Added canonical remaining-phase plan:
+  - `docs/PHASES_MASTER_PLAN_2026-04-08.md`
+- Archived stale/unlinked docs into `docs/archive/` and added `docs/archive/README.md`.
+- Archived dormant unlinked runtime surface:
+  - `src/core/autonomy-coordinator.mjs` -> `maintenance/autonomy-coordinator.legacy.mjs`
+- Updated docs index and audit status to reflect archive/canonicalization progress.
+
 ## Phase 0 Closure Slice: Runtime Wiring + Gates + UI Diagnostics (2026-04-08)
 
 **Status:** ✅ Implemented and test-gated

@@ -39,6 +39,7 @@ This folder is optimized for fast machine onboarding (fresh agent session, no pr
 32. [SESSION_IMITATION_REVIEW_2026-04-08.md](SESSION_IMITATION_REVIEW_2026-04-08.md) — Chat-session pattern review + imitation test outcomes
 33. [SELF_READING_INDEX.md](SELF_READING_INDEX.md) — Curated machine-readable self-reading file map
 34. [OPENUNUM_AUDIT_STATUS_2026-04-08.md](OPENUNUM_AUDIT_STATUS_2026-04-08.md) — Verified consolidated audit checklist + cleanup/test phased plan
+35. [PHASES_MASTER_PLAN_2026-04-08.md](PHASES_MASTER_PLAN_2026-04-08.md) — Canonical remaining phases plan and execution status
 
 ## Legacy Planning Docs
 
@@ -47,6 +48,7 @@ These files describe original planning context and early phase structure:
 - [ARCHITECTURE.md](/home/corp-unum/openunum/docs/ARCHITECTURE.md)
 - [IMPLEMENTATION_SEQUENCE.md](/home/corp-unum/openunum/docs/IMPLEMENTATION_SEQUENCE.md)
 - [E2E_GATES.md](/home/corp-unum/openunum/docs/E2E_GATES.md)
+- [archive/README.md](/home/corp-unum/openunum/docs/archive/README.md)
 
 ## Single-File Orientation
 
