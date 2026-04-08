@@ -519,7 +519,9 @@ async function resolvePendingReply(typing, startedAtIso, requestSessionId, reque
     if (streamResult !== null) return streamResult;
 
     while (Date.now() < deadline) {
-      await sleep(pendingPollDelayMs(typing.pollCount || 0));
+      if ((typing.pollCount || 0) > 0) {
+        await sleep(pendingPollDelayMs(typing.pollCount || 0));
+      }
       if (requestToken !== requestTokenSeq) return false;
       typing.pollCount = (typing.pollCount || 0) + 1;
       const act = await jget(`/api/sessions/${encodeURIComponent(requestSessionId)}/activity?since=${encodeURIComponent(startedAtIso)}`);

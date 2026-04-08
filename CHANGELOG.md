@@ -4,6 +4,14 @@ All notable changes to OpenUnum are documented in this file.
 
 ---
 
+## [2.3.16] - 2026-04-08
+
+### Changed
+- Pending-run reply resolver now performs an immediate first activity check before entering adaptive backoff waits.
+- This removes the initial artificial wait on pending recovery and reduces short-turn response latency while preserving SSE/poll fallback behavior.
+
+---
+
 ## [2.3.15] - 2026-04-08
 
 ### Added
