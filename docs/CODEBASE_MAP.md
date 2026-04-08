@@ -1,11 +1,11 @@
 # Codebase Map
 
-This map is implementation-accurate as of 2026-04-07.
+This map is implementation-accurate as of 2026-04-08.
 
 ## Top-Level Structure
 
 - `src/server.mjs`: HTTP API server and Web UI host
-- `src/server/routes/*.mjs`: extracted route handlers (health, ui, sessions, missions, model, auth, config, autonomy, chat/tools, browser, telegram, research, **providers**, **state**)
+- `src/server/routes/*.mjs`: extracted route handlers (health, ui, sessions, missions, model, auth, config, autonomy, chat/tools, browser, telegram, research, **providers**, **state**, **audit**, **verifier**, **memory-freshness**)
 - `src/server/services/*.mjs`: extracted runtime helpers (chat, auth jobs, browser runtime, telegram runtime, research runtime, config service, auth service)
 - `src/core/agent.mjs`: provider chat loop, tool-call execution, trace generation
 - `src/core/missions.mjs`: autonomous mission runner with proof-aware completion
@@ -51,7 +51,7 @@ This map is implementation-accurate as of 2026-04-07.
 
 ## Runtime Notes
 
-- Audit, verifier, and memory freshness APIs are served by the active `src/server.mjs` runtime path.
+- Audit, verifier, and memory freshness APIs are handled through active route modules (`src/server/routes/audit.mjs`, `src/server/routes/verifier.mjs`, `src/server/routes/memory-freshness.mjs`) wired by `src/server.mjs`.
 - Web UI currently uses polling-based pending/trace updates in `src/ui/index.html` (no SSE runtime endpoints).
 
 ## Request Flow (Chat)

@@ -1,13 +1,29 @@
 import { IndependentVerifier } from '../../core/verifier.mjs';
+
 const verifier = new IndependentVerifier();
 
-export default function verifierRoutes(app) {
-  app.post('/api/verifier/check', async (req, res) => {
-    const { before, after, type } = req.body || {};
-    const result = type === 'tool'
-      ? await verifier.verifyToolResult(req.body.toolName, req.body.args, after)
-      : await verifier.verifyStateChange(before || {}, after || {});
-    res.json(result);
-  });
-  app.get('/api/verifier/stats', (req, res) => res.json(verifier.getStats()));
+export async function handleVerifierRoute({ req, res, url, ctx }) {
+  if (req.method === 'GET' && url.pathname === '/api/verifier/stats') {
+    ctx.sendJson(res, 200, verifier.getStats());
+    return true;
+  }
+
+  if (req.method === 'POST' && url.pathname === '/api/verifier/check') {
+    const body = await ctx.parseBody(req);
+    const type = String(body?.type || 'state').trim().toLowerCase();
+    if (type === 'tool') {
+      const out = await verifier.verifyToolResult(
+        String(body?.toolName || ''),
+        body?.args || {},
+        body?.after || body?.result || {}
+      );
+      ctx.sendJson(res, 200, out);
+      return true;
+    }
+    const out = await verifier.verifyStateChange(body?.before || {}, body?.after || {});
+    ctx.sendJson(res, 200, out);
+    return true;
+  }
+
+  return false;
 }

@@ -14,21 +14,11 @@ import { getAutonomyMaster } from './core/autonomy-master.mjs';
 import { estimateMessagesTokens } from './core/context-budget.mjs';
 import { resolveExecutionEnvelope } from './core/model-execution-envelope.mjs';
 import {
-  EVENT_TYPES as AUDIT_EVENT_TYPES,
-  getAuditStats,
-  getLog as getAuditLog,
-  getMerkleRoot as getAuditRoot,
-  logEvent as logAuditEvent,
-  verifyChain as verifyAuditChain
-} from './core/audit-log.mjs';
-import {
   RUNTIME_STATE_CONTRACT_VERSION,
   buildRuntimeStatePacket,
   validateCanonicalRuntimeState
 } from './core/runtime-state-contract.mjs';
 import { buildConfigParityReport } from './core/config-parity-check.mjs';
-import { IndependentVerifier } from './core/verifier.mjs';
-import { getHalfLifeConfig } from './memory/freshness-decay.mjs';
 import { CDPBrowser } from './browser/cdp.mjs';
 import { logInfo, logError } from './logger.mjs';
 import {
@@ -94,6 +84,9 @@ import { handleChatToolsRoute } from './server/routes/chat_tools.mjs';
 import { handleSkillsResearchRoute } from './server/routes/skills_research.mjs';
 import { handleProvidersRoute } from './server/routes/providers.mjs';
 import { handleStateRoute } from './server/routes/state.mjs';
+import { handleVerifierRoute } from './server/routes/verifier.mjs';
+import { handleAuditRoute } from './server/routes/audit.mjs';
+import { handleMemoryFreshnessRoute } from './server/routes/memory-freshness.mjs';
 import { handleCommandRoute, handleCommandsListRoute } from './server/routes/commands.mjs';
 import { loadBuiltinCommands } from './commands/loader.mjs';
 import { createConfigService } from './server/services/config_service.mjs';
@@ -151,7 +144,6 @@ const prunePendingChats = chatRuntime.prunePendingChats;
 
 const autonomyMaster = getAutonomyMaster({ config, agent, memoryStore: memory, browser, pendingChats });
 const selfHeal = new SelfHealOrchestrator({ config, agent, browser, memory });
-const verifier = new IndependentVerifier();
 const API_ERROR_CONTRACT_VERSION = '2026-04-02.api-errors.v1';
 const TOOL_CATALOG_CONTRACT_VERSION = '2026-04-02.tool-catalog.v1';
 
@@ -661,109 +653,35 @@ const server = http.createServer(async (req, res) => {
       });
     }
 
-    if (req.method === 'GET' && url.pathname === '/api/verifier/stats') {
-      return sendJson(res, 200, verifier.getStats());
-    }
-
-    if (req.method === 'POST' && url.pathname === '/api/verifier/check') {
-      const body = await parseRequestBody(req);
-      const type = String(body?.type || 'state').trim().toLowerCase();
-      if (type === 'tool') {
-        const out = await verifier.verifyToolResult(String(body?.toolName || ''), body?.args || {}, body?.after || body?.result || {});
-        return sendJson(res, 200, out);
+    if (await handleVerifierRoute({
+      req,
+      res,
+      url,
+      ctx: {
+        parseBody: parseRequestBody,
+        sendJson
       }
-      const out = await verifier.verifyStateChange(body?.before || {}, body?.after || {});
-      return sendJson(res, 200, out);
-    }
+    })) return;
 
-    if (req.method === 'GET' && url.pathname === '/api/audit/stats') {
-      const stats = getAuditStats();
-      const sessionCount = new Set((getAuditLog() || []).map((entry) => String(entry?.correlationId || '').trim()).filter(Boolean)).size;
-      return sendJson(res, 200, {
-        ...stats,
-        totalLogs: stats.totalEntries || 0,
-        sessionsCount: sessionCount
-      });
-    }
-
-    if (req.method === 'GET' && url.pathname === '/api/audit/log') {
-      const since = String(url.searchParams.get('since') || '').trim() || null;
-      const type = String(url.searchParams.get('type') || '').trim() || null;
-      const limitRaw = Number(url.searchParams.get('limit') || 100);
-      const limit = Number.isFinite(limitRaw) && limitRaw > 0 ? Math.min(limitRaw, 1000) : 100;
-      const entries = getAuditLog({ since, type, limit });
-      return sendJson(res, 200, { entries, count: entries.length });
-    }
-
-    if (req.method === 'POST' && url.pathname === '/api/audit/log') {
-      const body = await parseRequestBody(req);
-      const requested = String(body?.eventType || '').trim();
-      const eventType = AUDIT_EVENT_TYPES.includes(requested)
-        ? requested
-        : 'verification';
-      const payload = {
-        action: String(body?.action || '').trim() || null,
-        actor: String(body?.actor || '').trim() || null,
-        details: body?.details && typeof body.details === 'object' ? body.details : {}
-      };
-      const entry = logAuditEvent(eventType, payload, String(body?.correlationId || '').trim() || undefined);
-      return sendJson(res, 200, {
-        ok: true,
-        logId: entry.entryId,
-        entry
-      });
-    }
-
-    if (req.method === 'GET' && url.pathname === '/api/audit/verify') {
-      return sendJson(res, 200, verifyAuditChain());
-    }
-
-    if (req.method === 'GET' && url.pathname === '/api/audit/root') {
-      return sendJson(res, 200, { merkleRoot: getAuditRoot() });
-    }
-
-    if (req.method === 'GET' && url.pathname === '/api/memory/freshness') {
-      const stale = typeof memory.getStaleMemories === 'function'
-        ? memory.getStaleMemories({ threshold: 0.125, limit: 200 })
-        : [];
-      return sendJson(res, 200, {
-        ok: true,
-        halfLifeConfig: getHalfLifeConfig(),
-        staleCount: stale.length,
-        timestamp: new Date().toISOString()
-      });
-    }
-
-    if (req.method === 'GET' && url.pathname === '/api/memory/stale') {
-      const thresholdRaw = Number(url.searchParams.get('threshold') || 0.125);
-      const limitRaw = Number(url.searchParams.get('limit') || 50);
-      const threshold = Number.isFinite(thresholdRaw) ? Math.max(0, thresholdRaw) : 0.125;
-      const limit = Number.isFinite(limitRaw) ? Math.max(1, Math.min(limitRaw, 500)) : 50;
-      const category = String(url.searchParams.get('category') || '').trim() || null;
-      const staleMemories = typeof memory.getStaleMemories === 'function'
-        ? memory.getStaleMemories({ threshold, limit, category })
-        : [];
-      return sendJson(res, 200, {
-        ok: true,
-        staleMemories,
-        count: staleMemories.length,
-        threshold,
-        timestamp: new Date().toISOString()
-      });
-    }
-
-    if (req.method === 'POST' && url.pathname.startsWith('/api/memory/refresh/')) {
-      const memoryId = Number(url.pathname.split('/').pop() || 0);
-      if (!Number.isFinite(memoryId) || memoryId <= 0) {
-        return sendJson(res, 400, { ok: false, error: 'memory_id_required' });
+    if (await handleAuditRoute({
+      req,
+      res,
+      url,
+      ctx: {
+        parseBody: parseRequestBody,
+        sendJson
       }
-      if (typeof memory.refreshMemory !== 'function') {
-        return sendJson(res, 503, { ok: false, error: 'store_not_available' });
+    })) return;
+
+    if (await handleMemoryFreshnessRoute({
+      req,
+      res,
+      url,
+      ctx: {
+        memory,
+        sendJson
       }
-      const out = memory.refreshMemory(memoryId);
-      if (!out?.ok) return sendJson(res, 404, { ok: false, error: 'memory_not_found' });
-      return sendJson(res, 200, { ok: true, ...out, timestamp: new Date().toISOString() });
-    }
+    })) return;
 
     if (req.method === 'GET' && url.pathname === '/api/runtime/overview') {
       return sendJson(res, 200, await buildRuntimeOverview());
