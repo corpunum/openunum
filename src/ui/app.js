@@ -1,5 +1,7 @@
 import { q, qa, escapeHtml, sleep } from './modules/dom.js';
 import { jget, jpost, jrequest } from './modules/http.js';
+import { setStatus } from './modules/feedback.js';
+import { showView as showViewWithMeta } from './modules/navigation.js';
 
 const VIEW_META = {
   chat: ['Chat Terminal', 'Autonomous agent conversation'],
@@ -50,60 +52,6 @@ let liveActivityEnabled = localStorage.getItem('openunum_live_activity');
 if (liveActivityEnabled == null) liveActivityEnabled = 'true';
 liveActivityEnabled = liveActivityEnabled === 'true';
 localStorage.setItem('openunum_session', sessionId);
-let toastCounter = 0;
-
-function showToast(message, type = 'info', title = 'Action') {
-  const host = q('toastStack');
-  if (!host) return;
-  const id = `toast-${Date.now()}-${toastCounter++}`;
-  const level = type === 'error' ? 'bad' : type === 'warn' ? 'warn' : type === 'success' ? 'good' : '';
-  const node = document.createElement('div');
-  node.className = `toast ${level}`;
-  node.id = id;
-  node.innerHTML = `
-    <div class="toast-head">
-      <span>${escapeHtml(title)}</span>
-      <span id="${id}-state">auto-close 5s</span>
-    </div>
-    <div class="toast-body">${escapeHtml(String(message || ''))}</div>
-    <div class="toast-actions">
-      <button type="button" id="${id}-pin">Pin</button>
-      <button type="button" id="${id}-dismiss">Dismiss</button>
-    </div>
-    <div class="toast-progress"><div></div></div>
-  `;
-  host.prepend(node);
-  let pinned = false;
-  const stateEl = q(`${id}-state`);
-  let timerId = null;
-  const cleanup = () => {
-    if (node?.parentNode) node.parentNode.removeChild(node);
-  };
-  const armAutoClose = () => {
-    if (timerId) clearTimeout(timerId);
-    timerId = setTimeout(() => {
-      if (!pinned) cleanup();
-    }, 5000);
-  };
-  armAutoClose();
-  q(`${id}-pin`)?.addEventListener('click', () => {
-    pinned = !pinned;
-    node.classList.toggle('pinned', pinned);
-    if (stateEl) stateEl.textContent = pinned ? 'pinned' : 'auto-close 5s';
-    if (!pinned) armAutoClose();
-  });
-  q(`${id}-dismiss`)?.addEventListener('click', () => {
-    if (timerId) clearTimeout(timerId);
-    cleanup();
-  });
-  while (host.children.length > 5) host.removeChild(host.lastChild);
-}
-
-function setStatus(id, message, { toast = true, type = 'info', title = 'Action' } = {}) {
-  const el = q(id);
-  if (el) el.textContent = String(message || '');
-  if (toast) showToast(message, type, title);
-}
 
 const topStatus = q('topStatus');
 const chat = q('chat');
@@ -182,11 +130,7 @@ const pendingPollDelayMs = (pollCount = 0) => {
 };
 
 function showView(viewId) {
-  qa('.menu-btn').forEach((b) => b.classList.toggle('active', b.dataset.view === viewId));
-  qa('.view').forEach((v) => v.classList.toggle('active', v.id === `view-${viewId}`));
-  const [title, subtitle] = VIEW_META[viewId] || ['OpenUnum', ''];
-  q('viewTitle').textContent = title;
-  q('viewSubtitle').textContent = subtitle;
+  showViewWithMeta(viewId, VIEW_META);
 }
 
 function formatRelativeTime(iso) {

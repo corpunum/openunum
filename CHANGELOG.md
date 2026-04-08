@@ -4,6 +4,16 @@ All notable changes to OpenUnum are documented in this file.
 
 ---
 
+## [2.3.12] - 2026-04-08
+
+### Changed
+- Continued WebUI JS modularization:
+  - extracted toast/status helpers to `src/ui/modules/feedback.js`
+  - extracted view navigation helper to `src/ui/modules/navigation.js`
+  - `src/ui/app.js` now imports these helpers to reduce monolithic utility density
+
+---
+
 ## [2.3.11] - 2026-04-08
 
 ### Changed
