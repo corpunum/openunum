@@ -9,7 +9,7 @@ Comprehensive testing documentation for the OpenUnum project.
 | **Lint** | `pnpm lint` | Syntax-parse all tracked JS/MJS under `src/`, `scripts/`, `tests/` |
 | **Format Check** | `pnpm format:check` | Enforce LF line endings + trailing newline in tracked in-scope text files |
 | **Unit** | `pnpm test:unit` | Fast, isolated unit tests via Vitest |
-| **E2E (Phase Battery)** | `pnpm e2e` | Canonical end-to-end phase battery (phase0..phase49) |
+| **E2E (Phase Battery)** | `pnpm e2e` | Canonical end-to-end phase battery (phase0..phase50) |
 | **E2E (Node Suite)** | `pnpm test:e2e` | Node test-runner suite for `tests/e2e/*` |
 | **Smoke (Isolated)** | `pnpm test:smoke` | Quick API health checks on a temporary local server |
 | **Smoke (Live Service)** | `pnpm test:smoke:live` | Quick API health checks against the currently running service |
@@ -29,6 +29,7 @@ Comprehensive testing documentation for the OpenUnum project.
 | **WebUI Vault/Mission Details E2E** | `pnpm phase44:e2e` | Browser regression for provider-vault modal test/save actions and mission timeline filter/search rendering |
 | **Deterministic Fast-Path E2E** | `pnpm phase48:e2e` | Verifies short-turn deterministic fast-path trace flags on `/api/chat` |
 | **Pending Completion Handoff E2E** | `pnpm phase49:e2e` | Verifies long-turn pending flow returns completed payload (`completed: true`) and persists final assistant reply |
+| **Tooling Rollout WebUI E2E** | `pnpm phase50:e2e` | Browser regression for Settings -> Tooling and Skills runtime save + inventory wiring |
 | **Verify (Canonical)** | `pnpm verify` | Canonical pre-merge/pre-deploy validation battery |
 | **All (alias)** | `pnpm test:all` | Alias to `pnpm verify` |
 
@@ -158,6 +159,7 @@ pnpm phase42:e2e
 pnpm phase43:e2e
 pnpm phase44:e2e
 pnpm phase49:e2e
+pnpm phase50:e2e
 pnpm test:smoke
 pnpm test:smoke:live
 pnpm test:imitation

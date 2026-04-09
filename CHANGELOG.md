@@ -4,6 +4,29 @@ All notable changes to OpenUnum are documented in this file.
 
 ---
 
+## [2.3.37] - 2026-04-09
+
+### Added
+- Operational hardening rollout backend:
+  - `src/server/services/local_model_service.mjs` for allowlisted local model rollout queue (`ollama pull`) with bounded concurrency and cancellation.
+  - New local model rollout API surface under `/api/models/local/*`:
+    - status, recommended models, enqueue download, list/get/cancel download jobs.
+- Runtime tooling inventory API:
+  - `GET /api/runtime/tooling-inventory` returns tools (with model-backed metadata), skills, model-backed runtime config snapshot, and local model rollout state.
+- WebUI operator surface:
+  - New Settings submenu view: `Tooling and Skills`.
+  - Includes runtime controls for `runtime.modelBackedTools.*`, tool/skill inventory tables, and local model download job controls.
+- Unit coverage:
+  - `tests/unit/runtime-route-tooling-inventory.test.mjs`
+  - `tests/unit/model-route-local-downloads.test.mjs`
+
+### Changed
+- `GET /api/tools/catalog` now augments each tool row with `model_backed` metadata (`contract`, `enabled`, profile details).
+- Config contract validation now accepts `runtime.modelBackedTools.recommendedLocalModels` as `string[]`.
+- Config patch persistence now writes `runtime.modelBackedTools` subtree end-to-end (runtime toggles, profile map, recommended local models).
+
+---
+
 ## [2.3.36] - 2026-04-09
 
 ### Added

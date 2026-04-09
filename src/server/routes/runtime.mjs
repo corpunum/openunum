@@ -1,10 +1,37 @@
 import { resolveExecutionEnvelope } from '../../core/model-execution-envelope.mjs';
+import { MODEL_BACKED_TOOL_CONTRACTS } from '../../tools/backends/contracts.mjs';
+import { resolveBackendProfiles } from '../../tools/backends/profiles.mjs';
 
 export async function handleRuntimeRoute({ req, res, url, ctx }) {
   const done = (status, payload) => {
     ctx.sendJson(res, status, payload);
     return true;
   };
+
+  const modelBackedContracts = new Set(Object.keys(MODEL_BACKED_TOOL_CONTRACTS || {}));
+
+  function augmentToolCatalog(tools = []) {
+    const mbt = ctx.config.runtime?.modelBackedTools || {};
+    const enabled = mbt.enabled === true;
+    const exposeToController = mbt.exposeToController !== false;
+    return (tools || []).map((tool) => {
+      const name = String(tool?.name || '').trim();
+      const isContractTool = modelBackedContracts.has(name);
+      const toolCfg = mbt.tools?.[name] || {};
+      const configuredProfiles = Array.isArray(toolCfg.backendProfiles) ? toolCfg.backendProfiles : [];
+      const effectiveProfiles = isContractTool ? resolveBackendProfiles(ctx.config, name) : [];
+      return {
+        ...tool,
+        model_backed: {
+          contract: isContractTool,
+          enabled: isContractTool && enabled,
+          exposeToController: isContractTool && enabled && exposeToController,
+          configuredProfiles,
+          effectiveProfiles
+        }
+      };
+    });
+  }
 
   if (req.method === 'GET' && url.pathname === '/api/capabilities') {
     return done(200, ctx.buildCapabilitiesPayload());
@@ -16,11 +43,47 @@ export async function handleRuntimeRoute({ req, res, url, ctx }) {
       model: ctx.config.model?.model,
       runtime: ctx.config.runtime
     });
+    const tools = ctx.agent.toolRuntime.toolCatalog({ allowedTools: executionEnvelope.toolAllowlist });
     return done(200, {
       contract_version: ctx.TOOL_CATALOG_CONTRACT_VERSION,
       enforce_profiles: ctx.config.runtime?.enforceModelExecutionProfiles !== false,
       allowed_tools: executionEnvelope.toolAllowlist || null,
-      tools: ctx.agent.toolRuntime.toolCatalog({ allowedTools: executionEnvelope.toolAllowlist })
+      tools: augmentToolCatalog(tools)
+    });
+  }
+
+  if (req.method === 'GET' && url.pathname === '/api/runtime/tooling-inventory') {
+    const executionEnvelope = resolveExecutionEnvelope({
+      provider: ctx.config.model?.provider,
+      model: ctx.config.model?.model,
+      runtime: ctx.config.runtime
+    });
+    const tools = augmentToolCatalog(
+      ctx.agent.toolRuntime.toolCatalog({ allowedTools: executionEnvelope.toolAllowlist })
+    );
+    let skills = [];
+    try {
+      const skillOut = await ctx.agent.runTool('skill_list', {});
+      skills = Array.isArray(skillOut?.skills) ? skillOut.skills : [];
+    } catch {
+      skills = [];
+    }
+    const localModels = await ctx.localModelService.getLocalModelStatus();
+    return done(200, {
+      ok: true,
+      generated_at: new Date().toISOString(),
+      allowed_tools: executionEnvelope.toolAllowlist || null,
+      modelBackedTools: {
+        enabled: ctx.config.runtime?.modelBackedTools?.enabled === true,
+        exposeToController: ctx.config.runtime?.modelBackedTools?.exposeToController !== false,
+        localMaxConcurrency: Number(ctx.config.runtime?.modelBackedTools?.localMaxConcurrency || 1),
+        queueDepth: Number(ctx.config.runtime?.modelBackedTools?.queueDepth || 8),
+        recommendedLocalModels: ctx.localModelService.recommendedLocalModels(),
+        tools: ctx.config.runtime?.modelBackedTools?.tools || {}
+      },
+      tools,
+      skills,
+      localModels
     });
   }
 

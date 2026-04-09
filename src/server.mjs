@@ -75,6 +75,7 @@ import { createResearchRuntimeService } from './server/services/research_runtime
 import { createChatRuntimeService } from './server/services/chat_runtime.mjs';
 import { createRuntimeService } from './server/services/runtime_service.mjs';
 import { enforceBrowserRequestGuards } from './server/services/request_guard_service.mjs';
+import { createLocalModelService } from './server/services/local_model_service.mjs';
 
 const config = loadConfig();
 const memory = new MemoryStore();
@@ -216,6 +217,7 @@ const buildRuntimeStateAttachment = runtimeService.buildRuntimeStateAttachment;
 const buildMissionTimeline = runtimeService.buildMissionTimeline;
 const applyAutonomyMode = runtimeService.applyAutonomyMode;
 const renderReplyHtml = runtimeService.renderReplyHtml;
+const localModelService = createLocalModelService({ config });
 
 function sendApiError(res, status, code, message, details = {}) {
   return sendApiErrorBase(
@@ -296,7 +298,8 @@ const server = http.createServer(async (req, res) => {
         buildRuntimeStateContractReport,
         buildAutonomyInsights,
         buildConfigParityReport,
-        TOOL_CATALOG_CONTRACT_VERSION
+        TOOL_CATALOG_CONTRACT_VERSION,
+        localModelService
       }
     })) return;
 
@@ -345,7 +348,8 @@ const server = http.createServer(async (req, res) => {
         buildLegacyProviderModels,
         normalizeModelSettings,
         normalizeProviderId,
-        PROVIDER_ORDER
+        PROVIDER_ORDER,
+        localModelService
       }
     })) return;
 

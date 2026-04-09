@@ -160,6 +160,41 @@ export function createConfigService({ config, PROVIDER_ORDER, reloadConfigSecret
       if (typeof body.runtime.autonomyPolicy.allowRecoveryToolsInPlan === 'boolean') nextPolicy.allowRecoveryToolsInPlan = body.runtime.autonomyPolicy.allowRecoveryToolsInPlan;
       config.runtime.autonomyPolicy = nextPolicy;
     }
+    if (body.runtime && body.runtime.modelBackedTools && typeof body.runtime.modelBackedTools === 'object') {
+      const source = body.runtime.modelBackedTools;
+      const next = { ...(config.runtime.modelBackedTools || {}) };
+      if (typeof source.enabled === 'boolean') next.enabled = source.enabled;
+      if (typeof source.exposeToController === 'boolean') next.exposeToController = source.exposeToController;
+      if (Number.isFinite(source.localMaxConcurrency)) next.localMaxConcurrency = Number(source.localMaxConcurrency);
+      if (Number.isFinite(source.queueDepth)) next.queueDepth = Number(source.queueDepth);
+      if (source.tools && typeof source.tools === 'object') {
+        const nextTools = { ...(next.tools || {}) };
+        for (const [toolName, toolCfg] of Object.entries(source.tools)) {
+          if (!toolCfg || typeof toolCfg !== 'object') continue;
+          const row = { ...(nextTools[toolName] || {}) };
+          if (Array.isArray(toolCfg.backendProfiles)) {
+            row.backendProfiles = toolCfg.backendProfiles
+              .filter((item) => item && typeof item === 'object')
+              .map((item) => ({
+                id: String(item.id || '').trim(),
+                type: String(item.type || 'model').trim(),
+                provider: String(item.provider || '').trim(),
+                model: String(item.model || '').trim(),
+                timeoutMs: Number.isFinite(item.timeoutMs) ? Number(item.timeoutMs) : undefined
+              }))
+              .filter((item) => item.id && item.provider && item.model);
+          }
+          nextTools[toolName] = row;
+        }
+        next.tools = nextTools;
+      }
+      if (Array.isArray(source.recommendedLocalModels)) {
+        next.recommendedLocalModels = source.recommendedLocalModels
+          .map((item) => String(item || '').trim())
+          .filter(Boolean);
+      }
+      config.runtime.modelBackedTools = next;
+    }
 
     if (body.model && typeof body.model.provider === 'string' && body.model.provider.trim()) {
       config.model.provider = normalizeProvider(body.model.provider.trim());

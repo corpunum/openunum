@@ -74,6 +74,7 @@ describe('request-contracts', () => {
           exposeToController: true,
           localMaxConcurrency: 1,
           queueDepth: 8,
+          recommendedLocalModels: ['gemma4:cpu', 'nomic-embed-text:latest'],
           tools: {
             summarize: {
               backendProfiles: [

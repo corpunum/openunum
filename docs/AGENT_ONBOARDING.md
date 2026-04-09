@@ -43,7 +43,17 @@ Model-backed logical tools (phase-one substrate):
 - Feature flag: `runtime.modelBackedTools.enabled`
 - Controller exposure toggle: `runtime.modelBackedTools.exposeToController`
 - Local guardrails: `runtime.modelBackedTools.localMaxConcurrency`, `runtime.modelBackedTools.queueDepth`
+- Local rollout allowlist: `runtime.modelBackedTools.recommendedLocalModels`
 - Initial logical tools: `summarize`, `classify`, `extract` (read-only, contract-validated)
+
+Operational rollout APIs (WebUI Settings -> Tooling and Skills):
+- `GET /api/runtime/tooling-inventory`
+- `GET /api/models/local/status`
+- `GET /api/models/local/recommended`
+- `POST /api/models/local/download`
+- `GET /api/models/local/downloads`
+- `GET /api/models/local/downloads/:id`
+- `POST /api/models/local/downloads/:id/cancel`
 
 ## Required Validation Gates
 

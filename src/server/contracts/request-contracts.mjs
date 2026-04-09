@@ -168,6 +168,11 @@ export function validateConfigPatch(body, ctx = {}) {
               }
             }
           }
+          if (mbt.recommendedLocalModels !== undefined) {
+            if (!Array.isArray(mbt.recommendedLocalModels) || !mbt.recommendedLocalModels.every((item) => typeof item === 'string')) {
+              addTypeError(errors, 'runtime.modelBackedTools.recommendedLocalModels', 'string[]');
+            }
+          }
         }
       }
     }

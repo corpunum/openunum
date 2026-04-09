@@ -51,6 +51,7 @@ import { createSessionController } from './modules/session-controller.js';
 import { createChatComposerController } from './modules/chat-composer-controller.js';
 import { createChatPendingController } from './modules/chat-pending-controller.js';
 import { createSettingsActionsController } from './modules/settings-actions-controller.js';
+import { createSettingsToolingController } from './modules/settings-tooling-controller.js';
 import { createUiShellActions } from './modules/ui-shell-actions.js';
 import { createAutoMissionRunner } from './modules/chat-auto-mission.js';
 import { createRuntimeRefreshers } from './modules/runtime-refreshers.js';
@@ -94,6 +95,7 @@ const VIEW_META = {
   'operator': ['Execution Trace', 'Runtime, tools, and live execution state'],
   'model-routing': ['Model Routing', 'Primary model selection and fallback strategy'],
   'provider-config': ['Provider Vault', 'Provider matrix, models, and secure auth vault'],
+  'settings-tooling': ['Tooling and Skills', 'Agent tools, skills inventory, and model-backed rollout'],
   'browser': ['Browser Ops', 'Browser and hardware control'],
   'telegram': ['Telegram Bridge', 'Channel connectivity and polling control'],
   'missions': ['Mission Runner', 'Autonomous execution loops'],
@@ -621,6 +623,15 @@ const settingsActionsController = createSettingsActionsController({
   getAuthCatalog: () => authCatalog
 });
 const { bindSettingsActions } = settingsActionsController;
+const settingsToolingController = createSettingsToolingController({
+  q,
+  jget,
+  jpost,
+  setStatus,
+  runWebuiWireValidation,
+  refreshRuntime
+});
+const { bindToolingActions, refreshToolingInventory } = settingsToolingController;
 const uiShellActions = createUiShellActions({
   q,
   qa,
@@ -642,6 +653,7 @@ bindOperationsPanelActions();
 bindControlPlaneActions();
 bindComposerActions();
 bindSettingsActions();
+bindToolingActions();
 bindUiShellActions();
 
 setInterval(() => {
@@ -660,6 +672,7 @@ setInterval(() => {
       { name: 'model', fn: refreshModel },
       { name: 'runtime', fn: refreshRuntime },
       { name: 'providers', fn: refreshProviderConfig },
+      { name: 'tooling', fn: refreshToolingInventory },
       //{ name: 'browser', fn: refreshBrowserConfig }, // Temporarily disabled due to CDP endpoint issues
       { name: 'overview', fn: refreshRuntimeOverview },
       { name: 'phase0-diag', fn: refreshPhase0Diagnostics },

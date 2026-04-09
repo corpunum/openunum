@@ -2,6 +2,32 @@
 
 Date: 2026-04-09
 
+## Operational Hardening Rollout Surface (2026-04-09)
+
+**Status:** ✅ Implemented and test-gated
+
+- Added backend local model rollout service with safety constraints:
+  - allowlisted small-model pulls only (`gemma4:cpu` + embeddings by default)
+  - bounded queue and one-at-a-time pull execution
+  - list/get/cancel job controls
+- Added local model rollout API endpoints:
+  - `GET /api/models/local/status`
+  - `GET /api/models/local/recommended`
+  - `POST /api/models/local/download`
+  - `GET /api/models/local/downloads`
+  - `GET /api/models/local/downloads/:id`
+  - `POST /api/models/local/downloads/:id/cancel`
+- Added runtime operator inventory endpoint:
+  - `GET /api/runtime/tooling-inventory` (tools + model-backed metadata + skills + local model rollout state)
+- Added new WebUI Settings submenu:
+  - `Tooling and Skills`
+  - runtime toggle controls for `runtime.modelBackedTools.*`
+  - tool/skill inventory tables
+  - local model rollout controls and download job table
+- Added unit test coverage:
+  - `tests/unit/runtime-route-tooling-inventory.test.mjs`
+  - `tests/unit/model-route-local-downloads.test.mjs`
+
 ## Chat + Search Reliability Hardening (2026-04-09)
 
 **Status:** ✅ Implemented and test-gated

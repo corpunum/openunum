@@ -2,7 +2,7 @@
 
 Base URL: `http://127.0.0.1:18880`
 
-**Last Updated:** 2026-04-08 (Phase 0 runtime contract/parity endpoints added)
+**Last Updated:** 2026-04-09 (tooling inventory + local model rollout endpoints)
 
 ## Health
 
@@ -159,6 +159,7 @@ The following surfaces are architectural targets and are not currently exposed b
 - `runtime.modelBackedTools.exposeToController: boolean`
 - `runtime.modelBackedTools.localMaxConcurrency: number`
 - `runtime.modelBackedTools.queueDepth: number`
+- `runtime.modelBackedTools.recommendedLocalModels: string[]`
 - `runtime.modelBackedTools.tools.<tool>.backendProfiles[]`
 - `model.routing.*`
 - `integrations.googleWorkspace.cliCommand: string`
@@ -386,7 +387,7 @@ Returns:
 {
   "contract_version": "2026-04-02.webui-capabilities.v2",
   "menu": ["chat", "missions", "trace", "runtime", "settings"],
-  "provider_order": ["ollama-local", "ollama-cloud", "nvidia", "openrouter", "openai"],
+  "provider_order": ["ollama-local", "ollama-cloud", "nvidia", "openrouter", "xiaomimimo", "openai"],
   "tool_catalog": {
     "contract_version": "2026-04-02.tool-catalog.v1",
     "tools": []
@@ -398,11 +399,13 @@ Returns:
 
 `GET /api/tools/catalog` returns the tool capability contract (name, schema, safety class, mutability, destructive flag, proof hint).
 When `runtime.modelBackedTools.enabled=true`, logical tools such as `summarize`, `classify`, and `extract` can appear in this catalog.
+Each tool row now includes a `model_backed` block with `contract`, `enabled`, `configuredProfiles`, and `effectiveProfiles`.
 
 ## Runtime Overview
 
 - `GET /api/runtime/overview`
 - `GET /api/runtime/inventory?limit=300`
+- `GET /api/runtime/tooling-inventory`
 - `GET /api/autonomy/insights?sessionId=...&goal=...`
 - `GET /api/controller/behaviors?limit=80`
 - `GET /api/controller/behavior-classes`
@@ -432,6 +435,12 @@ Returns a WebUI-oriented flagship summary:
 - `browser`
 - `http`
 - `latestFacts`
+
+`GET /api/runtime/tooling-inventory` returns:
+- effective tool catalog (with model-backed metadata)
+- runtime model-backed tool config snapshot
+- skill inventory (`skill_list` projection)
+- local model rollout state (installed models, recommended allowlist, download jobs)
 
 `GET /api/autonomy/insights` returns:
 - `sessionId`
@@ -510,6 +519,12 @@ Returns a WebUI-oriented flagship summary:
 - `POST /api/auth/job/input`
 - `GET /api/models?provider=ollama-local|ollama-cloud|nvidia|openrouter|xiaomimimo|openai`
 - `GET /api/model-catalog`
+- `GET /api/models/local/status`
+- `GET /api/models/local/recommended`
+- `POST /api/models/local/download`
+- `GET /api/models/local/downloads?limit=60`
+- `GET /api/models/local/downloads/:id`
+- `POST /api/models/local/downloads/:id/cancel`
 
 Credential visibility rules:
 - `GET /api/config` is sanitized and will keep `model.*ApiKey` fields empty by design.
@@ -539,6 +554,14 @@ Credential visibility rules:
     "canonical_key": "nvidia/qwen/qwen3-coder-480b-a35b-instruct"
   }
 }
+```
+
+Local model rollout notes:
+- downloads are intentionally allowlisted to small local models (`gemma4:cpu` + embeddings by default)
+- rollout queue runs one download at a time to avoid host instability during pulls
+- `POST /api/models/local/download` payload:
+```json
+{"model":"gemma4:cpu"}
 ```
 
 `GET /api/auth/catalog` returns the secure provider/auth contract:
