@@ -17,6 +17,8 @@ function defaultArgsForTool(name) {
   if (tool === 'summarize') return { text: 'OpenUnum operational hardening summary.', maxSentences: 2 };
   if (tool === 'classify') return { text: 'Please classify this as greeting, task, or research intent.' };
   if (tool === 'extract') return { text: 'Owner: OpenUnum; Priority: high; Milestone: phase-ops.', fields: ['owner', 'priority', 'milestone'] };
+  if (tool === 'parse_function_args') return { text: 'Create mission Alpha with priority high and owner ops.', targetFunction: 'create_mission', availableArgs: ['name', 'priority', 'owner'] };
+  if (tool === 'embed_text') return { text: 'OpenUnum framework runtime retrieval vector test.', dimensions: 32 };
   return { text: 'OpenUnum tool test input.' };
 }
 
@@ -435,11 +437,6 @@ export function createSettingsToolingController({
             embed_text: {
               backendProfiles: [
                 { id: 'embed_text.local', type: 'model', provider: 'ollama-local', model: 'ollama-local/nomic-embed-text:v1.5', timeoutMs: 15000 }
-              ]
-            },
-            suggest_code_patch: {
-              backendProfiles: [
-                { id: 'suggest_code_patch.local', type: 'model', provider: 'ollama-local', model: 'ollama-local/qwen2.5-coder:1.5b', timeoutMs: 30000 }
               ]
             }
           }

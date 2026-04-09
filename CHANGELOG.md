@@ -4,6 +4,28 @@ All notable changes to OpenUnum are documented in this file.
 
 ---
 
+## [2.3.39] - 2026-04-09
+
+### Added
+- New phase-1 model-backed tool contracts:
+  - `parse_function_args`
+  - `embed_text`
+- Adapter prompt support for the new contracts in `src/tools/backends/adapters/model-json-tool.mjs`.
+- Unit coverage for new contract normalization and preflight validation.
+
+### Changed
+- Default model-backed phase-1 mappings now use small local models:
+  - `summarize -> granite3.3:2b`
+  - `classify -> llama3.2:1b`
+  - `extract -> granite3.3:2b`
+  - `parse_function_args -> functiongemma:270m`
+  - `embed_text -> nomic-embed-text:v1.5`
+- `suggest_code_patch` remains gated off by default (not exposed as an active model-backed contract).
+- Local model rollout allowlist and defaults now include:
+  - `granite3.3:2b`, `llama3.2:1b`, `functiongemma:270m`, `nomic-embed-text:v1.5`, `qwen2.5-coder:1.5b`
+
+---
+
 ## [2.3.38] - 2026-04-09
 
 ### Added

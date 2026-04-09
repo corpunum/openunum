@@ -50,6 +50,27 @@ function buildPrompt(toolName, args = {}) {
       `fields: ${JSON.stringify(fields)}`
     ].join('\n');
   }
+  if (toolName === 'parse_function_args') {
+    const availableArgs = Array.isArray(args.availableArgs)
+      ? args.availableArgs.map((x) => String(x || '').trim()).filter(Boolean)
+      : [];
+    return [
+      'You are a strict JSON tool backend for parse_function_args.',
+      'Return only valid JSON with shape: {"data":{"arguments":{"arg":"value"}},"confidence":0.0}.',
+      `text: ${String(args.text || '')}`,
+      `targetFunction: ${String(args.targetFunction || '')}`,
+      `availableArgs: ${JSON.stringify(availableArgs)}`
+    ].join('\n');
+  }
+  if (toolName === 'embed_text') {
+    const dimensions = Number.isFinite(args.dimensions) ? Math.max(8, Math.min(2048, Number(args.dimensions))) : 64;
+    return [
+      'You are a strict JSON tool backend for embed_text.',
+      `Return only valid JSON with shape: {"data":{"embedding":[${'0.0,'.repeat(7)}0.0]},"confidence":0.0}.`,
+      `Generate exactly ${dimensions} numeric embedding values in "embedding".`,
+      `text: ${String(args.text || '')}`
+    ].join('\n');
+  }
   return [
     `You are a strict JSON tool backend for ${toolName}.`,
     'Return only valid JSON with shape: {"data":{},"confidence":0.0}.',

@@ -222,11 +222,6 @@ export function defaultConfig() {
             backendProfiles: [
               { id: 'embed_text.local', type: 'model', provider: 'ollama-local', model: 'ollama-local/nomic-embed-text:v1.5', timeoutMs: 15000 }
             ]
-          },
-          suggest_code_patch: {
-            backendProfiles: [
-              { id: 'suggest_code_patch.local', type: 'model', provider: 'ollama-local', model: 'ollama-local/qwen2.5-coder:1.5b', timeoutMs: 30000 }
-            ]
           }
         },
         recommendedLocalModels: [

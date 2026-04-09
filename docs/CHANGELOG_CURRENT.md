@@ -41,6 +41,17 @@ Date: 2026-04-09
   - `tests/unit/runtime-route-tooling-inventory.test.mjs`
   - `tests/unit/model-route-local-downloads.test.mjs`
   - `tests/unit/model-backed-telemetry.test.mjs`
+  - `tests/unit/model-backed-contracts.test.mjs` (phase-1 contracts for `parse_function_args`, `embed_text`)
+  - `tests/unit/preflight-validator-model-backed.test.mjs` (new contract preflight assertions)
+- Added phase-1 model-backed contracts and defaults:
+  - Active contracts: `summarize`, `classify`, `extract`, `parse_function_args`, `embed_text`
+  - `suggest_code_patch` intentionally kept non-active by default
+  - Recommended allowlisted local models expanded to:
+    - `granite3.3:2b`
+    - `llama3.2:1b`
+    - `functiongemma:270m`
+    - `nomic-embed-text:v1.5`
+    - `qwen2.5-coder:1.5b`
 
 ## Chat + Search Reliability Hardening (2026-04-09)
 

@@ -62,6 +62,43 @@ export const MODEL_BACKED_TOOL_CONTRACTS = {
     },
     sideEffects: 'none',
     resourceClass: 'compact'
+  },
+  parse_function_args: {
+    name: 'parse_function_args',
+    purpose: 'Parse function arguments from natural language into a normalized JSON object.',
+    parameters: {
+      type: 'object',
+      properties: {
+        text: { type: 'string' },
+        targetFunction: { type: 'string' },
+        availableArgs: { type: 'array', items: { type: 'string' } }
+      },
+      required: ['text']
+    },
+    outputSchema: {
+      requiredDataFields: ['arguments'],
+      confidenceMin: 0.0
+    },
+    sideEffects: 'none',
+    resourceClass: 'compact'
+  },
+  embed_text: {
+    name: 'embed_text',
+    purpose: 'Generate a lightweight numeric embedding vector for input text.',
+    parameters: {
+      type: 'object',
+      properties: {
+        text: { type: 'string' },
+        dimensions: { type: 'number' }
+      },
+      required: ['text']
+    },
+    outputSchema: {
+      requiredDataFields: ['embedding'],
+      confidenceMin: 0.0
+    },
+    sideEffects: 'none',
+    resourceClass: 'compact'
   }
 };
 
@@ -97,6 +134,29 @@ export function normalizeModelBackedOutput(toolName, raw = {}, backendInfo = {})
       tool: toolName,
       details: `missing required output fields: ${missing.join(', ')}`
     };
+  }
+  if (toolName === 'parse_function_args') {
+    const argsOut = data.arguments;
+    if (!argsOut || typeof argsOut !== 'object' || Array.isArray(argsOut)) {
+      return {
+        ok: false,
+        error: 'validation_failed',
+        tool: toolName,
+        details: 'arguments must be an object'
+      };
+    }
+  }
+  if (toolName === 'embed_text') {
+    const embedding = data.embedding;
+    if (!Array.isArray(embedding) || embedding.length === 0 || !embedding.every((v) => Number.isFinite(Number(v)))) {
+      return {
+        ok: false,
+        error: 'validation_failed',
+        tool: toolName,
+        details: 'embedding must be a non-empty numeric array'
+      };
+    }
+    data.embedding = embedding.map((v) => Number(v));
   }
   return {
     ok: raw.ok !== false,

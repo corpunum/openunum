@@ -21,4 +21,14 @@ describe('preflight-validator model-backed', () => {
     const out = validateToolCall('extract', { text: 'a:b', fields: ['a'] });
     expect(out.valid).toBe(true);
   });
+
+  it('accepts parse_function_args with text payload', () => {
+    const out = validateToolCall('parse_function_args', { text: 'Create mission alpha with owner ops' });
+    expect(out.valid).toBe(true);
+  });
+
+  it('accepts embed_text with text payload', () => {
+    const out = validateToolCall('embed_text', { text: 'OpenUnum retrieval test', dimensions: 32 });
+    expect(out.valid).toBe(true);
+  });
 });
