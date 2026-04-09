@@ -9,8 +9,14 @@ Current phase-one logical tools:
 - `summarize`
 - `classify`
 - `extract`
+- `parse_function_args`
+- `embed_text`
 
 These are read-only and contract-validated.
+
+Gated (not active by default):
+
+- `suggest_code_patch`
 
 ## Architecture
 
@@ -42,7 +48,9 @@ Config path: `runtime.modelBackedTools`
       "tools": {
         "summarize": { "backendProfiles": [] },
         "classify": { "backendProfiles": [] },
-        "extract": { "backendProfiles": [] }
+        "extract": { "backendProfiles": [] },
+        "parse_function_args": { "backendProfiles": [] },
+        "embed_text": { "backendProfiles": [] }
       }
     }
   }

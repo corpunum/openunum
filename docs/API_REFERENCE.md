@@ -959,6 +959,14 @@ Validation notes:
 - `POST /api/skills/review`, `POST /api/skills/approve`, `POST /api/skills/execute`, and `POST /api/skills/uninstall` require `name`.
 - Invalid payload shape returns `400` with `error: "invalid_payload"`.
 
+Skill-bundle authoring tools:
+
+- `skill_forge` and `skill_load` are currently exposed through direct tool runtime (`POST /api/tool/run`), not through dedicated `/api/skills/forge` or `/api/skills/load` routes.
+- Recommended sequence:
+  1. `POST /api/tool/run` with `{"name":"skill_forge","args":{"goal":"...","research":true}}`
+  2. `POST /api/tool/run` with `{"name":"skill_load","args":{"name":"<skill-name>"}}`
+  3. `POST /api/skills/execute` with `{"name":"<skill-name>","args":{...}}` (or `POST /api/tool/run` with `skill_execute`)
+
 ## Google Workspace / Email
 
 - `GET /api/email/status`

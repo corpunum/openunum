@@ -12,6 +12,7 @@ For new OpenUnum agents joining active implementation work.
 6. [API_REFERENCE.md](API_REFERENCE.md)
 7. [TESTING.md](TESTING.md)
 8. [../README.md](../README.md)
+9. [SKILL_BUNDLES.md](SKILL_BUNDLES.md)
 
 ## Runtime Truth First
 
@@ -44,7 +45,35 @@ Model-backed logical tools (phase-one substrate):
 - Controller exposure toggle: `runtime.modelBackedTools.exposeToController`
 - Local guardrails: `runtime.modelBackedTools.localMaxConcurrency`, `runtime.modelBackedTools.queueDepth`
 - Local rollout allowlist: `runtime.modelBackedTools.recommendedLocalModels`
-- Initial logical tools: `summarize`, `classify`, `extract` (read-only, contract-validated)
+- Initial logical tools: `summarize`, `classify`, `extract`, `parse_function_args`, `embed_text` (read-only, contract-validated)
+- `suggest_code_patch` is intentionally gated off by default.
+
+## Skill Bundle Authoring (Agent-Critical)
+
+OpenUnum supports native skill bundle generation and execution:
+
+- `skill_forge` -> generates and installs a skill bundle
+- `skill_load` -> loads bundle rules into current session context
+- `skill_execute` -> runs bundle `execute.mjs`
+
+Bundle storage:
+
+- `~/.openunum/skills/manifest.json`
+- `~/.openunum/skills/custom/<skill-name>/`
+
+When to use:
+
+- repeated workflows/patterns, not one-off tasks
+- when a reusable decision tree and examples improve consistency
+
+Operational sequence:
+
+1. `skill_list`
+2. `skill_forge`
+3. `skill_load`
+4. `skill_execute`
+
+Compact envelope is usually too restrictive for `skill_forge`; use balanced/full tier when authoring bundles.
 
 Operational rollout APIs (WebUI Settings -> Tooling and Skills):
 - `GET /api/runtime/tooling-inventory`

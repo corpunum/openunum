@@ -1,6 +1,6 @@
 # Codebase Map
 
-This map is implementation-accurate as of 2026-04-08.
+This map is implementation-accurate as of 2026-04-09.
 
 ## Top-Level Structure
 
@@ -118,7 +118,10 @@ This map is implementation-accurate as of 2026-04-08.
 - `http_download`
 - `desktop_open`
 - `desktop_xdotool`
+- `http_request`
 - `skill_list`
+- `skill_forge`
+- `skill_load`
 - `skill_install`
 - `skill_review`
 - `skill_approve`
@@ -136,6 +139,8 @@ This map is implementation-accurate as of 2026-04-08.
 - `summarize` (model-backed logical tool)
 - `classify` (model-backed logical tool)
 - `extract` (model-backed logical tool)
+- `parse_function_args` (model-backed logical tool)
+- `embed_text` (model-backed logical tool)
 
 ## Config Layer
 
