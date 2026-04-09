@@ -4,6 +4,29 @@ This document is the canonical implementation handoff for the next agent.
 
 ## Execution Updates
 
+### 2026-04-09 (Model-backed tools phase-one slice)
+
+- Implemented contract-driven model-backed logical tool substrate without changing controller loop shape:
+  - Added shared core tool contract source: `src/tools/tool-contracts.mjs`
+  - Added backend layer: `src/tools/backends/{registry,contracts,profiles,governor}.mjs`
+  - Added adapters: `src/tools/backends/adapters/model-json-tool.mjs`, `src/tools/backends/adapters/deterministic-wrapper.mjs`
+- Runtime wiring:
+  - `src/tools/runtime.mjs` now builds base schemas from shared contracts and can expose/execute logical tools `summarize` and `classify` when enabled.
+  - Added explicit provider/model factory path via `buildProviderForModel(...)` in `src/providers/index.mjs`.
+- Validator convergence:
+  - Replaced drifted dual-schema behavior by delegating `tool-validator` pre-execution checks to `preflight-validator`.
+  - `shell_run` contract now consistently uses `cmd` across validator surfaces.
+- Config/contract support:
+  - Added `runtime.modelBackedTools.*` defaults and merge path in `src/config.mjs`.
+  - Added `/api/config` contract validation coverage for `runtime.modelBackedTools.*`.
+- Tests:
+  - New unit tests for model-backed contracts, preflight behavior, governor bounds, and request contract validation.
+  - Validation run:
+    - `pnpm test:unit` ✅
+    - `pnpm test:smoke` ✅
+    - `pnpm e2e` ✅ (phase0..phase49)
+    - `pnpm docs:index` + `pnpm docs:index:check` + `pnpm docs:gate` ✅
+
 ### 2026-04-09 (Post-phase reliability hardening)
 
 - Search/runtime reliability framework updates:

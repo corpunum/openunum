@@ -33,6 +33,11 @@ This map is implementation-accurate as of 2026-04-08.
 - `src/core/role-model-registry.mjs`: **NEW** — Task-type to model-tier mapping
 - `src/core/turn-recovery-summary.mjs`: bounded evidence-based summaries on tool failures
 - `src/tools/runtime.mjs`: unified tool schema + execution routing
+- `src/tools/tool-contracts.mjs`: canonical tool schema/validation contract source
+- `src/tools/backends/registry.mjs`: model-backed logical tool backend resolution/execution
+- `src/tools/backends/contracts.mjs`: logical tool contracts + output normalization
+- `src/tools/backends/profiles.mjs`: backend profile resolution from config/defaults
+- `src/tools/backends/governor.mjs`: bounded local model-backed execution queue/concurrency
 - `src/tools/executor-daemon.mjs`: retry/backoff executor with JSONL logs
 - `src/tools/google-workspace.mjs`: native Google Workspace OAuth + Gmail/Google API client
 - `src/oauth/google-workspace.mjs`: Google installed-app PKCE helpers and token refresh
@@ -128,6 +133,8 @@ This map is implementation-accurate as of 2026-04-08.
 - `research_list_recent`
 - `research_review_queue`
 - `research_approve`
+- `summarize` (model-backed logical tool)
+- `classify` (model-backed logical tool)
 
 ## Config Layer
 

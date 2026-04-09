@@ -53,4 +53,37 @@ describe('request-contracts', () => {
     expect(out.ok).toBe(false);
     expect(out.errors.some((e) => e.field === 'clear')).toBe(true);
   });
+
+  it('validates model-backed tools runtime config shape', () => {
+    const bad = validateConfigPatch({
+      runtime: {
+        modelBackedTools: {
+          enabled: 'yes',
+          localMaxConcurrency: 0
+        }
+      }
+    });
+    expect(bad.ok).toBe(false);
+    expect(bad.errors.some((e) => e.field === 'runtime.modelBackedTools.enabled')).toBe(true);
+    expect(bad.errors.some((e) => e.field === 'runtime.modelBackedTools.localMaxConcurrency')).toBe(true);
+
+    const good = validateConfigPatch({
+      runtime: {
+        modelBackedTools: {
+          enabled: true,
+          exposeToController: true,
+          localMaxConcurrency: 1,
+          queueDepth: 8,
+          tools: {
+            summarize: {
+              backendProfiles: [
+                { id: 'sum.local', type: 'model', provider: 'ollama-local', model: 'ollama-local/gemma4:cpu', timeoutMs: 18000 }
+              ]
+            }
+          }
+        }
+      }
+    });
+    expect(good.ok).toBe(true);
+  });
 });

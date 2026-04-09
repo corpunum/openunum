@@ -32,7 +32,21 @@ Secret store path:
     "missionDefaultContinueUntilDone": true,
     "missionDefaultHardStepCap": 120,
     "missionDefaultMaxRetries": 3,
-    "missionDefaultIntervalMs": 400
+    "missionDefaultIntervalMs": 400,
+    "modelBackedTools": {
+      "enabled": false,
+      "exposeToController": true,
+      "localMaxConcurrency": 1,
+      "queueDepth": 8,
+      "tools": {
+        "summarize": {
+          "backendProfiles": []
+        },
+        "classify": {
+          "backendProfiles": []
+        }
+      }
+    }
   },
   "model": {
     "provider": "ollama",
@@ -120,3 +134,4 @@ Both `secrets.json` and `secrets.enc.json` are written with file mode `0600`.
   - `POST /api/controller/behavior/reset-all`
 - New fields should always be added to defaults + merged in `withDefaults(...)`.
 - Runtime/API updates should call `agent.reloadTools()` when tool behavior may change.
+- `runtime.modelBackedTools.*` controls logical model-backed tools (`summarize`, `classify`) while keeping the normal controller/tool-call loop unchanged.

@@ -155,6 +155,11 @@ The following surfaces are architectural targets and are not currently exposed b
 - `runtime.missionDefaultHardStepCap: number`
 - `runtime.missionDefaultMaxRetries: number`
 - `runtime.missionDefaultIntervalMs: number`
+- `runtime.modelBackedTools.enabled: boolean`
+- `runtime.modelBackedTools.exposeToController: boolean`
+- `runtime.modelBackedTools.localMaxConcurrency: number`
+- `runtime.modelBackedTools.queueDepth: number`
+- `runtime.modelBackedTools.tools.<tool>.backendProfiles[]`
 - `model.routing.*`
 - `integrations.googleWorkspace.cliCommand: string`
 
@@ -392,6 +397,7 @@ Returns:
 - `GET /api/tools/catalog`
 
 `GET /api/tools/catalog` returns the tool capability contract (name, schema, safety class, mutability, destructive flag, proof hint).
+When `runtime.modelBackedTools.enabled=true`, logical tools such as `summarize` and `classify` can appear in this catalog.
 
 ## Runtime Overview
 

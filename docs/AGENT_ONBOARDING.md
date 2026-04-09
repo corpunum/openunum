@@ -39,6 +39,12 @@ Chat runtime recovery truth:
 - `ollama-cloud`: cloud model lane
 - Additional providers: `nvidia`, `openrouter`, `xiaomimimo`, `openai`
 
+Model-backed logical tools (phase-one substrate):
+- Feature flag: `runtime.modelBackedTools.enabled`
+- Controller exposure toggle: `runtime.modelBackedTools.exposeToController`
+- Local guardrails: `runtime.modelBackedTools.localMaxConcurrency`, `runtime.modelBackedTools.queueDepth`
+- Initial logical tools: `summarize`, `classify` (read-only, contract-validated)
+
 ## Required Validation Gates
 
 Minimum local trust gate:

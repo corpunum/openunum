@@ -147,6 +147,8 @@ export function defaultConfig() {
             'browser_status',
             'browser_extract',
             'browser_snapshot',
+            'summarize',
+            'classify',
             'skill_list',
             'email_status',
             'research_list_recent'
@@ -183,7 +185,21 @@ export function defaultConfig() {
       },
       autonomyMasterAutoStart: false,
       researchDailyEnabled: false,
-      researchScheduleHour: 3
+      researchScheduleHour: 3,
+      modelBackedTools: {
+        enabled: false,
+        exposeToController: true,
+        localMaxConcurrency: 1,
+        queueDepth: 8,
+        tools: {
+          summarize: {
+            backendProfiles: []
+          },
+          classify: {
+            backendProfiles: []
+          }
+        }
+      }
     },
     research: {
       defaultQueries: [
@@ -261,7 +277,18 @@ function withDefaults(config) {
     ...config,
     server: { ...d.server, ...(config.server || {}) },
     browser: { ...d.browser, ...(config.browser || {}) },
-    runtime: { ...d.runtime, ...(config.runtime || {}) },
+    runtime: {
+      ...d.runtime,
+      ...(config.runtime || {}),
+      modelBackedTools: {
+        ...d.runtime.modelBackedTools,
+        ...(config.runtime?.modelBackedTools || {}),
+        tools: {
+          ...d.runtime.modelBackedTools.tools,
+          ...(config.runtime?.modelBackedTools?.tools || {})
+        }
+      }
+    },
     research: { ...d.research, ...(config.research || {}) },
     integrations: {
       ...d.integrations,

@@ -1,158 +1,102 @@
 /**
  * Pre-Flight Tool Validator
- * Catches bad tool arguments before execution.
- * Saves turns — especially critical for small models.
+ * Single source of truth driven by tool contracts.
  */
 
-const TOOL_VALIDATORS = {
-  file_read: (args) => {
-    if (!args || !args.path) return { valid: false, hint: 'Missing required "path" argument. Example: { "path": "/tmp/file.txt" }' };
-    if (typeof args.path !== 'string') return { valid: false, hint: '"path" must be a string' };
-    if (args.path.length > 4096) return { valid: false, hint: '"path" is too long' };
-    return { valid: true };
-  },
+import { toolDefinitions as fileSearchTools } from '../tools/file-search.mjs';
+import { toolDefinitions as webSearchTools } from '../tools/web-search.mjs';
+import { buildCoreToolSchemas, buildValidationIndex } from '../tools/tool-contracts.mjs';
+import { buildModelBackedToolSchemas } from '../tools/backends/contracts.mjs';
 
-  file_write: (args) => {
-    if (!args || !args.path) return { valid: false, hint: 'Missing required "path" argument' };
-    if (typeof args.path !== 'string') return { valid: false, hint: '"path" must be a string' };
-    if (args.content === undefined) return { valid: false, hint: 'Missing required "content" argument' };
-    return { valid: true };
-  },
+const EXTRA_SCHEMAS = [
+  ...Object.entries(fileSearchTools).map(([name, def]) => ({
+    type: 'function',
+    function: { name, parameters: def.parameters || { type: 'object' } }
+  })),
+  ...Object.entries(webSearchTools).map(([name, def]) => ({
+    type: 'function',
+    function: { name, parameters: def.parameters || { type: 'object' } }
+  })),
+  ...buildModelBackedToolSchemas({ exposeToController: true })
+];
 
-  file_patch: (args) => {
-    if (!args || !args.path) return { valid: false, hint: 'Missing required "path" argument' };
-    if (args.find === undefined) return { valid: false, hint: 'Missing required "find" argument' };
-    if (args.replace === undefined) return { valid: false, hint: 'Missing required "replace" argument' };
-    return { valid: true };
-  },
+const TOOL_VALIDATION_INDEX = buildValidationIndex([...buildCoreToolSchemas(), ...EXTRA_SCHEMAS]);
 
-  shell_run: (args) => {
-    if (!args || !args.cmd) return { valid: false, hint: 'Missing required "cmd" argument. Example: { "cmd": "ls -la" }' };
-    if (typeof args.cmd !== 'string') return { valid: false, hint: '"cmd" must be a string' };
-    if (args.cmd.length === 0) return { valid: false, hint: '"cmd" cannot be empty' };
-    if (args.cmd.length > 50000) return { valid: false, hint: '"cmd" too long — break into smaller steps' };
-    return { valid: true };
-  },
+const DANGEROUS_PATTERNS = [
+  /rm\s+-rf/i,
+  /sudo\s+/i,
+  /chmod\s+777/i,
+  /dd\s+/i,
+  /mkfs/i,
+  /fork.*bomb/i,
+  /curl.*\|.*bash/i,
+  /wget.*\|.*sh/i
+];
 
-  http_request: (args) => {
-    if (!args || !args.url) return { valid: false, hint: 'Missing required "url" argument. Example: { "url": "https://example.com" }' };
-    if (typeof args.url !== 'string') return { valid: false, hint: '"url" must be a string' };
-    try { new URL(args.url); } catch { return { valid: false, hint: `"url" is not valid: ${args.url}` }; }
-    if (args.method && !['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'HEAD', 'OPTIONS'].includes(args.method.toUpperCase())) {
-      return { valid: false, hint: `"method" must be one of GET/POST/PUT/PATCH/DELETE` };
+function addTypeError(errors, field, expected) {
+  errors.push(`${field} must be ${expected}`);
+}
+
+function genericValidate(name, args, spec) {
+  const errors = [];
+  for (const required of spec.required || []) {
+    if (args[required] === undefined || args[required] === null || args[required] === '') {
+      errors.push(`Missing required "${required}" argument`);
     }
-    return { valid: true };
-  },
-
-  http_download: (args) => {
-    if (!args || !args.url) return { valid: false, hint: 'Missing required "url" argument' };
-    if (!args.outPath) return { valid: false, hint: 'Missing required "outPath" argument' };
-    try { new URL(args.url); } catch { return { valid: false, hint: '"url" is not valid' }; }
-    return { valid: true };
-  },
-
-  browser_navigate: (args) => {
-    if (!args || !args.url) return { valid: false, hint: 'Missing required "url" argument' };
-    try { new URL(args.url); } catch { return { valid: false, hint: '"url" is not valid' }; }
-    return { valid: true };
-  },
-
-  browser_type: (args) => {
-    if (!args || !args.selector) return { valid: false, hint: 'Missing required "selector" argument' };
-    if (args.text === undefined) return { valid: false, hint: 'Missing required "text" argument' };
-    return { valid: true };
-  },
-
-  browser_click: (args) => {
-    if (!args || !args.selector) return { valid: false, hint: 'Missing required "selector" argument' };
-    return { valid: true };
-  },
-
-  browser_extract: (args) => {
-    // selector is optional for extract
-    return { valid: true };
-  },
-
-  browser_search: (args) => {
-    if (!args || !args.query) return { valid: false, hint: 'Missing required "query" argument' };
-    return { valid: true };
-  },
-
-  email_send: (args) => {
-    if (!args || !args.to) return { valid: false, hint: 'Missing required "to" argument' };
-    if (!args.subject) return { valid: false, hint: 'Missing required "subject" argument' };
-    if (!args.body) return { valid: false, hint: 'Missing required "body" argument' };
-    return { valid: true };
-  },
-
-  email_read: (args) => {
-    if (!args || !args.id) return { valid: false, hint: 'Missing required "id" argument' };
-    return { valid: true };
-  },
-
-  skill_execute: (args) => {
-    if (!args || !args.name) return { valid: false, hint: 'Missing required "name" argument' };
-    return { valid: true };
-  },
-
-  skill_install: (args) => {
-    if (!args || (!args.source && !args.content)) {
-      return { valid: false, hint: 'Missing required "source" or "content" argument' };
-    }
-    return { valid: true };
-  },
-
-  skill_review: (args) => {
-    if (!args || !args.name) return { valid: false, hint: 'Missing required "name" argument' };
-    return { valid: true };
-  },
-
-  skill_approve: (args) => {
-    if (!args || !args.name) return { valid: false, hint: 'Missing required "name" argument' };
-    return { valid: true };
-  },
-
-  skill_uninstall: (args) => {
-    if (!args || !args.name) return { valid: false, hint: 'Missing required "name" argument' };
-    return { valid: true };
-  },
-
-  session_delete: (args) => {
-    if (!args || !args.sessionId) return { valid: false, hint: 'Missing required "sessionId" argument' };
-    return { valid: true };
-  },
-
-  gworkspace_call: (args) => {
-    if (!args || !args.service) return { valid: false, hint: 'Missing required "service" argument' };
-    if (!args.resource) return { valid: false, hint: 'Missing required "resource" argument' };
-    if (!args.method) return { valid: false, hint: 'Missing required "method" argument' };
-    return { valid: true };
-  },
-
-  desktop_open: (args) => {
-    if (!args || !args.target) return { valid: false, hint: 'Missing required "target" argument' };
-    return { valid: true };
-  },
-
-  desktop_xdotool: (args) => {
-    if (!args || !args.cmd) return { valid: false, hint: 'Missing required "cmd" argument' };
-    return { valid: true };
   }
-};
+  for (const [field, expected] of Object.entries(spec.types || {})) {
+    if (args[field] === undefined || args[field] === null) continue;
+    if (expected === 'array') {
+      if (!Array.isArray(args[field])) addTypeError(errors, field, 'array');
+      continue;
+    }
+    if (expected === 'number') {
+      if (typeof args[field] !== 'number' || !Number.isFinite(args[field])) addTypeError(errors, field, 'number');
+      continue;
+    }
+    if (typeof args[field] !== expected) addTypeError(errors, field, expected);
+  }
+  if (name === 'shell_run' && typeof args.cmd === 'string') {
+    const matched = DANGEROUS_PATTERNS.find((pattern) => pattern.test(args.cmd));
+    if (matched) errors.push(`Dangerous command pattern detected: ${matched.source}`);
+  }
+  if (name === 'http_request' && typeof args.url === 'string') {
+    try {
+      const u = new URL(args.url);
+      if (!/^https?:$/i.test(u.protocol)) errors.push('url must be http(s)');
+    } catch {
+      errors.push(`"url" is not valid: ${args.url}`);
+    }
+  }
+  if (name === 'http_download' && typeof args.url === 'string') {
+    try {
+      const u = new URL(args.url);
+      if (!/^https?:$/i.test(u.protocol)) errors.push('url must be http(s)');
+    } catch {
+      errors.push(`"url" is not valid: ${args.url}`);
+    }
+  }
+  if (name === 'classify' && Array.isArray(args.labels) && args.labels.length < 2) {
+    errors.push('"labels" should include at least two candidates');
+  }
+  return errors;
+}
 
 /**
  * Validate a tool call before execution.
  * @returns {{ valid: boolean, hint?: string }}
  */
 export function validateToolCall(toolName, args) {
-  const validator = TOOL_VALIDATORS[toolName];
-  if (!validator) return { valid: true }; // Unknown tool — let it through
-  return validator(args);
+  const name = String(toolName || '').trim();
+  const currentArgs = args && typeof args === 'object' ? args : {};
+  const spec = TOOL_VALIDATION_INDEX[name];
+  if (!spec) return { valid: true };
+  const errors = genericValidate(name, currentArgs, spec);
+  if (!errors.length) return { valid: true };
+  return { valid: false, hint: errors[0], errors };
 }
 
-/**
- * Get list of all validated tools (for diagnostics)
- */
 export function getValidatedTools() {
-  return Object.keys(TOOL_VALIDATORS);
+  return Object.keys(TOOL_VALIDATION_INDEX);
 }
+

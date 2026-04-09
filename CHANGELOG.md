@@ -4,6 +4,36 @@ All notable changes to OpenUnum are documented in this file.
 
 ---
 
+## [2.3.36] - 2026-04-09
+
+### Added
+- Model-backed tool substrate under `src/tools/backends/`:
+  - `registry.mjs` for backend resolution and execution
+  - `contracts.mjs` for logical tool contracts (`summarize`, `classify`)
+  - `profiles.mjs` for config/registry-driven backend profile selection
+  - `governor.mjs` for bounded local concurrency/queue control
+  - adapters for model JSON execution and deterministic wrapper
+- Shared tool contract source in `src/tools/tool-contracts.mjs`.
+- Unit coverage for:
+  - model-backed contracts
+  - preflight validation of model-backed tools
+  - local governor queue/concurrency behavior
+  - runtime config contract validation for model-backed tools
+
+### Changed
+- `ToolRuntime` now builds base tool schemas from shared contracts and can expose/execute model-backed logical tools without changing the controller loop.
+- Unified tool validation path:
+  - `preflight-validator.mjs` now validates from contract-derived schema truth
+  - `tool-validator.mjs` now delegates pre-execution checks to preflight validator
+  - removed preflight/tool-validator arg drift (`shell_run.cmd` vs `command`)
+- Provider factory extension:
+  - added `buildProviderForModel(...)` for explicit provider/model backend execution.
+- Runtime config defaults now include `runtime.modelBackedTools` feature controls.
+- Config patch contract validation now supports and validates `runtime.modelBackedTools.*`.
+- Compact tier tool allowlist now includes `summarize` and `classify`.
+
+---
+
 ## [2.3.35] - 2026-04-09
 
 ### Changed

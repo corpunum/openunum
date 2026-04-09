@@ -25,58 +25,68 @@ function normalizeProviderModelId(provider, model) {
   if (provider === 'nvidia') {
     return stripped.includes('/') ? stripped : raw;
   }
-  if (provider === 'xiaomimimo') {
-    return new OpenAICompatibleProvider({
-      baseUrl: config.model.xiaomimimoBaseUrl,
-      apiKey: config.model.xiaomimimoApiKey,
-      model: normalizeProviderModelId('xiaomimimo', model),
-      timeoutMs
-    });
-  }
   return stripped;
 }
 
 export function buildProvider(config) {
-  const model = config.model.model;
-  const provider = normalizeProviderId(config.model.provider);
-  const timeoutMs = config.runtime?.providerRequestTimeoutMs ?? 120000;
+  return buildProviderForModel(config, {
+    provider: config?.model?.provider,
+    model: config?.model?.model,
+    timeoutMs: config?.runtime?.providerRequestTimeoutMs ?? 120000
+  });
+}
 
-  if (provider === 'ollama-cloud' || provider === 'ollama-local') {
-    return new OllamaProvider({ baseUrl: config.model.ollamaBaseUrl, model, timeoutMs });
+export function buildProviderForModel(config, { provider, model, timeoutMs } = {}) {
+  const selectedProvider = normalizeProviderId(provider || config?.model?.provider);
+  const selectedModel = String(model || config?.model?.model || '').trim();
+  const effectiveTimeout = Number.isFinite(timeoutMs)
+    ? Number(timeoutMs)
+    : (config?.runtime?.providerRequestTimeoutMs ?? 120000);
+
+  if (selectedProvider === 'ollama-cloud' || selectedProvider === 'ollama-local') {
+    return new OllamaProvider({ baseUrl: config.model.ollamaBaseUrl, model: selectedModel, timeoutMs: effectiveTimeout });
   }
-  if (provider === 'openrouter') {
+  if (selectedProvider === 'openrouter') {
     return new OpenAICompatibleProvider({
       baseUrl: config.model.openrouterBaseUrl,
       apiKey: config.model.openrouterApiKey,
-      model: normalizeProviderModelId('openrouter', model),
-      timeoutMs
+      model: normalizeProviderModelId('openrouter', selectedModel),
+      timeoutMs: effectiveTimeout
     });
   }
-  if (provider === 'nvidia') {
+  if (selectedProvider === 'nvidia') {
     return new OpenAICompatibleProvider({
       baseUrl: config.model.nvidiaBaseUrl,
       apiKey: config.model.nvidiaApiKey,
-      model: normalizeProviderModelId('nvidia', model),
-      timeoutMs
+      model: normalizeProviderModelId('nvidia', selectedModel),
+      timeoutMs: effectiveTimeout
     });
   }
-  if (provider === 'openai') {
+  if (selectedProvider === 'xiaomimimo') {
+    return new OpenAICompatibleProvider({
+      baseUrl: config.model.xiaomimimoBaseUrl,
+      apiKey: config.model.xiaomimimoApiKey,
+      model: normalizeProviderModelId('xiaomimimo', selectedModel),
+      timeoutMs: effectiveTimeout
+    });
+  }
+  if (selectedProvider === 'openai') {
     const oauth = getStoredOpenAICodexOAuth() || getEffectiveOpenAICodexOAuthStatus().active;
     const apiKey = config.model.openaiApiKey || config.model.genericApiKey;
-    if (oauth && (!apiKey || prefersOpenAICodexTransport(model))) {
+    if (oauth && (!apiKey || prefersOpenAICodexTransport(selectedModel))) {
       return new OpenAICodexOAuthProvider({
-        model: model.replace(/^(generic|openai)\//, ''),
-        timeoutMs
+        model: selectedModel.replace(/^(generic|openai)\//, ''),
+        timeoutMs: effectiveTimeout
       });
     }
     return new OpenAICompatibleProvider({
       baseUrl: config.model.openaiBaseUrl || config.model.genericBaseUrl,
       apiKey: config.model.openaiApiKey || config.model.genericApiKey,
-      model: model.replace(/^(generic|openai)\//, ''),
-      timeoutMs
+      model: selectedModel.replace(/^(generic|openai)\//, ''),
+      timeoutMs: effectiveTimeout
     });
   }
-  throw new Error(`Unsupported provider: ${provider}`);
+  throw new Error(`Unsupported provider: ${selectedProvider}`);
 }
 
 /**

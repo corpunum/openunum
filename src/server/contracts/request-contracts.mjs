@@ -119,6 +119,57 @@ export function validateConfigPatch(body, ctx = {}) {
           }
         }
       }
+
+      if (runtime.modelBackedTools !== undefined) {
+        if (!isPlainObject(runtime.modelBackedTools)) {
+          addTypeError(errors, 'runtime.modelBackedTools', 'object');
+        } else {
+          const mbt = runtime.modelBackedTools;
+          for (const key of ['enabled', 'exposeToController']) {
+            if (mbt[key] !== undefined && typeof mbt[key] !== 'boolean') {
+              addTypeError(errors, `runtime.modelBackedTools.${key}`, 'boolean');
+            }
+          }
+          if (mbt.localMaxConcurrency !== undefined && !inRange(mbt.localMaxConcurrency, 1, 8)) {
+            addTypeError(errors, 'runtime.modelBackedTools.localMaxConcurrency', 'number in [1,8]');
+          }
+          if (mbt.queueDepth !== undefined && !inRange(mbt.queueDepth, 1, 128)) {
+            addTypeError(errors, 'runtime.modelBackedTools.queueDepth', 'number in [1,128]');
+          }
+          if (mbt.tools !== undefined) {
+            if (!isPlainObject(mbt.tools)) {
+              addTypeError(errors, 'runtime.modelBackedTools.tools', 'object');
+            } else {
+              for (const [toolName, toolCfg] of Object.entries(mbt.tools)) {
+                if (!isPlainObject(toolCfg)) {
+                  addTypeError(errors, `runtime.modelBackedTools.tools.${toolName}`, 'object');
+                  continue;
+                }
+                if (toolCfg.backendProfiles !== undefined) {
+                  if (!Array.isArray(toolCfg.backendProfiles)) {
+                    addTypeError(errors, `runtime.modelBackedTools.tools.${toolName}.backendProfiles`, 'array');
+                    continue;
+                  }
+                  for (const [idx, profile] of toolCfg.backendProfiles.entries()) {
+                    if (!isPlainObject(profile)) {
+                      addTypeError(errors, `runtime.modelBackedTools.tools.${toolName}.backendProfiles.${idx}`, 'object');
+                      continue;
+                    }
+                    for (const field of ['id', 'type', 'provider', 'model']) {
+                      if (profile[field] !== undefined && typeof profile[field] !== 'string') {
+                        addTypeError(errors, `runtime.modelBackedTools.tools.${toolName}.backendProfiles.${idx}.${field}`, 'string');
+                      }
+                    }
+                    if (profile.timeoutMs !== undefined && !inRange(profile.timeoutMs, 1000, 180000)) {
+                      addTypeError(errors, `runtime.modelBackedTools.tools.${toolName}.backendProfiles.${idx}.timeoutMs`, 'number in [1000,180000]');
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
     }
   }
 
