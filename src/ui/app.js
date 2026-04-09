@@ -458,7 +458,7 @@ const routingUiHelpers = createRoutingUiHelpers({
 });
 ({ renderProviderSelectors, renderFallbackSequence } = routingUiHelpers);
 
-closeVaultModal = () => closeVaultModalWithState(q, vaultModalState);
+closeVaultModal = (modalId = 'vaultEditModal') => closeVaultModalWithState(q, vaultModalState, modalId);
 const runtimeRefreshers = createRuntimeRefreshers({
   q,
   jget,
@@ -625,11 +625,13 @@ const settingsActionsController = createSettingsActionsController({
 const { bindSettingsActions } = settingsActionsController;
 const settingsToolingController = createSettingsToolingController({
   q,
+  qa,
   jget,
   jpost,
   setStatus,
   runWebuiWireValidation,
-  refreshRuntime
+  refreshRuntime,
+  closeVaultModal
 });
 const { bindToolingActions, refreshToolingInventory } = settingsToolingController;
 const uiShellActions = createUiShellActions({

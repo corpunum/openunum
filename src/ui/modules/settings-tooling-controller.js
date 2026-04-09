@@ -12,15 +12,63 @@ function badge(text, level = '') {
   return `<span class="${cls}">${escapeHtml(text)}</span>`;
 }
 
+function defaultArgsForTool(name) {
+  const tool = String(name || '').trim();
+  if (tool === 'summarize') return { text: 'OpenUnum operational hardening summary.', maxSentences: 2 };
+  if (tool === 'classify') return { text: 'Please classify this as greeting, task, or research intent.' };
+  if (tool === 'extract') return { text: 'Owner: OpenUnum; Priority: high; Milestone: phase-ops.', fields: ['owner', 'priority', 'milestone'] };
+  return { text: 'OpenUnum tool test input.' };
+}
+
+function normalizeToolProfile(profile = {}, fallbackId = '') {
+  return {
+    id: String(profile.id || fallbackId).trim(),
+    type: String(profile.type || 'model').trim(),
+    provider: String(profile.provider || '').trim(),
+    model: String(profile.model || '').trim(),
+    timeoutMs: Number.isFinite(profile.timeoutMs) ? Number(profile.timeoutMs) : 20000
+  };
+}
+
 export function createSettingsToolingController({
   q,
+  qa,
   jget,
   jpost,
   setStatus,
   runWebuiWireValidation,
-  refreshRuntime
+  refreshRuntime,
+  closeVaultModal
 }) {
   let inventory = null;
+  const toolingModalState = { tool: '' };
+
+  function runtimeSettings() {
+    const mbt = inventory?.modelBackedTools || {};
+    return {
+      enabled: mbt.enabled === true,
+      exposeToController: mbt.exposeToController !== false,
+      localMaxConcurrency: Number(mbt.localMaxConcurrency || 1),
+      queueDepth: Number(mbt.queueDepth || 8)
+    };
+  }
+
+  function toolConfigByName(name) {
+    const tools = inventory?.modelBackedTools?.tools || {};
+    return tools[String(name || '').trim()] || {};
+  }
+
+  function buildToolSummary(tool = {}) {
+    const mbt = tool?.model_backed || {};
+    const profiles = Array.isArray(mbt.effectiveProfiles) ? mbt.effectiveProfiles : [];
+    if (!mbt.contract) {
+      return 'Native runtime tool';
+    }
+    if (!profiles.length) {
+      return 'No backend profiles configured';
+    }
+    return profiles.map((profile) => `${profile.provider}/${profile.model} (${Number(profile.timeoutMs || 0)}ms)`).join(' -> ');
+  }
 
   function renderTools(rows = []) {
     const body = q('toolingToolsBody');
@@ -29,26 +77,37 @@ export function createSettingsToolingController({
       body.innerHTML = '<tr><td colspan="5" class="hint">No tools available.</td></tr>';
       return;
     }
-    body.innerHTML = rows.map((row) => {
-      const mbt = row?.model_backed || {};
-      const typeBadge = mbt.contract
-        ? badge(mbt.enabled ? 'model-backed enabled' : 'model-backed disabled', mbt.enabled ? 'good' : 'warn')
-        : badge('native tool');
-      const profileSummary = mbt.contract
-        ? (Array.isArray(mbt.effectiveProfiles) && mbt.effectiveProfiles.length
-          ? mbt.effectiveProfiles.map((p) => `${escapeHtml(p.provider)}/${escapeHtml(p.model)}`).join('<br/>')
-          : '<span class="hint">no profiles</span>')
+    body.innerHTML = rows.map((tool) => {
+      const mbt = tool?.model_backed || {};
+      const status = !mbt.contract
+        ? badge('native', '')
+        : mbt.enabled
+          ? badge('model-backed enabled', 'good')
+          : badge('model-backed disabled', 'warn');
+      const actions = mbt.contract
+        ? `
+          <button type="button" class="tooling-edit" data-tool="${escapeHtml(tool.name || '')}">Edit</button>
+          <button type="button" class="tooling-test" data-tool="${escapeHtml(tool.name || '')}">Test</button>
+        `
         : '<span class="hint">n/a</span>';
       return `
         <tr>
-          <td class="mono">${escapeHtml(row.name || '')}</td>
-          <td>${typeBadge}</td>
-          <td>${escapeHtml(row.class || '')}</td>
-          <td>${escapeHtml(row.proofHint || '')}</td>
-          <td class="mono">${profileSummary}</td>
+          <td><span class="mono">${escapeHtml(tool.name || '')}</span></td>
+          <td>${status}</td>
+          <td>${escapeHtml(tool.class || '-')}</td>
+          <td>${escapeHtml(buildToolSummary(tool))}</td>
+          <td><div class="row compact-actions">${actions}</div></td>
         </tr>
       `;
     }).join('');
+    qa('.tooling-edit').forEach((btn) => {
+      btn.onclick = () => openToolModal(btn.dataset.tool);
+    });
+    qa('.tooling-test').forEach((btn) => {
+      btn.onclick = () => testTool(btn.dataset.tool).catch((err) => {
+        setStatus('toolingStatus', `tool test failed: ${String(err?.message || err)}`, { type: 'error', title: 'Tooling' });
+      });
+    });
   }
 
   function renderSkills(skills = []) {
@@ -122,19 +181,141 @@ export function createSettingsToolingController({
     }).join('');
   }
 
-  function syncRuntimeFields(mbt = {}) {
-    if (q('mbtEnabled')) q('mbtEnabled').value = String(mbt.enabled === true);
-    if (q('mbtExpose')) q('mbtExpose').value = String(mbt.exposeToController !== false);
-    if (q('mbtConcurrency')) q('mbtConcurrency').value = String(Number(mbt.localMaxConcurrency || 1));
-    if (q('mbtQueueDepth')) q('mbtQueueDepth').value = String(Number(mbt.queueDepth || 8));
+  function syncRuntimeFields() {
+    const rs = runtimeSettings();
+    if (q('mbtEnabled')) q('mbtEnabled').value = String(rs.enabled);
+    if (q('mbtExpose')) q('mbtExpose').value = String(rs.exposeToController);
+    if (q('mbtConcurrency')) q('mbtConcurrency').value = String(rs.localMaxConcurrency);
+    if (q('mbtQueueDepth')) q('mbtQueueDepth').value = String(rs.queueDepth);
   }
 
   function renderInventory() {
-    syncRuntimeFields(inventory?.modelBackedTools || {});
+    syncRuntimeFields();
     renderTools(inventory?.tools || []);
     renderSkills(inventory?.skills || []);
     renderModels(inventory?.localModels || {});
     renderDownloads(inventory?.localModels?.downloads || {});
+  }
+
+  function toolModalValue(id) {
+    return String(q(id)?.value || '').trim();
+  }
+
+  function openToolModal(toolName) {
+    const safeTool = String(toolName || '').trim();
+    if (!safeTool) return;
+    const modal = q('toolingEditModal');
+    const title = q('toolingEditTitle');
+    const body = q('toolingEditBody');
+    if (!modal || !title || !body) return;
+    toolingModalState.tool = safeTool;
+    const cfg = toolConfigByName(safeTool);
+    const profiles = Array.isArray(cfg?.backendProfiles) ? cfg.backendProfiles : [];
+    const primary = normalizeToolProfile(profiles[0], `${safeTool}.local`);
+    const secondary = normalizeToolProfile(profiles[1], `${safeTool}.cloud`);
+    title.textContent = `Tool Backend Profiles: ${safeTool}`;
+    body.innerHTML = `
+      <div class="field">
+        <label>Tool</label>
+        <input class="mono" value="${escapeHtml(safeTool)}" readonly />
+      </div>
+      <div class="grid two">
+        <div class="field">
+          <label>Primary Profile ID</label>
+          <input id="toolingPrimaryId" class="mono" value="${escapeHtml(primary.id)}" />
+        </div>
+        <div class="field">
+          <label>Primary Provider</label>
+          <input id="toolingPrimaryProvider" class="mono" value="${escapeHtml(primary.provider || 'ollama-local')}" />
+        </div>
+        <div class="field">
+          <label>Primary Model</label>
+          <input id="toolingPrimaryModel" class="mono" value="${escapeHtml(primary.model || 'ollama-local/gemma4:cpu')}" />
+        </div>
+        <div class="field">
+          <label>Primary Timeout (ms)</label>
+          <input id="toolingPrimaryTimeout" type="number" min="1000" max="180000" value="${Number(primary.timeoutMs || 20000)}" />
+        </div>
+      </div>
+      <div class="grid two" style="margin-top:10px;">
+        <div class="field">
+          <label>Fallback Profile ID</label>
+          <input id="toolingFallbackId" class="mono" value="${escapeHtml(secondary.id || `${safeTool}.cloud`)}" />
+        </div>
+        <div class="field">
+          <label>Fallback Provider</label>
+          <input id="toolingFallbackProvider" class="mono" value="${escapeHtml(secondary.provider || 'ollama-cloud')}" />
+        </div>
+        <div class="field">
+          <label>Fallback Model</label>
+          <input id="toolingFallbackModel" class="mono" value="${escapeHtml(secondary.model || 'ollama-cloud/minimax-m2.7:cloud')}" />
+        </div>
+        <div class="field">
+          <label>Fallback Timeout (ms)</label>
+          <input id="toolingFallbackTimeout" type="number" min="1000" max="180000" value="${Number(secondary.timeoutMs || 25000)}" />
+        </div>
+      </div>
+      <div class="hint">Leave fallback provider/model empty to store only primary profile.</div>
+    `;
+    modal.showModal();
+  }
+
+  async function saveToolModal() {
+    const tool = String(toolingModalState.tool || '').trim();
+    if (!tool) return;
+    const primaryProvider = toolModalValue('toolingPrimaryProvider');
+    const primaryModel = toolModalValue('toolingPrimaryModel');
+    const fallbackProvider = toolModalValue('toolingFallbackProvider');
+    const fallbackModel = toolModalValue('toolingFallbackModel');
+    const profiles = [];
+    if (primaryProvider && primaryModel) {
+      profiles.push({
+        id: toolModalValue('toolingPrimaryId') || `${tool}.local`,
+        type: 'model',
+        provider: primaryProvider,
+        model: primaryModel,
+        timeoutMs: Number(q('toolingPrimaryTimeout')?.value || 20000)
+      });
+    }
+    if (fallbackProvider && fallbackModel) {
+      profiles.push({
+        id: toolModalValue('toolingFallbackId') || `${tool}.cloud`,
+        type: 'model',
+        provider: fallbackProvider,
+        model: fallbackModel,
+        timeoutMs: Number(q('toolingFallbackTimeout')?.value || 25000)
+      });
+    }
+    await jpost('/api/config', {
+      runtime: {
+        modelBackedTools: {
+          tools: {
+            [tool]: {
+              backendProfiles: profiles
+            }
+          }
+        }
+      }
+    });
+    setStatus('toolingStatus', `saved backend profiles for ${tool}`, { type: 'success', title: 'Tooling' });
+    closeVaultModal('toolingEditModal');
+    await refreshToolingInventory();
+    await runWebuiWireValidation(`tooling_profile_save:${tool}`);
+  }
+
+  async function testTool(toolName) {
+    const tool = String(toolName || '').trim();
+    if (!tool) return;
+    const out = await jpost('/api/tool/run', {
+      name: tool,
+      args: defaultArgsForTool(tool),
+      sessionId: `tooling-test:${tool}:${Date.now()}`
+    }, { timeoutMs: 45000 });
+    const ok = out?.ok && out?.result?.ok !== false;
+    const status = ok
+      ? `tool ${tool} test ok`
+      : `tool ${tool} test failed: ${String(out?.result?.error || out?.error || 'unknown')}`;
+    setStatus('toolingStatus', status, { type: ok ? 'success' : 'error', title: 'Tooling' });
   }
 
   async function refreshToolingInventory() {
@@ -174,6 +355,49 @@ export function createSettingsToolingController({
     await runWebuiWireValidation('tooling_runtime_save');
   }
 
+  async function applyCoreDefaults() {
+    await jpost('/api/config', {
+      runtime: {
+        modelBackedTools: {
+          enabled: true,
+          exposeToController: true,
+          localMaxConcurrency: 1,
+          queueDepth: 8,
+          recommendedLocalModels: [
+            'gemma4:cpu',
+            'nomic-embed-text:latest',
+            'mxbai-embed-large:latest',
+            'all-minilm:latest'
+          ],
+          tools: {
+            summarize: {
+              backendProfiles: [
+                { id: 'summarize.local', type: 'model', provider: 'ollama-local', model: 'ollama-local/gemma4:cpu', timeoutMs: 22000 },
+                { id: 'summarize.cloud', type: 'model', provider: 'ollama-cloud', model: 'ollama-cloud/minimax-m2.7:cloud', timeoutMs: 28000 }
+              ]
+            },
+            classify: {
+              backendProfiles: [
+                { id: 'classify.local', type: 'model', provider: 'ollama-local', model: 'ollama-local/gemma4:cpu', timeoutMs: 18000 },
+                { id: 'classify.cloud', type: 'model', provider: 'ollama-cloud', model: 'ollama-cloud/minimax-m2.7:cloud', timeoutMs: 25000 }
+              ]
+            },
+            extract: {
+              backendProfiles: [
+                { id: 'extract.local', type: 'model', provider: 'ollama-local', model: 'ollama-local/gemma4:cpu', timeoutMs: 20000 },
+                { id: 'extract.cloud', type: 'model', provider: 'ollama-cloud', model: 'ollama-cloud/minimax-m2.7:cloud', timeoutMs: 28000 }
+              ]
+            }
+          }
+        }
+      }
+    });
+    setStatus('toolingStatus', 'applied core defaults for model-backed tools', { type: 'success', title: 'Tooling' });
+    await refreshRuntime();
+    await refreshToolingInventory();
+    await runWebuiWireValidation('tooling_apply_core_defaults');
+  }
+
   async function downloadModel(model) {
     const out = await jpost('/api/models/local/download', { model });
     setStatus('toolingStatus', out?.deduplicated
@@ -184,9 +408,7 @@ export function createSettingsToolingController({
 
   async function cancelDownload(jobId) {
     const out = await jpost(`/api/models/local/downloads/${encodeURIComponent(jobId)}/cancel`, {});
-    if (!out?.ok) {
-      throw new Error(out?.error || 'cancel_failed');
-    }
+    if (!out?.ok) throw new Error(out?.error || 'cancel_failed');
     setStatus('toolingStatus', `cancelled download ${jobId}`, { type: 'warn', title: 'Tooling' });
     await refreshDownloadsOnly();
   }
@@ -207,6 +429,11 @@ export function createSettingsToolingController({
         setStatus('toolingStatus', `save failed: ${String(err?.message || err)}`, { type: 'error', title: 'Tooling' });
       });
     });
+    q('applyToolingCoreDefaults')?.addEventListener('click', () => {
+      applyCoreDefaults().catch((err) => {
+        setStatus('toolingStatus', `apply defaults failed: ${String(err?.message || err)}`, { type: 'error', title: 'Tooling' });
+      });
+    });
     q('toolingModelsBody')?.addEventListener('click', (event) => {
       const btn = event.target?.closest?.('.tooling-download-btn');
       const model = btn?.dataset?.model;
@@ -223,10 +450,26 @@ export function createSettingsToolingController({
         setStatus('toolingStatus', `cancel failed: ${String(err?.message || err)}`, { type: 'error', title: 'Tooling' });
       });
     });
+
+    q('toolingEditSave')?.addEventListener('click', () => {
+      saveToolModal().catch((err) => {
+        setStatus('toolingStatus', `tool profile save failed: ${String(err?.message || err)}`, { type: 'error', title: 'Tooling' });
+      });
+    });
+    q('toolingEditTest')?.addEventListener('click', () => {
+      const tool = String(toolingModalState.tool || '').trim();
+      if (!tool) return;
+      testTool(tool).catch((err) => {
+        setStatus('toolingStatus', `tool test failed: ${String(err?.message || err)}`, { type: 'error', title: 'Tooling' });
+      });
+    });
+    q('toolingEditClose')?.addEventListener('click', () => closeVaultModal('toolingEditModal'));
+    q('toolingEditCloseTop')?.addEventListener('click', () => closeVaultModal('toolingEditModal'));
   }
 
   return {
     bindToolingActions,
-    refreshToolingInventory
+    refreshToolingInventory,
+    applyCoreDefaults
   };
 }

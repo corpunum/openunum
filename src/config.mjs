@@ -194,15 +194,30 @@ export function defaultConfig() {
         queueDepth: 8,
         tools: {
           summarize: {
-            backendProfiles: []
+            backendProfiles: [
+              { id: 'summarize.local', type: 'model', provider: 'ollama-local', model: 'ollama-local/gemma4:cpu', timeoutMs: 22000 },
+              { id: 'summarize.cloud', type: 'model', provider: 'ollama-cloud', model: 'ollama-cloud/minimax-m2.7:cloud', timeoutMs: 28000 }
+            ]
           },
           classify: {
-            backendProfiles: []
+            backendProfiles: [
+              { id: 'classify.local', type: 'model', provider: 'ollama-local', model: 'ollama-local/gemma4:cpu', timeoutMs: 18000 },
+              { id: 'classify.cloud', type: 'model', provider: 'ollama-cloud', model: 'ollama-cloud/minimax-m2.7:cloud', timeoutMs: 25000 }
+            ]
           },
           extract: {
-            backendProfiles: []
+            backendProfiles: [
+              { id: 'extract.local', type: 'model', provider: 'ollama-local', model: 'ollama-local/gemma4:cpu', timeoutMs: 20000 },
+              { id: 'extract.cloud', type: 'model', provider: 'ollama-cloud', model: 'ollama-cloud/minimax-m2.7:cloud', timeoutMs: 28000 }
+            ]
           }
-        }
+        },
+        recommendedLocalModels: [
+          'gemma4:cpu',
+          'nomic-embed-text:latest',
+          'mxbai-embed-large:latest',
+          'all-minilm:latest'
+        ]
       }
     },
     research: {

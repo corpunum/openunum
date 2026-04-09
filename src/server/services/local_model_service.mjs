@@ -19,7 +19,7 @@ function sanitizeModelId(value = '') {
 function isAllowedSmallModel(modelId = '') {
   const id = String(modelId || '').trim().toLowerCase();
   if (!id) return false;
-  if (id === 'gemma4:cpu') return true;
+  if (id === 'gemma4:cpu' || id === 'gemma4:latest' || id === 'gemma4') return true;
   if (id.includes('embed')) return true;
   if (id.includes('nomic-embed')) return true;
   if (id.includes('mxbai-embed')) return true;
@@ -29,6 +29,12 @@ function isAllowedSmallModel(modelId = '') {
 
 function nowIso() {
   return new Date().toISOString();
+}
+
+function canonicalLocalModelId(modelId = '') {
+  const id = String(modelId || '').trim().toLowerCase();
+  if (id === 'gemma4:cpu' || id === 'gemma4') return 'gemma4:latest';
+  return String(modelId || '').trim();
 }
 
 function summarizeJob(job = {}) {
@@ -80,11 +86,12 @@ export function createLocalModelService({ config }) {
   }
 
   async function getRecommendedStatus() {
-    const installed = new Set(await listInstalledLocalModels());
+    const installedRaw = await listInstalledLocalModels();
+    const installedCanonical = new Set(installedRaw.map((item) => canonicalLocalModelId(item).toLowerCase()));
     const recommended = recommendedLocalModels();
     return recommended.map((model) => ({
       model,
-      installed: installed.has(model),
+      installed: installedCanonical.has(canonicalLocalModelId(model).toLowerCase()),
       allowed: isAllowedSmallModel(model)
     }));
   }
@@ -157,8 +164,9 @@ export function createLocalModelService({ config }) {
     if (!allowlist.has(safeModel) || !isAllowedSmallModel(safeModel)) {
       return { ok: false, error: 'model_not_allowlisted', allowedModels: [...allowlist] };
     }
+    const resolvedModel = canonicalLocalModelId(safeModel);
     for (const job of jobs.values()) {
-      if (job.model !== safeModel) continue;
+      if (canonicalLocalModelId(job.model) !== resolvedModel) continue;
       if (job.status === 'queued' || job.status === 'running') {
         return { ok: true, deduplicated: true, job: summarizeJob(job) };
       }
@@ -166,7 +174,7 @@ export function createLocalModelService({ config }) {
     const id = crypto.randomUUID();
     const job = {
       id,
-      model: safeModel,
+      model: resolvedModel,
       status: 'queued',
       createdAt: nowIso(),
       requestedBy,

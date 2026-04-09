@@ -232,6 +232,7 @@
             </div>
             <div class="row" style="margin-top:10px;">
               <button class="primary" id="saveToolingRuntime">Save Tooling Runtime</button>
+              <button id="applyToolingCoreDefaults">Apply Core Defaults</button>
               <button id="refreshToolingInventory">Refresh Inventory</button>
               <button id="refreshToolingDownloads">Refresh Downloads</button>
             </div>
@@ -682,6 +683,18 @@
       <button id="vaultEditTest">Test</button>
       <button class="primary" id="vaultEditSave">Save</button>
       <button id="vaultEditClose">Cancel</button>
+    </div>
+  </dialog>
+  <dialog id="toolingEditModal" class="modal">
+    <div class="modal-head">
+      <div class="modal-title" id="toolingEditTitle">Edit Tool Backend Profiles</div>
+      <button id="toolingEditCloseTop">Close</button>
+    </div>
+    <div class="modal-body" id="toolingEditBody"></div>
+    <div class="modal-actions">
+      <button id="toolingEditTest">Test</button>
+      <button class="primary" id="toolingEditSave">Save</button>
+      <button id="toolingEditClose">Cancel</button>
     </div>
   </dialog>
   <script type="module" src="/ui/app.js"></script>
