@@ -3,6 +3,7 @@ import path from 'node:path';
 import { spawn } from 'node:child_process';
 import { getHomeDir, getConfigPath, loadConfig, saveConfig } from '../config.mjs';
 import { logInfo, logError, logWarn } from '../logger.mjs';
+import { probeCdpEndpoint } from '../browser/cdp.mjs';
 
 /**
  * Self-Healing System for OpenUnum
@@ -91,8 +92,12 @@ export class SelfHealSystem {
       name: 'browser_cdp',
       check: async () => {
         try {
-          const res = await fetch(`${this.config.browser.cdpUrl}/json/version`);
-          return { ok: res.ok, version: res.ok ? 'connected' : 'failed' };
+          const out = await probeCdpEndpoint(this.config.browser.cdpUrl);
+          return {
+            ok: out.ok === true,
+            version: out.ok ? String(out.mode || 'connected') : 'failed',
+            details: out
+          };
         } catch (e) {
           return { ok: false, error: String(e.message || e) };
         }

@@ -77,5 +77,11 @@ export async function handleBrowserRoute({ req, res, url, ctx }) {
     return true;
   }
 
+  if (req.method === 'POST' && url.pathname === '/api/browser/ensure') {
+    const out = await ctx.ensureBrowserReady();
+    ctx.sendJson(res, out.ok ? 200 : 503, out);
+    return true;
+  }
+
   return false;
 }

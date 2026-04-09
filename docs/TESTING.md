@@ -6,42 +6,48 @@ Comprehensive testing documentation for the OpenUnum project.
 
 | Suite | Command | Description |
 |-------|---------|-------------|
-| **Unit** | `npm run test:unit` | Fast, isolated unit tests via Vitest |
-| **E2E** | `npm run test:e2e` | End-to-end tests for core systems |
-| **Smoke (Isolated)** | `npm run test:smoke` | Quick API health checks on a temporary local server |
-| **Smoke (Live Service)** | `npm run test:smoke:live` | Quick API health checks against the currently running service |
-| **Session Imitation** | `npm run test:imitation` | Replays chat-session recovery patterns against self-monitor continuation logic |
-| **Docs Gate** | `npm run docs:gate` | Fails when code changed without documentation updates |
-| **Docs Index Freshness** | `npm run docs:index:check` | Fails when `docs/SELF_READING_INDEX.md` is stale vs generator output |
-| **Compact Profile Gate** | `npm run gate:compact-profile` | Enforces `phase0:check` when compact-profile/4B-sensitive surfaces changed |
-| **Packet Budget Gate** | `npm run gate:packet-budget` | Fails when runtime/context packet budgets exceed configured limits |
-| **Runtime Surface Contract Gate** | `npm run gate:runtime-surface-contract` | Fails when new server API literals are missing from `docs/API_REFERENCE.md` |
-| **Route Wiring Gate** | `npm run gate:route-wiring` | Fails when any `src/server/routes/*.mjs` module is not both imported and invoked by `src/server.mjs` |
-| **UI Surface Gate** | `npm run gate:ui-surface` | Fails when active UI file set under `src/ui/` diverges from canonical modular set (`index.html`, `styles.css`, `app.js`) |
-| **WebUI Browser E2E** | `npm run phase39:e2e` | Real browser interaction checks for Provider Vault modal/actions and Missions create/load/stop wiring |
-| **Origin Guard E2E** | `npm run phase40:e2e` | Verifies same-origin loopback + request-marker protection on browser mutating control-plane requests |
-| **CLI Operator E2E** | `npm run phase41:e2e` | Verifies CLI runtime/providers/auth/missions/sessions API-bridge commands against a live test server |
-| **WebUI Routing/Auth E2E** | `npm run phase42:e2e` | Browser interaction regression for model-routing save flow and service-vault modal/save wiring |
-| **UI Static Assets E2E** | `npm run phase43:e2e` | Verifies modular UI asset serving (`/ui/styles.css`, `/ui/app.js`) and 404 behavior for missing assets |
-| **WebUI Vault/Mission Details E2E** | `npm run phase44:e2e` | Browser regression for provider-vault modal test/save actions and mission timeline filter/search rendering |
-| **All** | `npm run test:all` | Run complete test battery |
+| **Lint** | `pnpm lint` | Syntax-parse all tracked JS/MJS under `src/`, `scripts/`, `tests/` |
+| **Format Check** | `pnpm format:check` | Enforce LF line endings + trailing newline in tracked in-scope text files |
+| **Unit** | `pnpm test:unit` | Fast, isolated unit tests via Vitest |
+| **E2E (Phase Battery)** | `pnpm e2e` | Canonical end-to-end phase battery (phase0..phase49) |
+| **E2E (Node Suite)** | `pnpm test:e2e` | Node test-runner suite for `tests/e2e/*` |
+| **Smoke (Isolated)** | `pnpm test:smoke` | Quick API health checks on a temporary local server |
+| **Smoke (Live Service)** | `pnpm test:smoke:live` | Quick API health checks against the currently running service |
+| **Session Imitation** | `pnpm test:imitation` | Replays chat-session recovery patterns against self-monitor continuation logic |
+| **Docs Gate** | `pnpm docs:gate` | Fails when code changed without documentation updates |
+| **Docs Index Freshness** | `pnpm docs:index:check` | Fails when `docs/SELF_READING_INDEX.md` is stale vs generator output |
+| **Compact Profile Gate** | `pnpm gate:compact-profile` | Enforces `phase0:check` when compact-profile/4B-sensitive surfaces changed |
+| **Packet Budget Gate** | `pnpm gate:packet-budget` | Fails when runtime/context packet budgets exceed configured limits |
+| **Runtime Surface Contract Gate** | `pnpm gate:runtime-surface-contract` | Fails when new server API literals are missing from `docs/API_REFERENCE.md` |
+| **Route Wiring Gate** | `pnpm gate:route-wiring` | Fails when any `src/server/routes/*.mjs` module is not both imported and invoked by `src/server.mjs` |
+| **UI Surface Gate** | `pnpm gate:ui-surface` | Fails when active UI file set under `src/ui/` diverges from canonical modular set (`index.html`, `styles.css`, `app.js`) |
+| **WebUI Browser E2E** | `pnpm phase39:e2e` | Real browser interaction checks for Provider Vault modal/actions and Missions create/load/stop wiring |
+| **Origin Guard E2E** | `pnpm phase40:e2e` | Verifies same-origin loopback + request-marker protection on browser mutating control-plane requests |
+| **CLI Operator E2E** | `pnpm phase41:e2e` | Verifies CLI runtime/providers/auth/missions/sessions API-bridge commands against a live test server |
+| **WebUI Routing/Auth E2E** | `pnpm phase42:e2e` | Browser interaction regression for model-routing save flow and service-vault modal/save wiring |
+| **UI Static Assets E2E** | `pnpm phase43:e2e` | Verifies modular UI asset serving (`/ui/styles.css`, `/ui/app.js`) and 404 behavior for missing assets |
+| **WebUI Vault/Mission Details E2E** | `pnpm phase44:e2e` | Browser regression for provider-vault modal test/save actions and mission timeline filter/search rendering |
+| **Deterministic Fast-Path E2E** | `pnpm phase48:e2e` | Verifies short-turn deterministic fast-path trace flags on `/api/chat` |
+| **Pending Completion Handoff E2E** | `pnpm phase49:e2e` | Verifies long-turn pending flow returns completed payload (`completed: true`) and persists final assistant reply |
+| **Verify (Canonical)** | `pnpm verify` | Canonical pre-merge/pre-deploy validation battery |
+| **All (alias)** | `pnpm test:all` | Alias to `pnpm verify` |
 
 ## Quick Start
 
 ```bash
 # Run all tests before deployment
-npm run deploy:gate
+pnpm deploy:gate
 
-# Run just E2E tests
-npm run test:e2e
+# Run canonical phase E2E battery
+pnpm e2e
 
 # Run smoke tests only (fastest)
-npm run test:smoke
+pnpm test:smoke
 ```
 
 ## What Each Suite Covers
 
-### Unit Tests (`npm run test:unit`)
+### Unit Tests (`pnpm test:unit`)
 
 Fast, isolated tests for individual modules:
 
@@ -55,7 +61,7 @@ Fast, isolated tests for individual modules:
 **Framework:** Vitest  
 **Expected Duration:** < 30 seconds
 
-### E2E Tests (`npm run test:e2e`)
+### E2E Tests (`pnpm test:e2e`)
 
 End-to-end tests validating complete system workflows:
 
@@ -74,7 +80,7 @@ End-to-end tests validating complete system workflows:
 **Requirements:** Tests self-start a local OpenUnum server via `tests/_helpers.mjs`  
 **Expected Duration:** 2-5 minutes
 
-### Smoke Tests (`npm run test:smoke`)
+### Smoke Tests (`pnpm test:smoke`)
 
 Quick health checks for API endpoints:
 
@@ -93,25 +99,25 @@ Quick health checks for API endpoints:
 **Expected Duration:** < 30 seconds  
 **Exit Code:** 0 = all passed, 1 = failures detected
 
-### Live Service Smoke (`npm run test:smoke:live`)
+### Live Service Smoke (`pnpm test:smoke:live`)
 
 Use this only when you explicitly want to validate the currently running deployment instance.
 
 - Reads `OPENUNUM_API_URL` (default `http://127.0.0.1:18880`)
 - Uses current runtime config and can fail if the service is stale or not reachable
 
-### Legacy Phase Tests
+### Phase E2E Battery
 
-Phased E2E tests for incremental system validation:
+Phased E2E tests are part of the canonical runtime/browser validation battery:
 
 ```bash
-npm run phase0:e2e    # Phase 0 tests
-npm run phase1:e2e    # Phase 1 tests
-# ... through phase37
+pnpm phase0:e2e    # Phase 0 tests
+pnpm phase1:e2e    # Phase 1 tests
+# ... through phase48
 ```
 
 **Location:** `tests/phase*.e2e.mjs`  
-**Note:** These are legacy tests; new features should use the `tests/e2e/` structure.
+**Policy:** Keep adding runtime contract checks in `tests/e2e/*`; add phased tests for full-flow regressions that require startup/browser or cross-surface coverage.
 
 ## Running Tests
 
@@ -136,27 +142,31 @@ npm run phase1:e2e    # Phase 1 tests
 ### Test Commands
 
 ```bash
-# All tests
-npm run test:all
+# Canonical gate (same as deploy gate)
+pnpm verify
 
 # Specific suites
-npm run test:unit
-npm run test:e2e
-npm run phase39:e2e
-npm run phase40:e2e
-npm run phase41:e2e
-npm run phase42:e2e
-npm run phase43:e2e
-npm run phase44:e2e
-npm run test:smoke
-npm run test:smoke:live
-npm run test:imitation
-npm run docs:index:check
-npm run gate:compact-profile
-npm run gate:packet-budget
-npm run gate:runtime-surface-contract
-npm run gate:route-wiring
-npm run gate:ui-surface
+pnpm lint
+pnpm format:check
+pnpm test:unit
+pnpm test:e2e
+pnpm e2e
+pnpm phase39:e2e
+pnpm phase40:e2e
+pnpm phase41:e2e
+pnpm phase42:e2e
+pnpm phase43:e2e
+pnpm phase44:e2e
+pnpm phase49:e2e
+pnpm test:smoke
+pnpm test:smoke:live
+pnpm test:imitation
+pnpm docs:index:check
+pnpm gate:compact-profile
+pnpm gate:packet-budget
+pnpm gate:runtime-surface-contract
+pnpm gate:route-wiring
+pnpm gate:ui-surface
 
 # Individual E2E test file
 node --test tests/e2e/verifier.e2e.mjs
@@ -170,10 +180,10 @@ node scripts/smoke-audit.mjs
 Before any deployment, run:
 
 ```bash
-npm run deploy:gate
+pnpm deploy:gate
 ```
 
-This runs all tests and outputs `✅ Deployment gate passed` on success.
+This runs `pnpm verify` and outputs `✅ Deployment gate passed` on success.
 
 ## Writing New Tests
 
@@ -276,7 +286,7 @@ pnpm exec playwright install chromium
 Run tests with verbose output:
 
 ```bash
-NODE_ENV=test TEST_VERBOSE=true npm run test:e2e
+NODE_ENV=test TEST_VERBOSE=true pnpm test:e2e
 ```
 
 ## Continuous Integration
@@ -293,7 +303,7 @@ Tests are designed to run in CI environments:
 For code coverage reports (when configured):
 
 ```bash
-npm run test:unit -- --coverage
+pnpm test:unit -- --coverage
 ```
 
 ---

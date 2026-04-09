@@ -1,5 +1,83 @@
 import CDP from 'chrome-remote-interface';
 
+const DEFAULT_CDP_TIMEOUT_MS = 2500;
+
+async function fetchWithTimeout(url, timeoutMs = DEFAULT_CDP_TIMEOUT_MS) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetch(url, { signal: controller.signal });
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+async function tryJsonEndpoint(baseUrl, path, timeoutMs = DEFAULT_CDP_TIMEOUT_MS) {
+  const res = await fetchWithTimeout(`${baseUrl}${path}`, timeoutMs);
+  if (!res.ok) {
+    return { ok: false, path, status: res.status };
+  }
+  try {
+    const data = await res.json();
+    return { ok: true, path, status: res.status, data };
+  } catch {
+    return { ok: false, path, status: res.status, error: 'invalid_json' };
+  }
+}
+
+export async function probeCdpEndpoint(cdpUrl, { timeoutMs = DEFAULT_CDP_TIMEOUT_MS } = {}) {
+  const baseUrl = String(cdpUrl || 'http://127.0.0.1:9222').replace(/\/$/, '');
+  const attempts = [];
+  const paths = ['/json/version', '/json/list', '/json'];
+  for (const path of paths) {
+    try {
+      const out = await tryJsonEndpoint(baseUrl, path, timeoutMs);
+      attempts.push(out);
+      if (!out.ok) continue;
+      if (path === '/json/version' && out.data && typeof out.data === 'object') {
+        return {
+          ok: true,
+          mode: 'classic-version',
+          cdpUrl: baseUrl,
+          version: out.data,
+          attempts
+        };
+      }
+      if ((path === '/json/list' || path === '/json') && Array.isArray(out.data)) {
+        return {
+          ok: true,
+          mode: path === '/json/list' ? 'classic-list' : 'classic-json',
+          cdpUrl: baseUrl,
+          tabs: out.data,
+          attempts
+        };
+      }
+    } catch (error) {
+      attempts.push({ ok: false, path, error: String(error?.message || error) });
+    }
+  }
+
+  const all404 = attempts.length > 0 && attempts.every((a) => a.ok === false && a.status === 404);
+  if (all404) {
+    return {
+      ok: false,
+      cdpUrl: baseUrl,
+      error: 'CDP endpoint returned 404',
+      hint:
+        'Port is reachable but not exposing DevTools JSON endpoints. ' +
+        'Start Chromium with --remote-debugging-port=<port> and a separate --user-data-dir.',
+      attempts
+    };
+  }
+  return {
+    ok: false,
+    cdpUrl: baseUrl,
+    error: 'CDP probe failed',
+    hint: 'Could not reach DevTools JSON endpoints. Check cdpUrl, browser launch flags, and local firewall.',
+    attempts
+  };
+}
+
 export class CDPBrowser {
   constructor(cdpUrl = 'http://127.0.0.1:9222') {
     this.cdpUrl = cdpUrl.replace(/\/$/, '');
@@ -14,31 +92,26 @@ export class CDPBrowser {
   }
 
   async status() {
-    try {
-      const res = await fetch(`${this.cdpUrl}/json/version`);
-      if (!res.ok) {
-        if (res.status === 404) {
-          return {
-            ok: false,
-            error: 'CDP endpoint returned 404',
-            hint:
-              'Port is reachable but not exposing the classic DevTools JSON API. ' +
-              'Launch Chrome/Chromium with --remote-debugging-port=9222 (or update cdpUrl in WebUI).'
-          };
-        }
-        return { ok: false, error: `status ${res.status}` };
-      }
-      const json = await res.json();
-      return { ok: true, data: json };
-    } catch (error) {
-      return { ok: false, error: String(error.message || error) };
-    }
+    const out = await probeCdpEndpoint(this.cdpUrl);
+    if (!out.ok) return out;
+    return {
+      ok: true,
+      cdpUrl: out.cdpUrl,
+      mode: out.mode,
+      data: out.version || null,
+      targets: Array.isArray(out.tabs) ? out.tabs.length : undefined
+    };
   }
 
   async listTabs() {
-    const res = await fetch(`${this.cdpUrl}/json/list`);
-    if (!res.ok) throw new Error(`CDP list failed: ${res.status}`);
-    return res.json();
+    const probe = await probeCdpEndpoint(this.cdpUrl);
+    if (!probe.ok) throw new Error(probe.error || 'CDP unavailable');
+    if (Array.isArray(probe.tabs)) return probe.tabs;
+    const res = await fetchWithTimeout(`${this.cdpUrl}/json/list`);
+    if (res.ok) return res.json();
+    const fallbackRes = await fetchWithTimeout(`${this.cdpUrl}/json`);
+    if (fallbackRes.ok) return fallbackRes.json();
+    throw new Error(`CDP list failed: ${res.status}/${fallbackRes.status}`);
   }
 
   async resolvePageTarget() {

@@ -512,28 +512,69 @@ function readJson(filePath) {
   }
 }
 
+function uniquePaths(paths = []) {
+  return [...new Set((Array.isArray(paths) ? paths : []).map((value) => String(value || '').trim()).filter(Boolean))];
+}
+
+function parsePathListEnv(name) {
+  const raw = String(process.env[name] || '').trim();
+  if (!raw) return [];
+  return uniquePaths(raw.split(path.delimiter));
+}
+
+function getOpenClawAgentsRoots() {
+  const configured = parsePathListEnv('OPENUNUM_OPENCLAW_AGENTS_ROOTS');
+  if (configured.length) return configured;
+  return [path.join(os.homedir(), '.openclaw', 'agents')];
+}
+
+function getOpenClawConfigCandidates() {
+  const directPath = String(process.env.OPENUNUM_OPENCLAW_CONFIG_PATH || '').trim();
+  if (directPath) return [directPath];
+  const home = os.homedir();
+  return uniquePaths([
+    path.join(home, '.openclaw', 'openclaw.json'),
+    path.join(home, 'openclaw', 'openclaw.json')
+  ]);
+}
+
+function getOpenClawEnvCandidates() {
+  const configured = parsePathListEnv('OPENUNUM_AUTH_ENV_FILES');
+  if (configured.length) return configured;
+  const home = os.homedir();
+  return uniquePaths([
+    path.join(home, '.openclaw', 'workspace', '.runtime-secrets.env'),
+    path.join(home, '.openclaw', 'workspace', '.env.trading_agent'),
+    path.join(home, 'openclaw', '.env'),
+    path.join(home, '.openclaw', '.env'),
+    path.join(home, 'openclaw-tradebot', '.env'),
+    path.join(home, 'openunumQwen', '.env')
+  ]);
+}
+
 function collectOpenClawAuthProfiles() {
-  const root = '/home/corp-unum/.openclaw/agents';
-  if (!fs.existsSync(root)) return [];
   const entries = [];
-  for (const agentId of fs.readdirSync(root)) {
-    const filePath = path.join(root, agentId, 'agent', 'auth-profiles.json');
-    const parsed = readJson(filePath);
-    if (!parsed || typeof parsed !== 'object') continue;
-    const profiles = parsed.profiles || {};
-    for (const [profileId, profile] of Object.entries(profiles)) {
-      if (!profile || typeof profile !== 'object') continue;
-      entries.push({
-        filePath,
-        agentId,
-        profileId,
-        provider: String(profile.provider || '').trim(),
-        type: String(profile.type || '').trim(),
-        access: String(profile.access || '').trim(),
-        refresh: String(profile.refresh || '').trim(),
-        expires: Number(profile.expires || 0) || 0,
-        email: String(profile.email || '').trim()
-      });
+  for (const root of getOpenClawAgentsRoots()) {
+    if (!fs.existsSync(root)) continue;
+    for (const agentId of fs.readdirSync(root)) {
+      const filePath = path.join(root, agentId, 'agent', 'auth-profiles.json');
+      const parsed = readJson(filePath);
+      if (!parsed || typeof parsed !== 'object') continue;
+      const profiles = parsed.profiles || {};
+      for (const [profileId, profile] of Object.entries(profiles)) {
+        if (!profile || typeof profile !== 'object') continue;
+        entries.push({
+          filePath,
+          agentId,
+          profileId,
+          provider: String(profile.provider || '').trim(),
+          type: String(profile.type || '').trim(),
+          access: String(profile.access || '').trim(),
+          refresh: String(profile.refresh || '').trim(),
+          expires: Number(profile.expires || 0) || 0,
+          email: String(profile.email || '').trim()
+        });
+      }
     }
   }
   return entries;
@@ -545,8 +586,9 @@ export function getOpenClawOauthStatus() {
   const active = profiles
     .filter((entry) => entry.access && (!entry.expires || entry.expires > now))
     .sort((a, b) => (b.expires || 0) - (a.expires || 0))[0] || null;
+  const openclawBinaryPath = String(process.env.OPENUNUM_OPENCLAW_BIN || path.join(os.homedir(), '.local', 'bin', 'openclaw'));
   return {
-    available: fs.existsSync('/home/corp-unum/.local/bin/openclaw') || Boolean(execCapture('which openclaw').ok),
+    available: fs.existsSync(openclawBinaryPath) || Boolean(execCapture('which openclaw').ok),
     active,
     profiles
   };
@@ -580,9 +622,9 @@ export function scanLocalAuthSources() {
   const sourceMap = {};
   const filesScanned = [];
 
-  const openClawConfigPath = '/home/corp-unum/.openclaw/openclaw.json';
-  const openClaw = readJson(openClawConfigPath);
-  if (openClaw) {
+  for (const openClawConfigPath of getOpenClawConfigCandidates()) {
+    const openClaw = readJson(openClawConfigPath);
+    if (!openClaw) continue;
     filesScanned.push(openClawConfigPath);
     setIfMissing(secrets, 'nvidiaApiKey', openClaw?.models?.providers?.nvidia?.apiKey, `${openClawConfigPath}:models.providers.nvidia.apiKey`, sourceMap);
     setIfMissing(providerBaseUrls, 'nvidiaBaseUrl', openClaw?.models?.providers?.nvidia?.baseUrl, `${openClawConfigPath}:models.providers.nvidia.baseUrl`, sourceMap);
@@ -595,14 +637,7 @@ export function scanLocalAuthSources() {
     setIfMissing(providerBaseUrls, 'ollamaBaseUrl', openClaw?.models?.providers?.ollama?.baseUrl, `${openClawConfigPath}:models.providers.ollama.baseUrl`, sourceMap);
   }
 
-  const envCandidates = [
-    '/home/corp-unum/.openclaw/workspace/.runtime-secrets.env',
-    '/home/corp-unum/.openclaw/workspace/.env.trading_agent',
-    '/home/corp-unum/openclaw/.env',
-    '/home/corp-unum/.openclaw/.env',
-    '/home/corp-unum/openclaw-tradebot/.env',
-    '/home/corp-unum/openunumQwen/.env'
-  ];
+  const envCandidates = getOpenClawEnvCandidates();
   for (const filePath of envCandidates) {
     if (!fs.existsSync(filePath)) continue;
     filesScanned.push(filePath);

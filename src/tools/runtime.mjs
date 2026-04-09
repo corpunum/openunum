@@ -4,6 +4,7 @@ import os from 'node:os';
 import crypto from 'node:crypto';
 import { pathToFileURL } from 'node:url';
 import { CDPBrowser } from '../browser/cdp.mjs';
+import { buildProvider } from '../providers/index.mjs';
 import { ExecutorDaemon } from './executor-daemon.mjs';
 import { SkillManager } from '../skills/manager.mjs';
 import { SkillFactory } from '../skills/factory.mjs';
@@ -15,243 +16,44 @@ import { validateToolCall } from '../core/preflight-validator.mjs';
 import { summarizeToolResult } from '../core/tool-result-summarizer.mjs';
 import { file_search, file_grep, file_info, toolDefinitions as fileSearchTools } from './file-search.mjs';
 import { web_search, web_fetch, toolDefinitions as webSearchTools } from './web-search.mjs';
+import { assessSearchEvidenceQuality, buildSearchBackendChain } from './search-policy.mjs';
 
-const TOOL_CAPABILITY_META = {
-  file_read: { class: 'read', mutatesState: false, destructive: false, proofHint: 'returned file content/path' },
-  file_write: { class: 'mutate', mutatesState: true, destructive: false, proofHint: 'returned bytes/path' },
-  file_patch: { class: 'mutate', mutatesState: true, destructive: false, proofHint: 'returned path with ok=true' },
-  file_restore_last: { class: 'mutate', mutatesState: true, destructive: false, proofHint: 'returned backupId/path' },
-  session_list: { class: 'read', mutatesState: false, destructive: false, proofHint: 'returned sessions[]' },
-  session_delete: { class: 'destructive', mutatesState: true, destructive: true, proofHint: 'deleted=true or explicit deletion counters' },
-  session_clear: { class: 'destructive', mutatesState: true, destructive: true, proofHint: 'deletedSessions/deletedMessages counters' },
-  shell_run: { class: 'execute', mutatesState: true, destructive: false, proofHint: 'command code/stdout/stderr' },
-  browser_status: { class: 'read', mutatesState: false, destructive: false, proofHint: 'status payload' },
-  browser_navigate: { class: 'execute', mutatesState: true, destructive: false, proofHint: 'target URL in output' },
-  browser_search: { class: 'execute', mutatesState: true, destructive: false, proofHint: 'query/output' },
-  browser_type: { class: 'execute', mutatesState: true, destructive: false, proofHint: 'selector and submission output' },
-  browser_click: { class: 'execute', mutatesState: true, destructive: false, proofHint: 'selector click result' },
-  browser_extract: { class: 'read', mutatesState: false, destructive: false, proofHint: 'extracted text' },
-  browser_snapshot: { class: 'read', mutatesState: false, destructive: false, proofHint: 'tabs snapshot' },
-  http_request: { class: 'execute', mutatesState: true, destructive: false, proofHint: 'status/body payload' },
-  http_download: { class: 'mutate', mutatesState: true, destructive: false, proofHint: 'outPath and transfer result' },
-  desktop_open: { class: 'execute', mutatesState: true, destructive: false, proofHint: 'process result' },
-  desktop_xdotool: { class: 'execute', mutatesState: true, destructive: false, proofHint: 'xdotool command result' },
-  skill_list: { class: 'read', mutatesState: false, destructive: false, proofHint: 'skills list' },
-  skill_install: { class: 'mutate', mutatesState: true, destructive: false, proofHint: 'installed skill result' },
-  skill_review: { class: 'read', mutatesState: false, destructive: false, proofHint: 'review report' },
-  skill_approve: { class: 'mutate', mutatesState: true, destructive: false, proofHint: 'approval state' },
-  skill_execute: { class: 'execute', mutatesState: true, destructive: false, proofHint: 'skill execution output' },
-  skill_uninstall: { class: 'destructive', mutatesState: true, destructive: true, proofHint: 'uninstall confirmation' },
-  email_status: { class: 'read', mutatesState: false, destructive: false, proofHint: 'auth/CLI state' },
-  email_send: { class: 'mutate', mutatesState: true, destructive: false, proofHint: 'message id / delivery response' },
-  email_list: { class: 'read', mutatesState: false, destructive: false, proofHint: 'message list' },
-  email_read: { class: 'read', mutatesState: false, destructive: false, proofHint: 'message payload' },
-  gworkspace_call: { class: 'execute', mutatesState: true, destructive: false, proofHint: 'api call response' },
-  research_run_daily: { class: 'execute', mutatesState: true, destructive: false, proofHint: 'run summary' },
-  research_list_recent: { class: 'read', mutatesState: false, destructive: false, proofHint: 'reports[]' },
-  research_review_queue: { class: 'read', mutatesState: false, destructive: false, proofHint: 'queue[]' },
-  research_approve: { class: 'mutate', mutatesState: true, destructive: false, proofHint: 'approval confirmation' }
-};
+import {
+  TOOL_CAPABILITY_META,
+  applySimplePatch,
+  extractOperationalFacts,
+  firstMeaningfulLine,
+  hasBlockedShellPattern,
+  hasUnsafeShellMetacharacters,
+  isLikelyInteractiveShellCommand,
+  isPlainObject,
+  parseOllamaListModelName,
+  parseOllamaRunIntent,
+  requiresUnlockedMode,
+  resolveWorkspaceRoot,
+  safePath,
+  tryParseCurlAsHttpRequest
+} from './runtime-helpers.mjs';
 
-function resolveWorkspaceRoot(config) {
-  const raw = String(config?.runtime?.workspaceRoot || process.env.OPENUNUM_WORKSPACE || process.cwd());
-  return path.resolve(raw);
-}
-
-function safePath(inputPath, workspaceRoot) {
-  const resolved = path.resolve(workspaceRoot, String(inputPath || ''));
-  const rootWithSep = workspaceRoot.endsWith(path.sep) ? workspaceRoot : `${workspaceRoot}${path.sep}`;
-  if (resolved !== workspaceRoot && !resolved.startsWith(rootWithSep)) {
-    throw new Error(`Path outside workspace is blocked: ${inputPath}`);
-  }
-  return resolved;
-}
-
-function hasBlockedShellPattern(cmd) {
-  const patterns = [
-    /\brm\s+-rf\s+\/(\s|$)/i,
-    /\brm\s+-rf\s+--no-preserve-root\b/i,
-    /\bmkfs(\.\w+)?\b/i,
-    /\bdd\s+if=.*\bof=\/dev\//i,
-    /\bshutdown\b/i,
-    /\breboot\b/i,
-    /:\(\)\s*\{.*\};\s*:/,
-    /\bchown\s+-R\s+\/\b/i,
-    /\bchmod\s+-R\s+777\s+\/\b/i
-  ];
-  return patterns.find((p) => p.test(String(cmd || ''))) || null;
-}
-
-function hasUnsafeShellMetacharacters(cmd) {
-  return /[;&|`]/.test(String(cmd || ''));
-}
-
-function isLikelyInteractiveShellCommand(cmd) {
-  const text = String(cmd || '').trim();
-  if (/^ollama run\s+\S+$/i.test(text)) return true;
-  if (/^python(\d+(\.\d+)*)?\s+-i\b/i.test(text)) return true;
-  if (/^node\s+-i\b/i.test(text)) return true;
-  if (/^(sqlite3|psql|mysql)\b/i.test(text) && !/(-c|--command|-e|--execute)\b/.test(text)) return true;
-  return false;
-}
-
-function requiresUnlockedMode(cmd) {
-  const patterns = [
-    /\bsudo\b/i,
-    /\bapt(-get)?\s+install\b/i,
-    /\bsystemctl\s+(start|stop|restart|enable|disable)\b/i,
-    /\buseradd\b|\buserdel\b|\bgroupadd\b|\bgroupdel\b/i,
-    /\bmount\b|\bumount\b/i
-  ];
-  return patterns.some((p) => p.test(String(cmd || '')));
-}
-
-function applySimplePatch(original, find, replace) {
-  if (!original.includes(find)) {
-    throw new Error('Patch target not found');
-  }
-  return original.replace(find, replace);
-}
-
-function isPlainObject(value) {
-  return value != null && typeof value === 'object' && !Array.isArray(value);
-}
-
-function firstMeaningfulLine(text, maxChars = 160) {
-  const line = String(text || '')
-    .split('\n')
-    .map((item) => item.trim())
-    .find(Boolean) || '';
-  return line.length > maxChars ? `${line.slice(0, maxChars - 3)}...` : line;
-}
-
-function parseListeningPorts(text) {
-  const ports = new Set();
-  const raw = String(text || '');
-  for (const match of raw.matchAll(/[:.]([0-9]{2,5})\b/g)) {
-    const port = Number(match[1]);
-    if (Number.isFinite(port) && port > 0 && port <= 65535) ports.add(port);
-  }
-  return [...ports].slice(0, 12);
-}
-
-function extractOperationalFacts(toolName, args = {}, result = {}) {
-  if (!result?.ok) return [];
-  const facts = [];
-  if (toolName === 'browser_navigate' && result.url) {
-    facts.push({ key: 'browser.last_url', value: String(result.url) });
-  }
-  if (toolName === 'http_request' && args?.url) {
-    facts.push({ key: 'http.last_url', value: String(args.url) });
-    if (Number.isFinite(result.status)) facts.push({ key: 'http.last_status', value: String(result.status) });
-  }
-  if (toolName !== 'shell_run') return facts;
-
-  const cmd = String(args?.cmd || '').trim().toLowerCase();
-  const stdout = String(result?.stdout || '');
-  if (!cmd) return facts;
-
-  if (cmd === 'pwd') {
-    const line = firstMeaningfulLine(stdout, 240);
-    if (line) facts.push({ key: 'workspace.last_pwd', value: line });
-  }
-  if (cmd.startsWith('uname')) {
-    const line = firstMeaningfulLine(stdout, 240);
-    if (line) facts.push({ key: 'system.uname', value: line });
-  }
-  if (cmd.includes('git status')) {
-    facts.push({ key: 'repo.git.present', value: 'true' });
-    const line = firstMeaningfulLine(stdout, 240);
-    if (line) facts.push({ key: 'repo.git.last_status', value: line });
-  }
-  if (cmd.includes('ollama list')) {
-    const lines = stdout.split('\n').map((line) => line.trim()).filter(Boolean);
-    const count = Math.max(0, lines.length - 1);
-    facts.push({ key: 'models.ollama.last_list_count', value: String(count) });
-  }
-  if (cmd.includes('ss -ltn') || cmd.includes('netstat -ltn')) {
-    const ports = parseListeningPorts(stdout);
-    if (ports.length) {
-      facts.push({ key: 'system.listen_ports', value: ports.join(',') });
+function safeParseJsonObject(text = '') {
+  const source = String(text || '').trim();
+  if (!source) return null;
+  try {
+    const parsed = JSON.parse(source);
+    return parsed && typeof parsed === 'object' ? parsed : null;
+  } catch {
+    const start = source.indexOf('{');
+    const end = source.lastIndexOf('}');
+    if (start >= 0 && end > start) {
+      try {
+        const parsed = JSON.parse(source.slice(start, end + 1));
+        return parsed && typeof parsed === 'object' ? parsed : null;
+      } catch {
+        return null;
+      }
     }
+    return null;
   }
-  if (cmd.includes('nvidia-smi')) {
-    facts.push({ key: 'hardware.gpu.nvidia.present', value: 'true' });
-    const line = firstMeaningfulLine(stdout, 240);
-    if (line) facts.push({ key: 'hardware.gpu.nvidia.summary', value: line });
-  }
-  return facts;
-}
-
-function tryParseCurlAsHttpRequest(cmd) {
-  const text = String(cmd || '').trim();
-  if (!/^curl\b/.test(text)) return null;
-  if (/[;&|`]/.test(text)) return null;
-  const urlMatch = text.match(/https?:\/\/[^\s'"]+/);
-  if (!urlMatch) return null;
-  const url = urlMatch[0];
-  const methodMatch = text.match(/(?:^|\s)-X\s+([A-Za-z]+)/);
-  const method = String(methodMatch?.[1] || 'GET').toUpperCase();
-  const headerMatches = [...text.matchAll(/(?:^|\s)-H\s+(['"])(.*?)\1/g)];
-  const headers = {};
-  for (const match of headerMatches) {
-    const line = String(match[2] || '');
-    const idx = line.indexOf(':');
-    if (idx === -1) continue;
-    headers[line.slice(0, idx).trim()] = line.slice(idx + 1).trim();
-  }
-  const bodyJsonMatch = text.match(/(?:^|\s)-d\s+'([^']+)'/);
-  const bodyTextMatch = text.match(/(?:^|\s)-d\s+"([^"]+)"/);
-  let bodyJson = undefined;
-  let bodyText = undefined;
-  const payload = bodyJsonMatch?.[1] ?? bodyTextMatch?.[1];
-  if (payload != null) {
-    try {
-      bodyJson = JSON.parse(payload);
-    } catch {
-      bodyText = payload;
-    }
-  }
-  return {
-    url,
-    method,
-    headers,
-    bodyJson,
-    bodyText
-  };
-}
-
-function parseOllamaRunIntent(cmd) {
-  const text = String(cmd || '').trim();
-  if (!/^ollama run\b/i.test(text)) return null;
-  if (/[;&`]/.test(text)) return null;
-  const promptMatch = text.match(/--prompt\s+(?:'([^']*)'|"([^"]*)")/i);
-  let prompt = promptMatch?.[1] ?? promptMatch?.[2] ?? null;
-  const modelFlagMatch = text.match(/--model-id\s+(\S+)|--model\s+(\S+)/i);
-  let model = modelFlagMatch?.[1] || modelFlagMatch?.[2] || '';
-  if (!model) {
-    const positional = text.match(/^ollama run\s+(\S+)/i);
-    model = positional?.[1] || '';
-  }
-  if (!model) return null;
-  if (prompt == null) {
-    const positionalPrompt = text.match(/^ollama run\s+\S+\s+(?:'([^']*)'|"([^"]*)"|(.+))$/i);
-    prompt = positionalPrompt?.[1] ?? positionalPrompt?.[2] ?? positionalPrompt?.[3] ?? null;
-  }
-  return { model, prompt: prompt == null ? null : String(prompt).trim() };
-}
-
-function parseOllamaListModelName(listOutput, ref) {
-  const target = String(ref || '').trim().toLowerCase();
-  if (!target) return null;
-  const lines = String(listOutput || '').split('\n').map((line) => line.trim()).filter(Boolean);
-  for (const line of lines.slice(1)) {
-    const parts = line.split(/\s{2,}/).filter(Boolean);
-    if (parts.length < 2) continue;
-    const [name, id] = parts;
-    if (String(id || '').trim().toLowerCase() === target) return name;
-  }
-  return null;
 }
 
 export class ToolRuntime {
@@ -1135,49 +937,101 @@ export class ToolRuntime {
       const budgetError = ensureBudget();
       if (budgetError) return budgetError;
       const requestedBackend = String(args.backend || 'auto').toLowerCase();
+      const query = String(args.query || '');
+      const limit = Number(args.limit ?? 10);
+      const region = args.region || 'us-en';
+      let browserStatus = null;
       if (requestedBackend === 'cdp' || requestedBackend === 'auto') {
-        try {
-          const browserStatus = await this.browser.status();
-          if (browserStatus?.ok) {
-            const extracted = await this.browser.search(String(args.query || ''));
+        browserStatus = await this.browser.status().catch(() => null);
+      }
+
+      const chain = buildSearchBackendChain({
+        requestedBackend,
+        browserAvailable: Boolean(browserStatus?.ok)
+      });
+      const attempts = [];
+
+      for (const backend of chain) {
+        if (backend === 'model-native') {
+          const candidate = await this.executeModelNativeSearch({ query, limit, region }).catch((error) => {
+            attempts.push({ backend, ok: false, error: String(error?.message || error) });
+            return null;
+          });
+          if (!candidate) continue;
+          const quality = assessSearchEvidenceQuality(candidate, { backend, query });
+          attempts.push({ backend, quality });
+          if (quality.ok) {
+            if (attempts.length > 1) {
+              candidate.searchAttempts = attempts;
+            }
+            return candidate;
+          }
+          continue;
+        }
+
+        if (backend === 'cdp') {
+          if (!browserStatus?.ok) {
+            attempts.push({ backend, ok: false, error: 'cdp_unavailable' });
+            continue;
+          }
+          try {
+            const extracted = await this.browser.search(query);
             const snapshot = await this.browser.snapshot().catch(() => ({ active: null }));
             const snippet = String(extracted?.text || '').replace(/\s+/g, ' ').trim().slice(0, 4000);
-            return {
+            const candidate = {
               ok: true,
               results: [{
-                title: snapshot?.active?.title || `Browser search: ${String(args.query || '').slice(0, 80)}`,
+                title: snapshot?.active?.title || `Browser search: ${query.slice(0, 80)}`,
                 url: snapshot?.active?.url || '',
                 snippet
               }],
-              query: String(args.query || ''),
+              query,
               backend: 'cdp',
               total: snippet ? 1 : 0,
               source: 'browser_cdp'
             };
+            const quality = assessSearchEvidenceQuality(candidate, { backend: 'cdp', query });
+            attempts.push({ backend: 'cdp', quality });
+            if (quality.ok || requestedBackend === 'cdp') {
+              if (!quality.ok) {
+                return { ok: false, error: 'cdp_low_quality', hint: quality.reason };
+              }
+              return candidate;
+            }
+          } catch (error) {
+            attempts.push({ backend: 'cdp', ok: false, error: String(error?.message || error) });
+            if (requestedBackend === 'cdp') {
+              return {
+                ok: false,
+                error: 'cdp_search_failed',
+                hint: String(error?.message || error)
+              };
+            }
           }
-          if (requestedBackend === 'cdp') {
-            return {
-              ok: false,
-              error: 'cdp_unavailable',
-              hint: browserStatus?.error || 'CDP browser not reachable'
-            };
+          continue;
+        }
+
+        const candidate = await web_search({ query, backend, limit, region }).catch((error) => {
+          attempts.push({ backend, ok: false, error: String(error?.message || error) });
+          return null;
+        });
+        if (!candidate) continue;
+        const quality = assessSearchEvidenceQuality(candidate, { backend, query });
+        attempts.push({ backend, quality });
+        if (quality.ok) {
+          if (attempts.length > 1) {
+            candidate.searchAttempts = attempts;
           }
-        } catch (error) {
-          if (requestedBackend === 'cdp') {
-            return {
-              ok: false,
-              error: 'cdp_search_failed',
-              hint: String(error?.message || error)
-            };
-          }
+          return candidate;
         }
       }
-      return web_search({
-        query: args.query,
-        backend: requestedBackend === 'auto' ? 'duckduckgo' : requestedBackend,
-        limit: Number(args.limit ?? 10),
-        region: args.region || 'us-en'
-      });
+
+      return {
+        ok: false,
+        error: 'search_no_quality_results',
+        hint: 'All configured search backends returned low-signal or blocked results.',
+        attempts
+      };
     }
     if (name === 'web_fetch') {
       const budgetError = ensureBudget();
@@ -1500,5 +1354,49 @@ export class ToolRuntime {
     }
 
     throw new Error(`Unknown tool: ${name}`);
+  }
+
+  async executeModelNativeSearch({ query, limit = 10, region = 'us-en' } = {}) {
+    const providerId = String(this.config?.model?.provider || '').trim().toLowerCase();
+    const supported = new Set(['openai', 'openrouter', 'nvidia', 'xiaomimimo']);
+    if (!supported.has(providerId)) {
+      throw new Error(`model_native_unsupported_provider:${providerId || 'unknown'}`);
+    }
+    const provider = buildProvider(this.config);
+    const prompt = [
+      `Search the web for: ${query}`,
+      `Return up to ${Math.max(1, Math.min(Number(limit || 10), 10))} results for region ${region}.`,
+      'Return strict JSON only:',
+      '{"results":[{"title":"...","url":"https://...","snippet":"..."}]}'
+    ].join('\n');
+
+    const out = await provider.chat({
+      messages: [
+        { role: 'system', content: 'Use native web browsing/search if available. Output only valid JSON.' },
+        { role: 'user', content: prompt }
+      ],
+      tools: [],
+      nativeWebSearch: true,
+      timeoutMs: Number(this.config?.runtime?.providerRequestTimeoutMs || 120000)
+    });
+    const parsed = safeParseJsonObject(String(out?.content || ''));
+    const rows = Array.isArray(parsed?.results) ? parsed.results : [];
+    const results = rows
+      .map((item) => ({
+        title: String(item?.title || '').trim(),
+        url: String(item?.url || '').trim(),
+        snippet: String(item?.snippet || '').trim()
+      }))
+      .filter((item) => item.title && item.url.startsWith('http'))
+      .slice(0, 10);
+
+    return {
+      ok: true,
+      results,
+      query: String(query || ''),
+      backend: 'model-native',
+      total: results.length,
+      source: 'provider_native_search'
+    };
   }
 }

@@ -194,12 +194,12 @@ export class SelfHealMonitor {
       actions.push({ 
         action: 'browser_cdp_unhealthy', 
         status: 'needs_attention', 
-        hint: 'Try POST /api/browser/launch or update CDP URL in config'
+        hint: 'Try POST /api/browser/ensure or update CDP URL in config'
       });
       results.push({ 
         action: 'browser_cdp_unhealthy', 
         success: false, 
-        hint: 'Call /api/browser/launch to start debug browser'
+        hint: 'Call /api/browser/ensure to validate/launch browser CDP as needed'
       });
     } else {
       results.push({ action: 'browser_ok', success: true });

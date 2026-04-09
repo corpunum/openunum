@@ -154,6 +154,8 @@ try {
   }, 10000);
 
   await page.click('.menu-btn[data-view="missions"]');
+  await page.waitForSelector('#view-missions.active', { timeout: 10000 });
+  await page.waitForSelector('#stopMission', { state: 'visible', timeout: 10000 });
   await page.click('#stopMission');
   await waitForCondition(async () => missionStopCalls > 0, 8000);
 

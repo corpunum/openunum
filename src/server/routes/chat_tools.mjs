@@ -1,4 +1,5 @@
 import { getTaskOrchestrator } from '../../core/autonomy-registry.mjs';
+import { ensureObjectPayload, validateChatRequest } from '../contracts/request-contracts.mjs';
 
 function isPlainObject(value) {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
@@ -46,20 +47,13 @@ function summarizeTaskReply(task) {
 export async function handleChatToolsRoute({ req, res, url, ctx }) {
   if (req.method === 'POST' && url.pathname === '/api/chat') {
     const body = await ctx.parseBody(req);
-    if (!isPlainObject(body)) {
-      ctx.sendJson(res, 400, { ok: false, error: 'invalid_payload', details: [{ field: 'body', issue: 'expected JSON object' }] });
+    const validation = validateChatRequest(body);
+    if (!validation.ok) {
+      ctx.sendJson(res, 400, { ok: false, error: 'invalid_payload', details: validation.errors });
       return true;
     }
-    const sessionId = String(body.sessionId || '').trim();
-    const message = String(body.message || '').trim();
-    if (!sessionId) {
-      ctx.sendJson(res, 400, { error: 'sessionId is required' });
-      return true;
-    }
-    if (!message) {
-      ctx.sendJson(res, 400, { error: 'message is required' });
-      return true;
-    }
+    const sessionId = String(validation.value.sessionId || '').trim();
+    const message = String(validation.value.message || '').trim();
 
     const existing = ctx.pendingChats.get(sessionId);
     if (existing) {
@@ -170,6 +164,18 @@ export async function handleChatToolsRoute({ req, res, url, ctx }) {
     }
     const existing = ctx.pendingChats.get(sessionId);
     if (!existing) {
+      const completed = ctx.chatRuntime?.getCompletedChat?.(sessionId, { consume: true });
+      if (completed) {
+        ctx.sendJson(res, 200, {
+          ok: true,
+          pending: false,
+          sessionId,
+          completed: true,
+          ...completed,
+          replyHtml: completed?.reply ? ctx.renderReplyHtml(completed.reply) : null
+        });
+        return true;
+      }
       ctx.sendJson(res, 200, { ok: true, pending: false, sessionId });
       return true;
     }
@@ -258,7 +264,7 @@ export async function handleChatToolsRoute({ req, res, url, ctx }) {
 
   if (req.method === 'POST' && url.pathname === '/api/tool/run') {
     const body = await ctx.parseBody(req);
-    if (!isPlainObject(body)) {
+    if (!ensureObjectPayload(body).ok) {
       ctx.sendJson(res, 400, { ok: false, error: 'invalid_payload', details: [{ field: 'body', issue: 'expected JSON object' }] });
       return true;
     }

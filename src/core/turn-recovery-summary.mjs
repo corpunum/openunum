@@ -70,6 +70,8 @@ export function extractRequirements(userMessage = '') {
     asksResearch: (datasetActionPattern.test(prompt) || datasetQuestionPattern.test(prompt) || explicitDatasetAsk.test(prompt) || datasetKeywordIntent.test(prompt)) && /hugging ?face|dataset|training|benchmark/.test(prompt),
     asksDataset: datasetActionPattern.test(prompt) || datasetQuestionPattern.test(prompt) || explicitDatasetAsk.test(prompt) || datasetKeywordIntent.test(prompt),
     asksComparison: /compare|comparison|versus|vs\b/.test(prompt),
+    asksTable: /\btable\b|\btabular\b|\bmatrix\b/.test(prompt),
+    wantsNoLinks: /\bno links\b|dont give me links|don't give me links|without links/.test(prompt),
     wantsLocal: /local|ollama|run for this hardware|run on this hardware|this hardware/.test(prompt),
     wantsUncensored: /uncensor|uncensored|unsensored|unsensor/.test(prompt),
     wantsGguf: /gguf|ollama|local/.test(prompt),
@@ -405,7 +407,77 @@ function buildStepAnswer({ executedTools = [], toolRuns = 0 }) {
   return lines.join('\n');
 }
 
+function buildWebSearchRankingAnswer({ userMessage = '', executedTools = [] }) {
+  const candidates = [];
+  for (const run of executedTools) {
+    if (!run || run.name !== 'web_search') continue;
+    const rows = Array.isArray(run.result?.results) ? run.result.results : [];
+    for (const row of rows) {
+      const title = String(row?.title || '').trim();
+      const url = String(row?.url || '').trim();
+      const snippet = clipText(String(row?.snippet || '').replace(/\s+/g, ' ').trim(), 180);
+      if (!title || !url) continue;
+      if (url.includes('duckduckgo.com/?q=')) continue;
+      candidates.push({ title, url, snippet });
+    }
+  }
+
+  if (!candidates.length) return '';
+  const unique = [];
+  const seen = new Set();
+  for (const item of candidates) {
+    const key = item.url.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    unique.push(item);
+    if (unique.length >= 5) break;
+  }
+  if (!unique.length) return '';
+
+  const userText = String(userMessage || '').toLowerCase();
+  const repoSignalInResults = unique.some((item) => /(github\.com|open-source|repository|repositories|repo)/i.test(`${item.title} ${item.url} ${item.snippet || ''}`));
+  const asksGithubOrRepos = /(github|repo|repository|open source|oss)/i.test(userText) || repoSignalInResults;
+  const asksTimeWindow = /(march|april|2026|this month|last month|within)/i.test(userText);
+  const wantsTable = /\btable\b|\btabular\b|\bmatrix\b/i.test(userText);
+  const wantsNoLinks = /\bno links\b|dont give me links|don't give me links|without links/i.test(userText);
+
+  const recommendation = asksGithubOrRepos
+    ? (asksTimeWindow
+      ? 'Recommendation: open the top 2-3 links and verify repo activity dates fall within March-April 2026 before final selection.'
+      : 'Recommendation: open the top 2-3 links and verify stars, recent commit cadence, and release freshness before final selection.')
+    : 'Recommendation: open the top 2-3 links and confirm editorial quality, update cadence, and ownership transparency before final selection.';
+
+  const lines = ['Top candidates from current web evidence:'];
+  if (wantsTable) {
+    lines.push('');
+    lines.push('| Rank | Candidate | Notes |');
+    lines.push('|---|---|---|');
+    for (let idx = 0; idx < unique.length; idx += 1) {
+      const item = unique[idx];
+      const notes = item.snippet || (asksGithubOrRepos ? 'Candidate repository source list' : 'Candidate source list');
+      const candidateText = wantsNoLinks ? item.title : `[${item.title}](${item.url})`;
+      lines.push(`| ${idx + 1} | ${candidateText.replace(/\|/g, '\\|')} | ${String(notes || '').replace(/\|/g, '\\|')} |`);
+    }
+  } else {
+    lines.push(...unique.map((item, idx) => `${idx + 1}. ${item.title} — ${item.url}${item.snippet ? ` (${item.snippet})` : ''}`));
+  }
+  lines.push('');
+  lines.push(recommendation);
+
+  if (asksGithubOrRepos && (userText.includes('march') || userText.includes('april'))) {
+    lines.push('Comparison: prioritize repos whose release activity and commit history are explicitly within March-April 2026.');
+  }
+  return lines.join('\n');
+}
+
 function buildGenericToolSummary({ executedTools = [], toolRuns = 0, requirements = null }) {
+  if (requirements?.asksRanking || requirements?.asksResearch || requirements?.asksComparison || requirements?.asksTable) {
+    const ranked = buildWebSearchRankingAnswer({
+      userMessage: requirements?.originalUserMessage || '',
+      executedTools
+    });
+    if (ranked) return ranked;
+  }
   if (requirements?.asksDataset || requirements?.asksResearch || requirements?.asksComparison) {
     const research = buildDatasetResearchAnswer({ userMessage: requirements.originalUserMessage || '', executedTools });
     if (research) return research;

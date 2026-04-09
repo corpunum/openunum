@@ -5,6 +5,8 @@
 set -e
 
 OPENUNUM_HOME="${OPENUNUM_HOME:-$HOME/.openunum}"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="${OPENUNUM_REPO_ROOT:-$(cd "$SCRIPT_DIR/.." && pwd)}"
 SERVER_URL="http://127.0.0.1:18880"
 LOG_FILE="$OPENUNUM_HOME/logs/auto-recover.log"
 MAX_RETRIES=3
@@ -34,7 +36,7 @@ restart_server() {
     sleep 2
     
     # Start new instance
-    cd /home/corp-unum/openunum
+    cd "$REPO_ROOT"
     nohup node src/server.mjs > "$OPENUNUM_HOME/logs/server.log" 2>&1 &
     
     # Wait for startup

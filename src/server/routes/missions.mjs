@@ -1,6 +1,9 @@
-function isPlainObject(value) {
-  return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
-}
+import {
+  validateMissionScheduleRequest,
+  validateMissionScheduleUpdateRequest,
+  validateMissionStartRequest,
+  validateMissionStopRequest
+} from '../contracts/request-contracts.mjs';
 
 function toFiniteNumber(value, fallback = null) {
   return Number.isFinite(value) ? Number(value) : fallback;
@@ -65,22 +68,19 @@ export async function handleMissionsRoute({ req, res, url, ctx }) {
 
   if (req.method === 'POST' && url.pathname === '/api/missions/start') {
     const body = await ctx.parseBody(req);
-    if (!isPlainObject(body)) {
-      ctx.sendJson(res, 400, { ok: false, error: 'invalid_payload', details: [{ field: 'body', issue: 'expected JSON object' }] });
+    const validation = validateMissionStartRequest(body);
+    if (!validation.ok) {
+      ctx.sendJson(res, 400, { ok: false, error: 'invalid_payload', details: validation.errors });
       return true;
     }
-    const goal = String(body.goal || '').trim();
-    if (!goal) {
-      ctx.sendJson(res, 400, { ok: false, error: 'goal_required' });
-      return true;
-    }
+    const goal = String(validation.value.goal || '').trim();
     const out = ctx.missions.start({
       goal,
-      maxSteps: toFiniteNumber(body.maxSteps, undefined),
-      intervalMs: toFiniteNumber(body.intervalMs, ctx.config.runtime.missionDefaultIntervalMs),
-      maxRetries: toFiniteNumber(body.maxRetries, ctx.config.runtime.missionDefaultMaxRetries),
-      continueUntilDone: body.continueUntilDone ?? ctx.config.runtime.missionDefaultContinueUntilDone,
-      hardStepCap: toFiniteNumber(body.hardStepCap, ctx.config.runtime.missionDefaultHardStepCap)
+      maxSteps: toFiniteNumber(validation.value.maxSteps, undefined),
+      intervalMs: toFiniteNumber(validation.value.intervalMs, ctx.config.runtime.missionDefaultIntervalMs),
+      maxRetries: toFiniteNumber(validation.value.maxRetries, ctx.config.runtime.missionDefaultMaxRetries),
+      continueUntilDone: validation.value.continueUntilDone ?? ctx.config.runtime.missionDefaultContinueUntilDone,
+      hardStepCap: toFiniteNumber(validation.value.hardStepCap, ctx.config.runtime.missionDefaultHardStepCap)
     });
     ctx.sendJson(res, 200, {
       ...out,
@@ -95,15 +95,12 @@ export async function handleMissionsRoute({ req, res, url, ctx }) {
 
   if (req.method === 'POST' && url.pathname === '/api/missions/stop') {
     const body = await ctx.parseBody(req);
-    if (!isPlainObject(body)) {
-      ctx.sendJson(res, 400, { ok: false, error: 'invalid_payload', details: [{ field: 'body', issue: 'expected JSON object' }] });
+    const validation = validateMissionStopRequest(body);
+    if (!validation.ok) {
+      ctx.sendJson(res, 400, { ok: false, error: 'invalid_payload', details: validation.errors });
       return true;
     }
-    const id = String(body.id || '').trim();
-    if (!id) {
-      ctx.sendJson(res, 400, { ok: false, error: 'mission_id_required' });
-      return true;
-    }
+    const id = String(validation.value.id || '').trim();
     ctx.sendJson(res, 200, ctx.missions.stop(id));
     return true;
   }
@@ -118,27 +115,24 @@ export async function handleMissionsRoute({ req, res, url, ctx }) {
 
   if (req.method === 'POST' && url.pathname === '/api/missions/schedule') {
     const body = await ctx.parseBody(req);
-    if (!isPlainObject(body)) {
-      ctx.sendJson(res, 400, { ok: false, error: 'invalid_payload', details: [{ field: 'body', issue: 'expected JSON object' }] });
+    const validation = validateMissionScheduleRequest(body);
+    if (!validation.ok) {
+      ctx.sendJson(res, 400, { ok: false, error: 'invalid_payload', details: validation.errors });
       return true;
     }
-    const goal = String(body.goal || '').trim();
-    if (!goal) {
-      ctx.sendJson(res, 400, { ok: false, error: 'goal_required' });
-      return true;
-    }
+    const goal = String(validation.value.goal || '').trim();
     const out = ctx.missions.startSchedule({
       goal,
-      runAt: body.runAt,
-      delayMs: toFiniteNumber(body.delayMs, undefined),
-      intervalMs: toFiniteNumber(body.intervalMs, undefined),
-      enabled: body.enabled,
+      runAt: validation.value.runAt,
+      delayMs: toFiniteNumber(validation.value.delayMs, undefined),
+      intervalMs: toFiniteNumber(validation.value.intervalMs, undefined),
+      enabled: validation.value.enabled,
       options: {
-        maxSteps: toFiniteNumber(body.maxSteps, undefined),
-        maxRetries: toFiniteNumber(body.maxRetries, undefined),
-        continueUntilDone: body.continueUntilDone,
-        hardStepCap: toFiniteNumber(body.hardStepCap, undefined),
-        intervalMs: toFiniteNumber(body.missionIntervalMs, undefined)
+        maxSteps: toFiniteNumber(validation.value.maxSteps, undefined),
+        maxRetries: toFiniteNumber(validation.value.maxRetries, undefined),
+        continueUntilDone: validation.value.continueUntilDone,
+        hardStepCap: toFiniteNumber(validation.value.hardStepCap, undefined),
+        intervalMs: toFiniteNumber(validation.value.missionIntervalMs, undefined)
       }
     });
     ctx.sendJson(res, 200, out);
@@ -147,21 +141,18 @@ export async function handleMissionsRoute({ req, res, url, ctx }) {
 
   if (req.method === 'POST' && url.pathname === '/api/missions/schedule/update') {
     const body = await ctx.parseBody(req);
-    if (!isPlainObject(body)) {
-      ctx.sendJson(res, 400, { ok: false, error: 'invalid_payload', details: [{ field: 'body', issue: 'expected JSON object' }] });
+    const validation = validateMissionScheduleUpdateRequest(body);
+    if (!validation.ok) {
+      ctx.sendJson(res, 400, { ok: false, error: 'invalid_payload', details: validation.errors });
       return true;
     }
-    const id = String(body?.id || '').trim();
-    if (!id) {
-      ctx.sendJson(res, 400, { error: 'schedule_id_required' });
-      return true;
-    }
+    const id = String(validation.value.id || '').trim();
     const updated = ctx.missions.updateSchedule(id, {
-      enabled: typeof body.enabled === 'boolean' ? body.enabled : undefined,
-      status: body.status ? String(body.status) : undefined,
-      runAt: body.runAt ? String(body.runAt) : undefined,
-      nextRunAt: body.nextRunAt ? String(body.nextRunAt) : undefined,
-      intervalMs: Number.isFinite(body.intervalMs) ? Number(body.intervalMs) : undefined
+      enabled: typeof validation.value.enabled === 'boolean' ? validation.value.enabled : undefined,
+      status: validation.value.status ? String(validation.value.status) : undefined,
+      runAt: validation.value.runAt ? String(validation.value.runAt) : undefined,
+      nextRunAt: validation.value.nextRunAt ? String(validation.value.nextRunAt) : undefined,
+      intervalMs: Number.isFinite(validation.value.intervalMs) ? Number(validation.value.intervalMs) : undefined
     });
     if (!updated) {
       ctx.sendJson(res, 404, { error: 'schedule_not_found' });

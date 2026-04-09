@@ -1,12 +1,19 @@
 # Operations Runbook
 
-**Last Updated:** 2026-04-07 (Phase 1-3 additions)
+**Last Updated:** 2026-04-09
+
+Use this once per shell:
+
+```bash
+export OPENUNUM_REPO_ROOT="${OPENUNUM_REPO_ROOT:-$HOME/openunum}"
+cd "$OPENUNUM_REPO_ROOT"
+```
 
 ## 1. Start / Stop
 
 ### Foreground start
 ```bash
-cd /home/corp-unum/openunum
+cd "$OPENUNUM_REPO_ROOT"
 node src/server.mjs
 ```
 
@@ -25,26 +32,26 @@ node src/cli.mjs health
 ### Full Deployment Gate
 ```bash
 # Run all tests before deployment
-cd /home/corp-unum/openunum
-npm run deploy:gate
+cd "$OPENUNUM_REPO_ROOT"
+pnpm deploy:gate
 ```
 
 This runs:
-- Unit tests (`npm run test:unit`) — < 30 seconds
-- E2E tests (`npm run test:e2e`) — 2-5 minutes
-- Smoke tests (`npm run test:smoke`) — < 30 seconds
+- Unit tests (`pnpm test:unit`) — < 30 seconds
+- E2E tests (`pnpm test:e2e`) — 2-5 minutes
+- Smoke tests (`pnpm test:smoke`) — < 30 seconds
 
 ### Individual Test Suites
 ```bash
 # Unit tests only
-npm run test:unit
+pnpm test:unit
 
 # E2E tests only (requires running server)
-npm start  # in background
-npm run test:e2e
+pnpm start  # in background
+pnpm test:e2e
 
 # Smoke tests only (fastest)
-npm run test:smoke
+pnpm test:smoke
 
 # Specific E2E test file
 node --test tests/e2e/verifier.e2e.mjs
@@ -58,7 +65,7 @@ node --test tests/e2e/freshness-decay.e2e.mjs
 pnpm install
 
 # Start server for E2E/smoke tests
-npm start
+pnpm start
 
 # Set environment (optional)
 export OPENUNUM_API_URL=http://localhost:18880
@@ -68,7 +75,7 @@ export NODE_ENV=test
 ## 3. Regression Gate
 
 ```bash
-cd /home/corp-unum/openunum
+cd "$OPENUNUM_REPO_ROOT"
 pnpm e2e
 ```
 
@@ -79,7 +86,7 @@ Always run before/after major changes.
 Use this for routine frontend/backend wiring checks without launching GitHub/Google OAuth approval windows:
 
 ```bash
-cd /home/corp-unum/openunum
+cd "$OPENUNUM_REPO_ROOT"
 pnpm smoke:ui:noauth
 ```
 
@@ -91,7 +98,7 @@ This flow intentionally avoids:
 
 Install:
 ```bash
-cd /home/corp-unum/openunum
+cd "$OPENUNUM_REPO_ROOT"
 bash scripts/install-systemd.sh
 ```
 
@@ -127,7 +134,7 @@ Notes:
 
 1. **Run full test suite:**
    ```bash
-   npm run deploy:gate
+   pnpm deploy:gate
    # Wait for: ✅ Deployment gate passed
    ```
 
@@ -167,7 +174,7 @@ Notes:
    curl -sS http://127.0.0.1:18880/api/health
    
    # Run smoke tests
-   npm run test:smoke
+   pnpm test:smoke
    ```
 
 7. **Rollback if needed:**
@@ -236,7 +243,7 @@ Notes:
 
 - [ ] **Full E2E test suite:**
   ```bash
-  npm run test:e2e
+  pnpm test:e2e
   ```
 
 - [ ] **Database integrity:**
@@ -275,7 +282,7 @@ curl -sS http://127.0.0.1:18880/api/browser/status
 ```
 3. Launch managed debug browser:
 ```bash
-curl -sS -X POST http://127.0.0.1:18880/api/browser/launch -H 'Content-Type: application/json' -d '{}'
+curl -sS -X POST http://127.0.0.1:18880/api/browser/ensure -H 'Content-Type: application/json' -d '{}'
 ```
 
 ## 10. Phase 0 Diagnostics Triage
@@ -284,7 +291,7 @@ Use this when runtime behavior drifts or compact-profile changes are deployed.
 
 ### CLI Triage Sequence
 ```bash
-cd /home/corp-unum/openunum
+cd "$OPENUNUM_REPO_ROOT"
 pnpm phase0:check
 pnpm gate:compact-profile
 ```
@@ -361,7 +368,7 @@ curl -sS http://127.0.0.1:18880/api/providers/config
 
 ### Symptom: Browser claims success but no visible window
 - Confirm graphical session env (`DISPLAY`, Wayland/X11)
-- Use `/api/browser/launch` and re-check `/api/browser/status`
+- Use `/api/browser/ensure` and re-check `/api/browser/status`
 
 ### Symptom: Task loops without completion
 - Inspect mission status and tool proof counts.

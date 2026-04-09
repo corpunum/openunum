@@ -17,6 +17,7 @@ test_model.py
 test_ollama.py
 
 # Runtime/generated artifacts
+data/audit-log.jsonl
 data/working-memory/*.json
 data/side-quests/*.json
 local_models.txt

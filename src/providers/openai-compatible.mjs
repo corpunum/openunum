@@ -6,15 +6,19 @@ export class OpenAICompatibleProvider {
     this.timeoutMs = Number.isFinite(timeoutMs) ? Number(timeoutMs) : 120000;
   }
 
-  async chat({ messages, tools = [], timeoutMs }) {
+  async chat({ messages, tools = [], timeoutMs, nativeWebSearch = false }) {
     const effectiveTimeout = Number.isFinite(timeoutMs)
       ? Math.max(1000, Math.min(Number(timeoutMs), this.timeoutMs))
       : this.timeoutMs;
+    const toolDefs = tools.length > 0
+      ? tools
+      : (nativeWebSearch ? [{ type: 'web_search_preview' }] : undefined);
     const body = {
       model: this.model,
       messages,
       temperature: 0.2,
-      tools: tools.length > 0 ? tools : undefined
+      tools: toolDefs,
+      tool_choice: nativeWebSearch ? 'auto' : undefined
     };
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(new Error('provider_timeout')), effectiveTimeout);

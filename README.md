@@ -2,8 +2,8 @@
 
 OpenUnum is an Ubuntu-first autonomous assistant framework focused on high tool reliability, strict model control, and agent-operable runtime behavior.
 
-**Current State (2026-04-08):**
-- ✅ **Phase 1-4 Complete** — Working memory, context compaction, model behavior registry, execution envelopes, council remediation
+**Current State (2026-04-09):**
+- ✅ **Phase 0-10 Complete** — Runtime contracts, control-plane hardening, route canonicalization, provider/runtime contracts, WebUI modularization, fast-path and reliability remediation
 - Web UI with Gemini-inspired glass styling while preserving full backend feature coverage
 - Visible/traceable tool execution from chat (expand/collapse execution traces)
 - Multi-provider model handling with strict primary-provider lock option
@@ -15,11 +15,13 @@ OpenUnum is an Ubuntu-first autonomous assistant framework focused on high tool 
 - Persistent self-learning memory from tool outcomes, strategy outcomes, and route-signature lessons
 - Manual model-behavior controls (override/reset) for operator correction
 - Autonomy mode presets (`standard`, `relentless`)
-- Pending chat handling (`/api/chat` + `/api/chat/pending`) to avoid "stuck loading"
+- Pending chat handling (`/api/chat` + `/api/chat/pending`) with completion payload handoff (`completed: true`) to avoid poll-race "stuck loading"
 - Session-aware pending handling in UI to prevent cross-session reply bleed when switching chats
 - Local session history persistence in SQLite until user clicks `New Chat`
 - **Council Validation Framework** — 6 domain experts, latest consolidated maturity tracked in `OPENUNUM_EXPLAINED.md`
 - **Phase 0 Runtime Foundations** — Canonical runtime-state contract + config parity diagnostics (`/api/runtime/state-contract`, `/api/runtime/config-parity`)
+- **Phase 10 Generic-Core Closure** — Removed UI-specific execution hacks from agent core + added deterministic fast-path regression (`phase48`)
+- **Phase 10/11 Runtime Reliability Additions** — search backend quality gating + model-native-first fallback chain + circuit-loop guardrails + pending completion-cache regression (`phase49`)
 
 ## Fast Start
 
@@ -38,7 +40,7 @@ node src/server.mjs
 
 4. Optional full test gate:
 ```bash
-pnpm e2e
+pnpm verify
 ```
 
 5. Optional isolated API smoke gate (self-starts temp server):
@@ -68,7 +70,7 @@ Read in this exact order:
 2. [docs/AGENT_ONBOARDING.md](docs/AGENT_ONBOARDING.md)
 3. [BRAIN.MD](BRAIN.MD) — Core Operating Principles (9 principles)
 4. [docs/COUNCIL_ARCHITECTURE.md](docs/COUNCIL_ARCHITECTURE.md) — Council validation framework
-5. [docs/PHASES_MASTER_PLAN_2026-04-08.md](docs/PHASES_MASTER_PLAN_2026-04-08.md) — Canonical phases execution record
+5. [docs/OPENUNUM_STRICT_HANDOFF_2026-04-09.md](docs/OPENUNUM_STRICT_HANDOFF_2026-04-09.md) — Canonical phase execution and implementation handoff
 6. [docs/CODEBASE_MAP.md](docs/CODEBASE_MAP.md)
 7. [docs/API_REFERENCE.md](docs/API_REFERENCE.md)
 8. [docs/AUTONOMY_AND_MEMORY.md](docs/AUTONOMY_AND_MEMORY.md)
@@ -76,15 +78,18 @@ Read in this exact order:
 10. [docs/TESTING.md](docs/TESTING.md)
 
 **Quick Reference:**
-- **Phase 1-4 Status:** ✅ Complete
+- **Phase 0-10 Status:** ✅ Complete
 - **Council Maturity:** 🟡 Amber (see latest report links in docs index)
-- **Next Milestone:** production hardening and runtime/API canonicalization
-- **Test Coverage:** 45+ unit, 39 E2E phases, 8 smoke scripts (+ browser-interaction phase gate)
+- **Next Milestone:** reliability and operator-surface hardening from strict handoff
+- **Test Coverage:** 45+ unit, 41 E2E phases, 8 smoke scripts (+ browser-interaction phase gate)
 
 ## Commands
 
 ```bash
 pnpm start
+pnpm lint
+pnpm format:check
+pnpm verify
 pnpm e2e
 pnpm test:smoke
 pnpm test:smoke:live
@@ -109,8 +114,8 @@ CLI remote API bridge commands use `OPENUNUM_BASE_URL` (default `http://127.0.0.
 
 ## Deployment
 
-- User service file: [deploy/openunum.service](/home/corp-unum/openunum/deploy/openunum.service)
-- Installer script: [scripts/install-systemd.sh](/home/corp-unum/openunum/scripts/install-systemd.sh)
+- User service file: `deploy/openunum.service`
+- Installer script: `scripts/install-systemd.sh`
 - Service restart policy is rate-limited (`StartLimitIntervalSec=120`, `StartLimitBurst=5`) to prevent restart storms on repeated bind failures.
 
 ## Security / Control Notes

@@ -1,3 +1,5 @@
+import { ensureObjectPayload, validateAuthCatalogRequest } from '../contracts/request-contracts.mjs';
+
 function isPlainObject(value) {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
 }
@@ -10,14 +12,15 @@ export async function handleAuthRoute({ req, res, url, ctx }) {
 
   if (req.method === 'POST' && url.pathname === '/api/auth/catalog') {
     const body = await ctx.parseBody(req);
-    if (!isPlainObject(body)) {
-      ctx.sendJson(res, 400, { ok: false, error: 'invalid_payload', details: [{ field: 'body', issue: 'expected JSON object' }] });
+    const validation = validateAuthCatalogRequest(body);
+    if (!validation.ok) {
+      ctx.sendJson(res, 400, { ok: false, error: 'invalid_payload', details: validation.errors });
       return true;
     }
-    const providerBaseUrls = body?.providerBaseUrls || {};
-    const secretUpdates = body?.secrets || {};
-    const oauthConfig = body?.oauthConfig || {};
-    const clear = Array.isArray(body?.clear) ? body.clear : [];
+    const providerBaseUrls = validation.value?.providerBaseUrls || {};
+    const secretUpdates = validation.value?.secrets || {};
+    const oauthConfig = validation.value?.oauthConfig || {};
+    const clear = Array.isArray(validation.value?.clear) ? validation.value.clear : [];
 
     if (typeof providerBaseUrls.ollamaBaseUrl === 'string' && providerBaseUrls.ollamaBaseUrl.trim()) ctx.config.model.ollamaBaseUrl = providerBaseUrls.ollamaBaseUrl.trim();
     if (typeof providerBaseUrls.openrouterBaseUrl === 'string' && providerBaseUrls.openrouterBaseUrl.trim()) ctx.config.model.openrouterBaseUrl = providerBaseUrls.openrouterBaseUrl.trim();
@@ -44,7 +47,7 @@ export async function handleAuthRoute({ req, res, url, ctx }) {
 
   if (req.method === 'POST' && url.pathname === '/api/auth/prefill-local') {
     const body = await ctx.parseBody(req);
-    if (!isPlainObject(body)) {
+    if (!ensureObjectPayload(body).ok) {
       ctx.sendJson(res, 400, { ok: false, error: 'invalid_payload', details: [{ field: 'body', issue: 'expected JSON object' }] });
       return true;
     }

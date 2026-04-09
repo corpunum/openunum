@@ -187,6 +187,7 @@ evidence: [list key artifacts, paths, hashes]
       const agentPromise = this.agent.chat({
         message: quest.taskDescription,
         sessionId: quest.childSessionId,
+        sideQuestMode: true,
         modelOverride: quest.metadata.modelOverride,
         toolsAllow: quest.metadata.toolsAllow
       });

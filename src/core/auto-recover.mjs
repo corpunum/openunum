@@ -1,8 +1,10 @@
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
 import { logInfo, logError, logWarn } from '../logger.mjs';
 import { loadConfig, saveConfig, getHomeDir } from '../config.mjs';
+import { probeCdpEndpoint } from '../browser/cdp.mjs';
 
 /**
  * Auto-Recovery System
@@ -132,15 +134,17 @@ export class AutoRecover {
     // Launch new instance
     const args = [
       `--remote-debugging-port=${port}`,
+      '--remote-allow-origins=*',
       '--user-data-dir=/tmp/openunum-chrome-recovery',
       '--no-first-run',
       '--no-default-browser-check',
+      '--no-sandbox',
+      '--headless=new',
       '--disable-gpu',
       '--disable-software-rasterizer',
       '--disable-dev-shm-usage',
       '--disable-features=Vulkan,UseSkiaRenderer',
       '--use-gl=swiftshader',
-      '--new-window',
       'about:blank'
     ];
 
@@ -150,8 +154,8 @@ export class AutoRecover {
     // Wait for CDP to be ready
     for (let i = 0; i < 30; i++) {
       try {
-        const res = await fetch(`http://127.0.0.1:${port}/json/version`);
-        if (res.ok) {
+        const probe = await probeCdpEndpoint(`http://127.0.0.1:${port}`);
+        if (probe.ok) {
           this.config.browser.cdpUrl = `http://127.0.0.1:${port}`;
           saveConfig(this.config);
           if (this.agent?.reloadTools) this.agent.reloadTools();
@@ -550,6 +554,23 @@ export class AutoRecover {
   }
 
   findChromeBinary() {
+    const override = String(process.env.OPENUNUM_BROWSER_BIN || '').trim();
+    if (override && fs.existsSync(override)) return override;
+
+    try {
+      const root = path.join(os.homedir(), '.cache', 'ms-playwright');
+      if (fs.existsSync(root)) {
+        const entries = fs.readdirSync(root, { withFileTypes: true })
+          .filter((entry) => entry.isDirectory() && entry.name.startsWith('chromium-'))
+          .map((entry) => entry.name)
+          .sort((a, b) => b.localeCompare(a));
+        for (const name of entries) {
+          const candidate = path.join(root, name, 'chrome-linux', 'chrome');
+          if (fs.existsSync(candidate)) return candidate;
+        }
+      }
+    } catch {}
+
     const candidates = [
       '/usr/bin/chromium',
       '/usr/bin/chromium-browser',

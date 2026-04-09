@@ -39,6 +39,21 @@ export function summarizeToolResult(toolName, result, maxChars = DEFAULT_MAX_CHA
       );
       break;
 
+    case 'web_search':
+      summary.backend = result.backend;
+      summary.total = Number.isFinite(result.total) ? result.total : undefined;
+      summary.results = Array.isArray(result.results)
+        ? result.results.slice(0, 6).map((item) => ({
+          title: truncateMiddle(item?.title || '', 180),
+          url: item?.url || '',
+          snippet: truncateMiddle(item?.snippet || '', 220)
+        }))
+        : [];
+      if (Array.isArray(result.searchAttempts)) {
+        summary.searchAttempts = result.searchAttempts.slice(0, 4);
+      }
+      break;
+
     case 'browser_extract':
     case 'browser_snapshot':
       summary.text = truncateMiddle(

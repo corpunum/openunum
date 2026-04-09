@@ -6,7 +6,7 @@ try {
   const start = await jpost('/api/missions/start', {
     goal: 'Create a short mission update and stop',
     maxSteps: 1,
-    intervalMs: 0
+    intervalMs: 10
   });
   assert.equal(start.status, 200);
   assert.ok(start.json.id);

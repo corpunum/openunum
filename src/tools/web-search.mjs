@@ -125,6 +125,7 @@ async function searchDuckDuckGo(query, limit, region) {
     const results = parseDuckDuckGoResults(html, limit);
 
     return {
+      ok: true,
       results,
       query,
       backend: 'duckduckgo',
@@ -155,9 +156,10 @@ function parseDuckDuckGoResults(html, limit) {
       const snippetMatch = block.match(/<a[^>]*class="result__snippet"[^>]*>([^<]*)<\/a>/i);
 
       if (titleMatch && urlMatch) {
+        const normalizedUrl = normalizeDuckDuckGoUrl(urlMatch[1]);
         results.push({
           title: decodeHtmlEntities(titleMatch[1]),
-          url: decodeURIComponent(urlMatch[1].replace(/^\/\/duckduckgo.com\/l\/\?uddg=/, '')),
+          url: normalizedUrl,
           snippet: decodeHtmlEntities(snippetMatch?.[1] || '')
         });
       }
@@ -203,6 +205,7 @@ async function searchBrave(query, limit, region) {
   const data = await response.json();
   
   return {
+    ok: true,
     results: (data.web?.results || []).map(r => ({
       title: r.title,
       url: r.url,
@@ -266,6 +269,7 @@ async function searchSerpApi(query, limit, region) {
   const data = await response.json();
 
   return {
+    ok: true,
     results: (data.organic_results || []).map(r => ({
       title: r.title,
       url: r.link,
@@ -326,6 +330,25 @@ function decodeHtmlEntities(text) {
     '&#34;': '"'
   };
   return text.replace(/&[^;]+;/g, entity => entities[entity] || entity);
+}
+
+function normalizeDuckDuckGoUrl(rawUrl) {
+  const decodedHref = decodeHtmlEntities(String(rawUrl || '').trim());
+  if (!decodedHref) return '';
+  try {
+    if (decodedHref.startsWith('//duckduckgo.com/l/?') || decodedHref.startsWith('https://duckduckgo.com/l/?') || decodedHref.startsWith('/l/?')) {
+      const href = decodedHref.startsWith('/l/?')
+        ? `https://duckduckgo.com${decodedHref}`
+        : (decodedHref.startsWith('//') ? `https:${decodedHref}` : decodedHref);
+      const parsed = new URL(href);
+      const uddg = parsed.searchParams.get('uddg');
+      if (uddg) return decodeURIComponent(uddg);
+      return href;
+    }
+    return decodedHref;
+  } catch {
+    return decodedHref;
+  }
 }
 
 /**

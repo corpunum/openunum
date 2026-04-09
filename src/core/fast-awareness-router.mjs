@@ -1,4 +1,5 @@
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { logInfo, logError } from '../logger.mjs';
 
@@ -7,7 +8,7 @@ import { logInfo, logError } from '../logger.mjs';
  * @private
  */
 function getLearningDataPath() {
-  const home = process.env.OPENUNUM_HOME || path.join(process.env.HOME || '/home/corp-unum', '.openunum');
+  const home = process.env.OPENUNUM_HOME || path.join(os.homedir(), '.openunum');
   return path.join(home, 'router-learning.json');
 }
 
@@ -16,7 +17,7 @@ function getLearningDataPath() {
  * @private
  */
 function getTelemetryPath() {
-  const home = process.env.OPENUNUM_HOME || path.join(process.env.HOME || '/home/corp-unum', '.openunum');
+  const home = process.env.OPENUNUM_HOME || path.join(os.homedir(), '.openunum');
   return path.join(home, 'router-telemetry.jsonl');
 }
 

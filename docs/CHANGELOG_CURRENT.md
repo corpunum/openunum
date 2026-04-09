@@ -1,6 +1,48 @@
 # Changelog (Current Consolidated)
 
-Date: 2026-04-07
+Date: 2026-04-09
+
+## Chat + Search Reliability Hardening (2026-04-09)
+
+**Status:** ✅ Implemented and test-gated
+
+- Added model-native-first web-search backend chain with quality-gated fallback:
+  - order: `model-native` -> `cdp` -> keyed API backends -> `duckduckgo`
+  - challenge-page and low-signal detection prevents false-positive “success”
+- Added native web-search hook for OpenAI-compatible providers (`nativeWebSearch`) while preserving graceful fallback on unsupported providers.
+- Improved web-search synthesis:
+  - ranking output stays domain-aware across follow-up turns
+  - explicit table/no-links rendering for prompts that request tabular output
+- Fixed recovery-loop behavior:
+  - no repair side-quest spawn for `tool_circuit_open`
+  - repair side-quest spawns are throttled per `session+tool`
+  - side-quest execution now respects `modelOverride` / `toolsAllow` / `sideQuestMode`
+- Added pending completion handoff contract:
+  - `GET /api/chat/pending` now returns `completed: true` + final payload on the first non-pending poll
+  - added runtime hard-timeout fallback response path to avoid silent long-turn stalls
+- Added regression E2E:
+  - `tests/phase49.chat-pending-completion-cache.e2e.mjs`
+  - `pnpm phase49:e2e`
+  - included in canonical `pnpm e2e` battery
+
+## Phase 10 Generic-Core + Fast-Path Reliability (2026-04-09)
+
+**Status:** ✅ Implemented and test-gated
+
+- Removed UI-specific runtime coercion from `src/core/agent.mjs`:
+  - removed `src/ui/index.html` target forcing in tool-call args
+  - removed UI-only pivot prompts and deterministic UI file auto-edit fallback
+- Kept agent execution generic while preserving existing safety/checklist/proof continuation controls.
+- Upgraded deterministic short-turn gate to feature-score routing:
+  - added `scoreDeterministicFastTurn(...)`
+  - deterministic path now keys off message-shape features + router confidence (not fixed greetings only)
+- Fixed runtime trace bug in memory-recall shadow path:
+  - `sessionId: sid` -> `sessionId`
+  - `currentGoal: triggerInfo` -> `currentGoal: originalUserMessage`
+- Added and wired regression:
+  - `tests/phase48.short-turn-deterministic-fastpath.e2e.mjs`
+  - `pnpm phase48:e2e`
+  - CI `Core E2E Contracts` now includes `phase48`
 
 ## WebUI + Provider Stack Hardening (2026-04-08)
 

@@ -236,7 +236,7 @@ try {
   const missionStarted = await jpost('/api/missions/start', {
     goal: 'Check if /tmp directory exists',
     maxSteps: 1,
-    intervalMs: 0
+    intervalMs: 10
   });
   assert.equal(missionStarted.status, 200);
   const missionTimeline = await jget(`/api/missions/timeline?id=${encodeURIComponent(missionStarted.json.id)}`);

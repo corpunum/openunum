@@ -1,0 +1,181 @@
+import { resolveExecutionEnvelope } from '../../core/model-execution-envelope.mjs';
+
+export async function handleRuntimeRoute({ req, res, url, ctx }) {
+  const done = (status, payload) => {
+    ctx.sendJson(res, status, payload);
+    return true;
+  };
+
+  if (req.method === 'GET' && url.pathname === '/api/capabilities') {
+    return done(200, ctx.buildCapabilitiesPayload());
+  }
+
+  if (req.method === 'GET' && url.pathname === '/api/tools/catalog') {
+    const executionEnvelope = resolveExecutionEnvelope({
+      provider: ctx.config.model?.provider,
+      model: ctx.config.model?.model,
+      runtime: ctx.config.runtime
+    });
+    return done(200, {
+      contract_version: ctx.TOOL_CATALOG_CONTRACT_VERSION,
+      enforce_profiles: ctx.config.runtime?.enforceModelExecutionProfiles !== false,
+      allowed_tools: executionEnvelope.toolAllowlist || null,
+      tools: ctx.agent.toolRuntime.toolCatalog({ allowedTools: executionEnvelope.toolAllowlist })
+    });
+  }
+
+  if (req.method === 'GET' && url.pathname === '/api/runtime/overview') {
+    return done(200, await ctx.buildRuntimeOverview());
+  }
+
+  if (req.method === 'GET' && url.pathname === '/api/runtime/inventory') {
+    const limit = Number(url.searchParams.get('limit') || 300);
+    return done(200, ctx.buildRuntimeInventory(limit));
+  }
+
+  if (req.method === 'GET' && url.pathname === '/api/runtime/state-contract') {
+    const sessionId = String(url.searchParams.get('sessionId') || '').trim();
+    const goal = String(url.searchParams.get('goal') || '').trim();
+    const phase = String(url.searchParams.get('phase') || '').trim();
+    const nextAction = String(url.searchParams.get('nextAction') || '').trim();
+    return done(200, ctx.buildRuntimeStateContractReport({
+      sessionId,
+      goal,
+      phase,
+      nextAction
+    }));
+  }
+
+  if (req.method === 'GET' && url.pathname === '/api/runtime/config-parity') {
+    return done(200, ctx.buildConfigParityReport(ctx.config, process.env));
+  }
+
+  if (req.method === 'GET' && url.pathname === '/api/autonomy/insights') {
+    const sessionId = String(url.searchParams.get('sessionId') || '').trim();
+    const goal = String(url.searchParams.get('goal') || '').trim();
+    return done(200, ctx.buildAutonomyInsights({ sessionId, goal }));
+  }
+
+  if (req.method === 'GET' && url.pathname === '/api/autonomy/predictive-failures') {
+    const predictions = ctx.agent.predictiveFailure?.getCurrentPredictions() || [];
+    const stats = ctx.agent.predictiveFailure?.getAccuracyStats() || { totalPredictions: 0, totalFailures: 0, accuracy: 0 };
+    return done(200, {
+      ok: true,
+      predictions,
+      stats,
+      timestamp: new Date().toISOString()
+    });
+  }
+
+  if (req.method === 'GET' && url.pathname === '/api/autonomy/tasks') {
+    const limit = Number(url.searchParams.get('limit') || 20);
+    const result = ctx.agent.taskOrchestrator?.listTasks(limit) || { ok: false, error: 'task_orchestrator_not_initialized' };
+    return done(result.ok ? 200 : 500, result);
+  }
+
+  if (req.method === 'GET' && url.pathname === '/api/autonomy/tasks/status') {
+    const taskId = String(url.searchParams.get('id') || '').trim();
+    if (!taskId) return done(400, { ok: false, error: 'id is required' });
+    const result = ctx.agent.taskOrchestrator?.getTask(taskId) || { ok: false, error: 'task_orchestrator_not_initialized' };
+    return done(result.ok ? 200 : 404, result);
+  }
+
+  if (req.method === 'POST' && url.pathname === '/api/autonomy/tasks/run') {
+    const body = await ctx.parseBody(req);
+    const result = await ctx.agent.taskOrchestrator?.runTask(body || {}) || { ok: false, error: 'task_orchestrator_not_initialized' };
+    return done(result.ok ? 200 : 400, result);
+  }
+
+  if (req.method === 'GET' && url.pathname === '/api/autonomy/workers') {
+    const limit = Number(url.searchParams.get('limit') || 20);
+    const result = ctx.agent.workerOrchestrator?.listWorkers(limit) || { ok: false, error: 'worker_orchestrator_not_initialized' };
+    return done(result.ok ? 200 : 500, result);
+  }
+
+  if (req.method === 'POST' && url.pathname === '/api/autonomy/workers/start') {
+    const body = await ctx.parseBody(req);
+    const result = ctx.agent.workerOrchestrator?.startWorker(body || {}) || { ok: false, error: 'worker_orchestrator_not_initialized' };
+    return done(result.ok ? 200 : 400, result);
+  }
+
+  if (req.method === 'POST' && url.pathname === '/api/autonomy/workers/stop') {
+    const body = await ctx.parseBody(req);
+    const result = ctx.agent.workerOrchestrator?.stopWorker(body?.id) || { ok: false, error: 'worker_orchestrator_not_initialized' };
+    return done(result.ok ? 200 : 404, result);
+  }
+
+  if (req.method === 'POST' && url.pathname === '/api/autonomy/workers/tick') {
+    const body = await ctx.parseBody(req);
+    const result = await ctx.agent.workerOrchestrator?.tickWorker(body?.id) || { ok: false, error: 'worker_orchestrator_not_initialized' };
+    return done(result.ok ? 200 : 404, result);
+  }
+
+  if (req.method === 'GET' && url.pathname === '/api/controller/behaviors') {
+    const limitRaw = Number(url.searchParams.get('limit') || 80);
+    const limit = Number.isFinite(limitRaw) ? Math.max(1, Math.min(limitRaw, 400)) : 80;
+    return done(200, {
+      ok: true,
+      behaviors: ctx.agent.getControllerBehaviorSnapshot(limit)
+    });
+  }
+
+  if (req.method === 'GET' && url.pathname === '/api/controller/behavior-classes') {
+    return done(200, {
+      ok: true,
+      classes: ctx.agent.getBehaviorClasses()
+    });
+  }
+
+  if (req.method === 'POST' && url.pathname === '/api/controller/behavior/reset') {
+    const body = await ctx.parseBody(req);
+    const providerRaw = String(body?.provider || '').trim();
+    const provider = ctx.normalizeProviderId(providerRaw);
+    const model = String(body?.model || '').trim().toLowerCase();
+    if (!providerRaw || !model) return done(400, { error: 'provider and model are required' });
+    const out = ctx.agent.resetControllerBehavior({ provider, model });
+    return done(200, { ok: true, ...out });
+  }
+
+  if (req.method === 'POST' && url.pathname === '/api/controller/behavior/reset-all') {
+    const out = ctx.agent.resetAllControllerBehaviors();
+    return done(200, { ok: true, ...out });
+  }
+
+  if (req.method === 'POST' && url.pathname === '/api/controller/behavior/override') {
+    const body = await ctx.parseBody(req);
+    const providerRaw = String(body?.provider || '').trim();
+    const provider = ctx.normalizeProviderId(providerRaw);
+    const model = String(body?.model || '').trim().toLowerCase();
+    const classId = String(body?.classId || '').trim();
+    const tuning = body?.tuning && typeof body.tuning === 'object' ? body.tuning : {};
+    const needs = body?.needs && typeof body.needs === 'object' ? body.needs : {};
+    if (!providerRaw || !model || !classId) {
+      return done(400, { error: 'provider, model, and classId are required' });
+    }
+    const key = ctx.behaviorOverrideKey(provider, model);
+    ctx.config.model.behaviorOverrides = ctx.config.model.behaviorOverrides || {};
+    ctx.config.model.behaviorOverrides[key] = { classId, tuning, needs };
+    ctx.saveConfig(ctx.config);
+    return done(200, {
+      ok: true,
+      key,
+      override: ctx.config.model.behaviorOverrides[key]
+    });
+  }
+
+  if (req.method === 'POST' && url.pathname === '/api/controller/behavior/override/remove') {
+    const body = await ctx.parseBody(req);
+    const providerRaw = String(body?.provider || '').trim();
+    const provider = ctx.normalizeProviderId(providerRaw);
+    const model = String(body?.model || '').trim().toLowerCase();
+    if (!providerRaw || !model) return done(400, { error: 'provider and model are required' });
+    const key = ctx.behaviorOverrideKey(provider, model);
+    ctx.config.model.behaviorOverrides = ctx.config.model.behaviorOverrides || {};
+    const removed = Boolean(ctx.config.model.behaviorOverrides[key]);
+    delete ctx.config.model.behaviorOverrides[key];
+    ctx.saveConfig(ctx.config);
+    return done(200, { ok: true, removed, key });
+  }
+
+  return false;
+}

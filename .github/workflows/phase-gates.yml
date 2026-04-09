@@ -25,47 +25,8 @@ jobs:
       - name: Install
         run: pnpm install --frozen-lockfile=false
 
-      - name: Docs Gate
-        run: pnpm docs:gate
-
-      - name: Docs Index Freshness
-        run: pnpm docs:index:check
-
-      - name: Unit Tests
-        run: pnpm test:unit
-
-      - name: Smoke Tests (isolated)
-        run: pnpm test:smoke
-
-      - name: UI Smoke (no oauth)
-        run: pnpm smoke:ui:noauth
-
-      - name: Session Imitation Regression
-        run: pnpm test:imitation
-
-      - name: Core E2E Contracts
-        run: pnpm phase0:e2e && pnpm phase6:e2e && pnpm phase10:e2e && pnpm phase11:e2e && pnpm phase40:e2e && pnpm phase41:e2e && pnpm phase43:e2e && pnpm phase47:e2e
-
       - name: Install Playwright Chromium
         run: pnpm exec playwright install --with-deps chromium
 
-      - name: WebUI Browser E2E (Playwright)
-        run: pnpm phase39:e2e && pnpm phase42:e2e && pnpm phase44:e2e && pnpm phase45:e2e && pnpm phase46:e2e
-
-      - name: Phase0 Foundation Check
-        run: pnpm phase0:check
-
-      - name: Compact Profile Gate
-        run: pnpm gate:compact-profile
-
-      - name: Packet Budget Gate
-        run: pnpm gate:packet-budget
-
-      - name: Runtime Surface Contract Gate
-        run: pnpm gate:runtime-surface-contract
-
-      - name: Route Wiring Gate
-        run: pnpm gate:route-wiring
-
-      - name: UI Surface Gate
-        run: pnpm gate:ui-surface
+      - name: Canonical Verify Gate
+        run: pnpm verify

@@ -609,14 +609,9 @@ When backend is `passphrase`, `secret_store.locked=true` means passphrase is not
 
 `POST /api/auth/prefill-local` scans local sources and securely saves discovered credentials without returning raw secret values:
 - `process.env`
-- `/home/corp-unum/.openclaw/openclaw.json`
-- `/home/corp-unum/.openclaw/agents/*/agent/auth-profiles.json`
-- `/home/corp-unum/.openclaw/workspace/.runtime-secrets.env`
-- `/home/corp-unum/.openclaw/workspace/.env.trading_agent`
-- `/home/corp-unum/openclaw/.env`
-- `/home/corp-unum/.openclaw/.env`
-- `/home/corp-unum/openclaw-tradebot/.env`
-- `/home/corp-unum/openunumQwen/.env`
+- `OPENUNUM_OPENCLAW_CONFIG_PATH` (optional override, defaults to `~/.openclaw/openclaw.json`)
+- `OPENUNUM_OPENCLAW_AGENTS_ROOTS` (optional path-list override, defaults to `~/.openclaw/agents`)
+- `OPENUNUM_AUTH_ENV_FILES` (optional path-list override, defaults include `~/.openclaw/workspace/.runtime-secrets.env`, `~/.openclaw/workspace/.env.trading_agent`, `~/openclaw/.env`, `~/.openclaw/.env`, `~/openclaw-tradebot/.env`, `~/openunumQwen/.env`)
 
 Secrets are no longer returned from `GET /api/config` or persisted in `openunum.json`.
 
@@ -777,6 +772,18 @@ Long-running behavior:
 or
 ```json
 {"ok":true,"pending":false,"sessionId":"abc"}
+```
+or (completed payload handoff; first non-pending poll after completion):
+```json
+{
+  "ok": true,
+  "pending": false,
+  "completed": true,
+  "sessionId": "abc",
+  "reply": "...",
+  "replyHtml": "...",
+  "trace": { "...": "..." }
+}
 ```
 
 ## Runtime Diagnostics
@@ -1016,11 +1023,13 @@ Schedule update payload (partial):
 - `GET /api/browser/config`
 - `POST /api/browser/config`
 - `POST /api/browser/launch`
+- `POST /api/browser/ensure` — verify configured CDP endpoint, launch managed debug browser only if needed
 
 Validation notes:
 - `POST /api/browser/navigate` requires `url`.
 - `POST /api/browser/search` requires `query`.
 - Mutating browser endpoints require JSON object payloads; invalid shape returns `400` with `error: "invalid_payload"`.
+- `POST /api/browser/ensure` returns `source: "configured"|"launched"` when successful.
 
 ## Telegram
 

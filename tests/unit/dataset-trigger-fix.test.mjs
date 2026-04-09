@@ -70,4 +70,32 @@ describe('Synthesize Tool Only Answer', () => {
     });
     expect(result).toContain('Usable Hugging Face datasets found for this ask:');
   });
+
+  it('should return ranked web candidates for best/top queries when web_search evidence exists', () => {
+    const result = synthesizeToolOnlyAnswer({
+      userMessage: 'best github open source projects march april 2026',
+      executedTools: [{
+        name: 'web_search',
+        result: {
+          ok: true,
+          results: [
+            {
+              title: 'Repo Alpha',
+              url: 'https://github.com/org/repo-alpha',
+              snippet: 'Active in March 2026'
+            },
+            {
+              title: 'Repo Beta',
+              url: 'https://github.com/org/repo-beta',
+              snippet: 'Major release in April 2026'
+            }
+          ]
+        }
+      }],
+      toolRuns: 1
+    });
+    expect(result).toContain('Top candidates from current web evidence:');
+    expect(result).toContain('Repo Alpha');
+    expect(result).toContain('Recommendation:');
+  });
 });

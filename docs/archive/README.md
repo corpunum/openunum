@@ -1,12 +1,19 @@
 # Docs Archive
 
-This folder contains legacy/stale docs removed from the active onboarding/read-order path.
+This folder contains superseded and historical docs removed from active onboarding.
+
+## Archived on 2026-04-09 (Phase 8 doc slimming)
+
+- `2026-04-09-phase8-doc-slimming/*`
+  - competitive analyses moved out of active path
+  - dated council deep-dive reports moved out of active path
+  - superseded phase plans/status snapshots moved out of active path
+  - session/repo harvest one-off analyses moved out of active path
 
 ## Archived on 2026-04-08
 
 - `2026-04-08-historical-plans/*`
   - superseded planning/snapshot docs archived out of canonical onboarding flow
-  - includes: `MASTER_PLAN.md`, `IMPLEMENTATION_SEQUENCE.md`, `PHASE0_EXECUTION_PLAN.md`, `PHASE4_PLAN.md`, `IMPROVEMENT_SUMMARY.md`, `PROJECT_STATE_SNAPSHOT.md`
 - `agent-onboarding.md`
   - superseded by `docs/AGENT_ONBOARDING.md`
 - `session-stuck-patterns.md`
