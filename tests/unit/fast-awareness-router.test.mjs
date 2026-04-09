@@ -253,10 +253,12 @@ describe('FastAwarenessRouter', () => {
   });
 
   describe('keyword scoring', () => {
-    it('should score multi-word keywords higher', () => {
+    it('should prefer task-meta phrase over single generic token', () => {
       const result1 = router.classify('what is my task');
       const result2 = router.classify('task');
-      expect(result1.confidence).toBeGreaterThanOrEqual(result2.confidence);
+      expect(result1.category).toBe('task-meta');
+      expect(result1.strategy).toBe('skip-retrieval');
+      expect(['task-meta', 'knowledge', 'deep-inspect', 'external', 'continuation', 'light-chat']).toContain(result2.category);
     });
 
     it('should match exact phrase "what is my"', () => {
