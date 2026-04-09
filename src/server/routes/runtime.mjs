@@ -1,6 +1,7 @@
 import { resolveExecutionEnvelope } from '../../core/model-execution-envelope.mjs';
 import { MODEL_BACKED_TOOL_CONTRACTS } from '../../tools/backends/contracts.mjs';
 import { resolveBackendProfiles } from '../../tools/backends/profiles.mjs';
+import { loadSkills } from '../../skills/loader.mjs';
 
 export async function handleRuntimeRoute({ req, res, url, ctx }) {
   const done = (status, payload) => {
@@ -62,6 +63,22 @@ export async function handleRuntimeRoute({ req, res, url, ctx }) {
     });
   }
 
+  function parseSkillListPayload(raw = null) {
+    if (!raw || typeof raw !== 'object') return [];
+    if (Array.isArray(raw.skills)) return raw.skills;
+    if (raw.ok === true && Array.isArray(raw.data?.skills)) return raw.data.skills;
+    const maybeJson = typeof raw.data === 'string' ? raw.data.trim() : '';
+    if (maybeJson.startsWith('{') || maybeJson.startsWith('[')) {
+      try {
+        const decoded = JSON.parse(maybeJson);
+        if (Array.isArray(decoded?.skills)) return decoded.skills;
+      } catch {
+        return [];
+      }
+    }
+    return [];
+  }
+
   if (req.method === 'GET' && url.pathname === '/api/capabilities') {
     return done(200, ctx.buildCapabilitiesPayload());
   }
@@ -91,13 +108,50 @@ export async function handleRuntimeRoute({ req, res, url, ctx }) {
       ctx.agent.toolRuntime.toolCatalog({}),
       { allowedTools: executionEnvelope.toolAllowlist }
     );
-    let skills = [];
+    let managedSkills = [];
     try {
       const skillOut = await ctx.agent.runTool('skill_list', {});
-      skills = Array.isArray(skillOut?.skills) ? skillOut.skills : [];
+      managedSkills = parseSkillListPayload(skillOut);
     } catch {
-      skills = [];
+      managedSkills = [];
     }
+    const discoveredSkillDocs = loadSkills();
+    const discoveredSkills = (Array.isArray(discoveredSkillDocs) ? discoveredSkillDocs : []).map((row) => ({
+      name: String(row?.name || '').trim(),
+      source: row?.source || 'filesystem',
+      approved: row?.approved ?? null,
+      verdict: row?.verdict || 'n/a',
+      usageCount: Number(row?.usageCount || 0),
+      lastUsedAt: row?.lastUsedAt || null,
+      installedAt: row?.installedAt || null
+    })).filter((row) => row.name);
+    const skillOps = tools
+      .filter((tool) => String(tool?.name || '').startsWith('skill_'))
+      .map((tool) => ({
+        name: String(tool.name || ''),
+        source: 'runtime-tool',
+        approved: null,
+        verdict: 'operation',
+        usageCount: 0,
+        description: String(tool.description || '')
+      }));
+    const mergedSkills = new Map();
+    for (const row of managedSkills) {
+      const key = String(row?.name || '').trim();
+      if (!key) continue;
+      mergedSkills.set(key, { ...row, source: row?.source || 'managed' });
+    }
+    for (const row of discoveredSkills) {
+      const key = String(row?.name || '').trim();
+      if (!key || mergedSkills.has(key)) continue;
+      mergedSkills.set(key, row);
+    }
+    for (const row of skillOps) {
+      const key = String(row?.name || '').trim();
+      if (!key || mergedSkills.has(key)) continue;
+      mergedSkills.set(key, row);
+    }
+    const skills = [...mergedSkills.values()].sort((a, b) => String(a.name).localeCompare(String(b.name)));
     const localModels = await ctx.localModelService.getLocalModelStatus();
     return done(200, {
       ok: true,
@@ -122,6 +176,11 @@ export async function handleRuntimeRoute({ req, res, url, ctx }) {
       },
       tools,
       skills,
+      skillsBreakdown: {
+        managed: managedSkills,
+        discovered: discoveredSkills,
+        operations: skillOps
+      },
       localModels
     });
   }

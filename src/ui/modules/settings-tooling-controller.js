@@ -79,7 +79,7 @@ export function createSettingsToolingController({
     const body = q('toolingToolsBody');
     if (!body) return;
     if (!rows.length) {
-      body.innerHTML = '<tr><td colspan="5" class="hint">No tools available.</td></tr>';
+      body.innerHTML = '<tr><td colspan="6" class="hint">No tools available.</td></tr>';
       return;
     }
     body.innerHTML = rows.map((tool) => {
@@ -97,6 +97,12 @@ export function createSettingsToolingController({
       const envelopeBadge = tool.allowedInCurrentEnvelope
         ? badge('allowed in current envelope', 'good')
         : badge('blocked in current envelope', 'warn');
+      const localProfiles = (Array.isArray(mbt.effectiveProfiles) ? mbt.effectiveProfiles : [])
+        .filter((profile) => String(profile?.provider || '').includes('ollama-local') || String(profile?.model || '').startsWith('ollama-local/'))
+        .map((profile) => String(profile.model || '').replace(/^ollama-local\//, '') || '-');
+      const localModelCell = localProfiles.length
+        ? `<span class="mono">${escapeHtml(localProfiles.join(', '))}</span>`
+        : '<span class="hint">none</span>';
       const actions = mbt.contract
         ? `
           <button type="button" class="tooling-edit" data-tool="${escapeHtml(tool.name || '')}">Edit</button>
@@ -108,7 +114,8 @@ export function createSettingsToolingController({
           <td><span class="mono">${escapeHtml(tool.name || '')}</span></td>
           <td>${status}<div style="margin-top:4px;">${envelopeBadge}</div></td>
           <td>${escapeHtml(tool.class || '-')}</td>
-          <td>${escapeHtml(buildToolSummary(tool))}<div class="hint" style="margin-top:4px;">${escapeHtml(telemetryText)}</div></td>
+          <td><span class="mono">${escapeHtml(buildToolSummary(tool))}</span><div class="hint" style="margin-top:4px;">${escapeHtml(telemetryText)}</div></td>
+          <td>${localModelCell}</td>
           <td><div class="row compact-actions">${actions}</div></td>
         </tr>
       `;
@@ -136,7 +143,7 @@ export function createSettingsToolingController({
         <tr>
           <td class="mono">${escapeHtml(skill?.name || '')}</td>
           <td>${badge(approved ? 'approved' : 'pending', approved ? 'good' : 'warn')}</td>
-          <td>${escapeHtml(skill?.verdict || '-')}</td>
+          <td>${escapeHtml(skill?.verdict || '-')}<div class="hint" style="margin-top:4px;">${escapeHtml(skill?.source || 'unknown')}</div></td>
           <td>${Number(skill?.usageCount || 0)}</td>
           <td>${escapeHtml(skill?.lastUsedAt || skill?.updatedAt || '-')}</td>
         </tr>

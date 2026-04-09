@@ -15,9 +15,18 @@ export function loadSkills() {
       const rows = Array.isArray(manifest?.skills) ? manifest.skills : [];
       for (const row of rows) {
         const name = String(row?.name || '').trim();
-        const filePath = String(row?.filePath || '').trim();
-        if (!name || !filePath || !fs.existsSync(filePath)) continue;
-        const code = fs.readFileSync(filePath, 'utf8');
+        const rawFilePath = String(row?.filePath || '').trim();
+        if (!name || !rawFilePath || !fs.existsSync(rawFilePath)) continue;
+        let skillPath = rawFilePath;
+        if (fs.statSync(rawFilePath).isDirectory()) {
+          const candidate = path.join(rawFilePath, 'SKILL.md');
+          if (fs.existsSync(candidate) && fs.statSync(candidate).isFile()) {
+            skillPath = candidate;
+          } else {
+            continue;
+          }
+        }
+        const code = fs.readFileSync(skillPath, 'utf8');
         const meta = [
           `name=${name}`,
           `source=${row?.source || 'unknown'}`,
@@ -27,6 +36,12 @@ export function loadSkills() {
         ].join(' ');
         skills.set(name, {
           name,
+          source: row?.source || 'managed',
+          approved: row?.approved === true,
+          verdict: row?.verdict || 'pending_review',
+          usageCount: Number(row?.usageCount || 0),
+          lastUsedAt: row?.lastUsedAt || null,
+          installedAt: row?.installedAt || null,
           content: `Managed skill (${meta})\n\n${code.slice(0, 4000)}`
         });
       }
@@ -40,7 +55,16 @@ export function loadSkills() {
     const skillPath = path.join(skillsDir, e.name, 'SKILL.md');
     if (!fs.existsSync(skillPath)) continue;
     if (!skills.has(e.name)) {
-      skills.set(e.name, { name: e.name, content: fs.readFileSync(skillPath, 'utf8') });
+      skills.set(e.name, {
+        name: e.name,
+        source: 'filesystem',
+        approved: null,
+        verdict: 'n/a',
+        usageCount: 0,
+        lastUsedAt: null,
+        installedAt: null,
+        content: fs.readFileSync(skillPath, 'utf8')
+      });
     }
   }
   return [...skills.values()];
