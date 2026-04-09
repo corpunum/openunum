@@ -4,6 +4,22 @@ All notable changes to OpenUnum are documented in this file.
 
 ---
 
+## [2.3.35] - 2026-04-09
+
+### Changed
+- Hardened web-search recovery synthesis for strict, time-windowed GitHub ranking requests in `src/core/turn-recovery-summary.mjs`:
+  - detects strict constraints (`repo-only` + `new entries` + explicit date-window intent),
+  - requires per-row GitHub repo URL shape and date-window evidence before rendering ranked tables,
+  - enriches evidence checks with `web_fetch` output text when available,
+  - fails closed with an explicit constraint error when evidence is insufficient (instead of producing a weak/misleading table).
+
+### Added
+- Regression coverage in `tests/unit/turn-recovery-summary-search-constraints.test.mjs` for:
+  - strict-constraint fail-closed behavior when evidence is missing,
+  - strict-constraint table synthesis when repo/date evidence is present.
+
+---
+
 ## [2.3.34] - 2026-04-08
 
 ### Changed

@@ -408,6 +408,23 @@ function buildStepAnswer({ executedTools = [], toolRuns = 0 }) {
 }
 
 function buildWebSearchRankingAnswer({ userMessage = '', executedTools = [] }) {
+  const userText = String(userMessage || '').toLowerCase();
+  const strictRepoMode = /(github|repo|repository|open source|oss)/i.test(userText);
+  const strictNewEntries = /\bnew entries\b|\bnew repos?\b|\bcreated\b|\bnew projects?\b/.test(userText);
+  const strictTimeWindow = /(march|april|2026|this month|last month|within)/i.test(userText);
+  const mustVerifyRepoWindow = strictRepoMode && strictNewEntries && strictTimeWindow;
+
+  const fetchedEvidence = new Map();
+  for (const run of executedTools) {
+    if (!run || run.name !== 'web_fetch') continue;
+    const url = String(run?.result?.url || '').trim();
+    if (!url) continue;
+    fetchedEvidence.set(
+      url.toLowerCase(),
+      clipText(String(run?.result?.text || run?.result?.stdout || '').replace(/\s+/g, ' ').trim(), 3000)
+    );
+  }
+
   const candidates = [];
   for (const run of executedTools) {
     if (!run || run.name !== 'web_search') continue;
@@ -418,7 +435,8 @@ function buildWebSearchRankingAnswer({ userMessage = '', executedTools = [] }) {
       const snippet = clipText(String(row?.snippet || '').replace(/\s+/g, ' ').trim(), 180);
       if (!title || !url) continue;
       if (url.includes('duckduckgo.com/?q=')) continue;
-      candidates.push({ title, url, snippet });
+      const fetchText = fetchedEvidence.get(url.toLowerCase()) || '';
+      candidates.push({ title, url, snippet, fetchText });
     }
   }
 
@@ -434,12 +452,30 @@ function buildWebSearchRankingAnswer({ userMessage = '', executedTools = [] }) {
   }
   if (!unique.length) return '';
 
-  const userText = String(userMessage || '').toLowerCase();
   const repoSignalInResults = unique.some((item) => /(github\.com|open-source|repository|repositories|repo)/i.test(`${item.title} ${item.url} ${item.snippet || ''}`));
   const asksGithubOrRepos = /(github|repo|repository|open source|oss)/i.test(userText) || repoSignalInResults;
   const asksTimeWindow = /(march|april|2026|this month|last month|within)/i.test(userText);
   const wantsTable = /\btable\b|\btabular\b|\bmatrix\b/i.test(userText);
   const wantsNoLinks = /\bno links\b|dont give me links|don't give me links|without links/i.test(userText);
+
+  const monthWindowRegex = /(march|april)\s+2026/i;
+  const repoUrlRegex = /^https?:\/\/github\.com\/[^/\s]+\/[^/\s?#]+/i;
+  const filtered = mustVerifyRepoWindow
+    ? unique.filter((item) => {
+      const blob = `${item.title} ${item.url} ${item.snippet || ''} ${item.fetchText || ''}`.toLowerCase();
+      const hasRepoUrl = repoUrlRegex.test(item.url);
+      const hasWindowEvidence = monthWindowRegex.test(blob) || /2026-03|2026-04/.test(blob);
+      return hasRepoUrl && hasWindowEvidence;
+    })
+    : unique;
+
+  if (mustVerifyRepoWindow && filtered.length === 0) {
+    return [
+      'Insufficient evidence to build a verified March-April 2026 repo-only table from current search results.',
+      'Constraint check failed: missing per-row repo URL and date-window evidence.',
+      'Recommendation: re-run retrieval with repo-level sources (GitHub repo URLs) that include created/updated dates for March-April 2026.'
+    ].join('\n');
+  }
 
   const recommendation = asksGithubOrRepos
     ? (asksTimeWindow
@@ -452,14 +488,14 @@ function buildWebSearchRankingAnswer({ userMessage = '', executedTools = [] }) {
     lines.push('');
     lines.push('| Rank | Candidate | Notes |');
     lines.push('|---|---|---|');
-    for (let idx = 0; idx < unique.length; idx += 1) {
-      const item = unique[idx];
+    for (let idx = 0; idx < filtered.length; idx += 1) {
+      const item = filtered[idx];
       const notes = item.snippet || (asksGithubOrRepos ? 'Candidate repository source list' : 'Candidate source list');
       const candidateText = wantsNoLinks ? item.title : `[${item.title}](${item.url})`;
       lines.push(`| ${idx + 1} | ${candidateText.replace(/\|/g, '\\|')} | ${String(notes || '').replace(/\|/g, '\\|')} |`);
     }
   } else {
-    lines.push(...unique.map((item, idx) => `${idx + 1}. ${item.title} — ${item.url}${item.snippet ? ` (${item.snippet})` : ''}`));
+    lines.push(...filtered.map((item, idx) => `${idx + 1}. ${item.title} — ${item.url}${item.snippet ? ` (${item.snippet})` : ''}`));
   }
   lines.push('');
   lines.push(recommendation);
