@@ -18,7 +18,7 @@ OpenUnum is an Ubuntu-first autonomous assistant framework focused on high tool 
 - Pending chat handling (`/api/chat` + `/api/chat/pending`) with completion payload handoff (`completed: true`) to avoid poll-race "stuck loading"
 - Session-aware pending handling in UI to prevent cross-session reply bleed when switching chats
 - Local session history persistence in SQLite until user clicks `New Chat`
-- **Council Validation Framework** — 6 domain experts, latest consolidated maturity tracked in `OPENUNUM_EXPLAINED.md`
+- **Council Validation Framework** — 6 domain inspirations, latest consolidated maturity tracked in `OPENUNUM_EXPLAINED.md`
 - **Phase 0 Runtime Foundations** — Canonical runtime-state contract + config parity diagnostics (`/api/runtime/state-contract`, `/api/runtime/config-parity`)
 - **Phase 10 Generic-Core Closure** — Removed UI-specific execution hacks from agent core + added deterministic fast-path regression (`phase48`)
 - **Phase 10/11 Runtime Reliability Additions** — search backend quality gating + model-native-first fallback chain + circuit-loop guardrails + pending completion-cache regression (`phase49`)
