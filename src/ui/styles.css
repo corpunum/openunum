@@ -407,11 +407,18 @@ dialog.modal::backdrop {
 .provider-card.healthy { border-color: rgba(34,197,94,.7); }
 .provider-card.degraded { border-color: rgba(234,179,8,.7); }
 .table-wrap {
-  overflow: hidden;
+  overflow-x: auto;
+  overflow-y: visible;
   border: 1px solid #2f4a80;
   border-radius: 12px;
   background: rgba(10, 19, 36, .72);
   margin-top: 10px;
+}
+/* Tooling view can be long (tools + skills + rollout + jobs), keep it fully scrollable. */
+#view-settings-tooling {
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding-right: 8px;
 }
 table {
   width: 100%;
