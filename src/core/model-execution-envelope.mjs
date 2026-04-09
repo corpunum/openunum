@@ -78,6 +78,7 @@ function normalizeProfileMap(runtime = {}) {
         'browser_snapshot',
         'summarize',
         'classify',
+        'extract',
         'skill_list',
         'email_status',
         'research_list_recent'

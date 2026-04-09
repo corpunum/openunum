@@ -11,7 +11,7 @@ This document is the canonical implementation handoff for the next agent.
   - Added backend layer: `src/tools/backends/{registry,contracts,profiles,governor}.mjs`
   - Added adapters: `src/tools/backends/adapters/model-json-tool.mjs`, `src/tools/backends/adapters/deterministic-wrapper.mjs`
 - Runtime wiring:
-  - `src/tools/runtime.mjs` now builds base schemas from shared contracts and can expose/execute logical tools `summarize` and `classify` when enabled.
+  - `src/tools/runtime.mjs` now builds base schemas from shared contracts and can expose/execute logical tools `summarize`, `classify`, and `extract` when enabled.
   - Added explicit provider/model factory path via `buildProviderForModel(...)` in `src/providers/index.mjs`.
 - Validator convergence:
   - Replaced drifted dual-schema behavior by delegating `tool-validator` pre-execution checks to `preflight-validator`.

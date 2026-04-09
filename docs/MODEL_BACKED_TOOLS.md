@@ -8,6 +8,7 @@ Current phase-one logical tools:
 
 - `summarize`
 - `classify`
+- `extract`
 
 These are read-only and contract-validated.
 
@@ -40,7 +41,8 @@ Config path: `runtime.modelBackedTools`
       "queueDepth": 8,
       "tools": {
         "summarize": { "backendProfiles": [] },
-        "classify": { "backendProfiles": [] }
+        "classify": { "backendProfiles": [] },
+        "extract": { "backendProfiles": [] }
       }
     }
   }
@@ -72,4 +74,3 @@ Relevant unit tests:
 - `tests/unit/model-backed-governor.test.mjs`
 - `tests/unit/preflight-validator-model-backed.test.mjs`
 - `tests/unit/request-contracts.test.mjs` (runtime config contract coverage)
-

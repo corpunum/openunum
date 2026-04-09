@@ -7,6 +7,7 @@ describe('model-backed contracts', () => {
     const names = schemas.map((s) => s.function.name);
     expect(names).toContain('summarize');
     expect(names).toContain('classify');
+    expect(names).toContain('extract');
   });
 
   it('normalizes valid summarize output', () => {
@@ -38,4 +39,3 @@ describe('model-backed contracts', () => {
     expect(out.error).toBe('validation_failed');
   });
 });
-

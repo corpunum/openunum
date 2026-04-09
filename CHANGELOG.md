@@ -9,7 +9,7 @@ All notable changes to OpenUnum are documented in this file.
 ### Added
 - Model-backed tool substrate under `src/tools/backends/`:
   - `registry.mjs` for backend resolution and execution
-  - `contracts.mjs` for logical tool contracts (`summarize`, `classify`)
+  - `contracts.mjs` for logical tool contracts (`summarize`, `classify`, `extract`)
   - `profiles.mjs` for config/registry-driven backend profile selection
   - `governor.mjs` for bounded local concurrency/queue control
   - adapters for model JSON execution and deterministic wrapper

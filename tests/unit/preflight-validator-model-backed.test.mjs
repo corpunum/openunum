@@ -16,5 +16,9 @@ describe('preflight-validator model-backed', () => {
     const out = validateToolCall('shell_run', { cmd: 'echo ok' });
     expect(out.valid).toBe(true);
   });
-});
 
+  it('accepts extract with text and fields', () => {
+    const out = validateToolCall('extract', { text: 'a:b', fields: ['a'] });
+    expect(out.valid).toBe(true);
+  });
+});

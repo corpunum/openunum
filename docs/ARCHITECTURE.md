@@ -106,7 +106,7 @@ Response (with trace metadata)
 - `memory` — Store, recall, search
 - `exec` — Shell commands
 - `web_search` — DuckDuckGo
-- `model-backed logical tools` — phase-one read-only contracts (`summarize`, `classify`)
+- `model-backed logical tools` — phase-one read-only contracts (`summarize`, `classify`, `extract`)
 
 ### Tool Runtime
 - Located: `src/tools/runtime.mjs`

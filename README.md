@@ -22,7 +22,7 @@ OpenUnum is an Ubuntu-first autonomous assistant framework focused on high tool 
 - **Phase 0 Runtime Foundations** — Canonical runtime-state contract + config parity diagnostics (`/api/runtime/state-contract`, `/api/runtime/config-parity`)
 - **Phase 10 Generic-Core Closure** — Removed UI-specific execution hacks from agent core + added deterministic fast-path regression (`phase48`)
 - **Phase 10/11 Runtime Reliability Additions** — search backend quality gating + model-native-first fallback chain + circuit-loop guardrails + pending completion-cache regression (`phase49`)
-- **Model-Backed Tools Substrate (Phase 1 slice)** — logical tools (`summarize`, `classify`) can be exposed via runtime feature flag and backed by swappable model profiles under `src/tools/backends/*`
+- **Model-Backed Tools Substrate (Phase 1 slice)** — logical tools (`summarize`, `classify`, `extract`) can be exposed via runtime feature flag and backed by swappable model profiles under `src/tools/backends/*`
 
 ## Fast Start
 

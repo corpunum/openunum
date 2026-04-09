@@ -149,6 +149,7 @@ export function defaultConfig() {
             'browser_snapshot',
             'summarize',
             'classify',
+            'extract',
             'skill_list',
             'email_status',
             'research_list_recent'
@@ -196,6 +197,9 @@ export function defaultConfig() {
             backendProfiles: []
           },
           classify: {
+            backendProfiles: []
+          },
+          extract: {
             backendProfiles: []
           }
         }

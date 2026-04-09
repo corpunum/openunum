@@ -41,6 +41,15 @@ function buildPrompt(toolName, args = {}) {
       `topK: ${Number.isFinite(args.topK) ? Number(args.topK) : 1}`
     ].join('\n');
   }
+  if (toolName === 'extract') {
+    const fields = Array.isArray(args.fields) ? args.fields.map((x) => String(x || '').trim()).filter(Boolean) : [];
+    return [
+      'You are a strict JSON tool backend for extract.',
+      'Return only valid JSON with shape: {"data":{"fields":{"field":"value"}},"confidence":0.0}.',
+      `text: ${String(args.text || '')}`,
+      `fields: ${JSON.stringify(fields)}`
+    ].join('\n');
+  }
   return [
     `You are a strict JSON tool backend for ${toolName}.`,
     'Return only valid JSON with shape: {"data":{},"confidence":0.0}.',
@@ -76,4 +85,3 @@ export async function executeModelJsonTool({ config, toolName, args = {}, profil
     confidence: Number(parsed.confidence)
   };
 }
-

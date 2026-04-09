@@ -44,6 +44,24 @@ export const MODEL_BACKED_TOOL_CONTRACTS = {
     },
     sideEffects: 'none',
     resourceClass: 'compact'
+  },
+  extract: {
+    name: 'extract',
+    purpose: 'Extract structured fields from input text.',
+    parameters: {
+      type: 'object',
+      properties: {
+        text: { type: 'string' },
+        fields: { type: 'array', items: { type: 'string' } }
+      },
+      required: ['text', 'fields']
+    },
+    outputSchema: {
+      requiredDataFields: ['fields'],
+      confidenceMin: 0.0
+    },
+    sideEffects: 'none',
+    resourceClass: 'compact'
   }
 };
 
@@ -97,4 +115,3 @@ export function normalizeModelBackedOutput(toolName, raw = {}, backendInfo = {})
     }
   };
 }
-

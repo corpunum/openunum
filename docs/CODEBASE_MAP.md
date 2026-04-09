@@ -135,6 +135,7 @@ This map is implementation-accurate as of 2026-04-08.
 - `research_approve`
 - `summarize` (model-backed logical tool)
 - `classify` (model-backed logical tool)
+- `extract` (model-backed logical tool)
 
 ## Config Layer
 

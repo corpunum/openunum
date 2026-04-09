@@ -122,6 +122,7 @@ Examples:
 - `summarize`
 - `classify`
 - `extract`
+- `extract`
 
 These are OpenUnum capability names. They are not model names.
 
@@ -147,6 +148,7 @@ Start with the smallest safe vertical slice:
 
 - `summarize`
 - `classify`
+- `extract`
 
 ### Optional third tool only if the first two remain clean
 
@@ -235,7 +237,7 @@ Phase-one selection rule:
 This means:
 
 - build the framework first
-- do not hardcode specific models in `summarize` or `classify`
+- do not hardcode specific models in `summarize`, `classify`, or `extract`
 - tolerate "no suitable local backend currently configured" as a valid runtime state
 
 ## Hardware Governance
@@ -320,6 +322,7 @@ Tasks:
 
 - implement `summarize`
 - implement `classify`
+- implement `extract`
 - optionally implement `extract` only if first two stay simple
 - keep them read-only and non-authoritative
 
@@ -366,7 +369,7 @@ Tasks:
 - timeout/fallback tests
 - local resource tests
 - regression tests for existing tools and catalog truth
-- lightweight quality eval sets for `summarize` and `classify`
+- lightweight quality eval sets for `summarize`, `classify`, and `extract`
 
 Exit:
 
@@ -469,6 +472,7 @@ Docs:
 
 - `summarize`: preserves required facts, not just shorter text
 - `classify`: label accuracy and calibration
+- `extract`: field extraction accuracy and schema success rate
 - `extract`: schema success rate and field accuracy
 
 ## Acceptance Criteria
@@ -505,6 +509,7 @@ The correct first milestone is:
 - add backend registry
 - expose `summarize`
 - expose `classify`
+- expose `extract`
 - keep everything read-only
 - prove it with tests
 

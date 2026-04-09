@@ -79,6 +79,9 @@ function genericValidate(name, args, spec) {
   if (name === 'classify' && Array.isArray(args.labels) && args.labels.length < 2) {
     errors.push('"labels" should include at least two candidates');
   }
+  if (name === 'extract' && Array.isArray(args.fields) && args.fields.length < 1) {
+    errors.push('"fields" should include at least one field name');
+  }
   return errors;
 }
 
@@ -99,4 +102,3 @@ export function validateToolCall(toolName, args) {
 export function getValidatedTools() {
   return Object.keys(TOOL_VALIDATION_INDEX);
 }
-

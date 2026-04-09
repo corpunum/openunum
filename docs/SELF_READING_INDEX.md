@@ -19,7 +19,7 @@ Purpose: curated file map for autonomous code/docs self-reading and update workf
 ## Security and Secrets
 
 - ✅ `src/secrets/store.mjs` (848 lines)
-- ✅ `docs/CONFIG_SCHEMA.md` (138 lines)
+- ✅ `docs/CONFIG_SCHEMA.md` (141 lines)
 - ✅ `docs/API_REFERENCE.md` (1055 lines)
 
 ## Testing and Gates

@@ -101,7 +101,7 @@ Available tools include:
 - `memory` — Store, recall, search (hybrid BM25 + embeddings)
 - `exec` — Shell commands
 - `web_search` — multi-backend search (`auto`, `cdp`, `duckduckgo`, `brave`, `serpapi`) with runtime CDP-first behavior for `auto` and fallback when CDP is unavailable
-- `model-backed logical tools` — phase-one read-only contracts (`summarize`, `classify`) with swappable backend profiles under `src/tools/backends/*`
+- `model-backed logical tools` — phase-one read-only contracts (`summarize`, `classify`, `extract`) with swappable backend profiles under `src/tools/backends/*`
 
 The runtime provides argument generation, fallback handling, result compaction, and execution trace logging.
 

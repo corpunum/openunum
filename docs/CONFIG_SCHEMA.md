@@ -44,6 +44,9 @@ Secret store path:
         },
         "classify": {
           "backendProfiles": []
+        },
+        "extract": {
+          "backendProfiles": []
         }
       }
     }
