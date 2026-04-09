@@ -549,7 +549,8 @@ export class FastAwarenessRouter {
       hash = ((hash << 5) - hash) + char;
       hash = hash & hash;
     }
-    return `class_${Math.abs(hash).toString(36)}`;
+    const compactText = String(normalized || '').slice(0, 48).replace(/\s+/g, '_');
+    return `class_${compactText}_${Math.abs(hash).toString(36)}`;
   }
 
   _isSimpleGreeting(normalized) {
