@@ -200,28 +200,41 @@ export function defaultConfig() {
         tools: {
           summarize: {
             backendProfiles: [
-              { id: 'summarize.local', type: 'model', provider: 'ollama-local', model: 'ollama-local/gemma4:cpu', timeoutMs: 22000 },
-              { id: 'summarize.cloud', type: 'model', provider: 'ollama-cloud', model: 'ollama-cloud/minimax-m2.7:cloud', timeoutMs: 28000 }
+              { id: 'summarize.local', type: 'model', provider: 'ollama-local', model: 'ollama-local/granite3.3:2b', timeoutMs: 22000 }
             ]
           },
           classify: {
             backendProfiles: [
-              { id: 'classify.local', type: 'model', provider: 'ollama-local', model: 'ollama-local/gemma4:cpu', timeoutMs: 18000 },
-              { id: 'classify.cloud', type: 'model', provider: 'ollama-cloud', model: 'ollama-cloud/minimax-m2.7:cloud', timeoutMs: 25000 }
+              { id: 'classify.local', type: 'model', provider: 'ollama-local', model: 'ollama-local/llama3.2:1b', timeoutMs: 18000 }
             ]
           },
           extract: {
             backendProfiles: [
-              { id: 'extract.local', type: 'model', provider: 'ollama-local', model: 'ollama-local/gemma4:cpu', timeoutMs: 20000 },
-              { id: 'extract.cloud', type: 'model', provider: 'ollama-cloud', model: 'ollama-cloud/minimax-m2.7:cloud', timeoutMs: 28000 }
+              { id: 'extract.local', type: 'model', provider: 'ollama-local', model: 'ollama-local/granite3.3:2b', timeoutMs: 20000 }
+            ]
+          },
+          parse_function_args: {
+            backendProfiles: [
+              { id: 'parse_function_args.local', type: 'model', provider: 'ollama-local', model: 'ollama-local/functiongemma:270m', timeoutMs: 15000 }
+            ]
+          },
+          embed_text: {
+            backendProfiles: [
+              { id: 'embed_text.local', type: 'model', provider: 'ollama-local', model: 'ollama-local/nomic-embed-text:v1.5', timeoutMs: 15000 }
+            ]
+          },
+          suggest_code_patch: {
+            backendProfiles: [
+              { id: 'suggest_code_patch.local', type: 'model', provider: 'ollama-local', model: 'ollama-local/qwen2.5-coder:1.5b', timeoutMs: 30000 }
             ]
           }
         },
         recommendedLocalModels: [
-          'gemma4:cpu',
-          'nomic-embed-text:latest',
-          'mxbai-embed-large:latest',
-          'all-minilm:latest'
+          'granite3.3:2b',
+          'llama3.2:1b',
+          'functiongemma:270m',
+          'nomic-embed-text:v1.5',
+          'qwen2.5-coder:1.5b'
         ]
       }
     },

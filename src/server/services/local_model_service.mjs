@@ -3,10 +3,11 @@ import crypto from 'node:crypto';
 import { fetchOllamaModels } from '../../models/catalog.mjs';
 
 const DEFAULT_RECOMMENDED_MODELS = [
-  'gemma4:cpu',
-  'nomic-embed-text:latest',
-  'mxbai-embed-large:latest',
-  'all-minilm:latest'
+  'granite3.3:2b',
+  'llama3.2:1b',
+  'functiongemma:270m',
+  'nomic-embed-text:v1.5',
+  'qwen2.5-coder:1.5b'
 ];
 
 function sanitizeModelId(value = '') {
@@ -19,6 +20,10 @@ function sanitizeModelId(value = '') {
 function isAllowedSmallModel(modelId = '') {
   const id = String(modelId || '').trim().toLowerCase();
   if (!id) return false;
+  if (id === 'granite3.3:2b') return true;
+  if (id === 'llama3.2:1b') return true;
+  if (id === 'functiongemma:270m') return true;
+  if (id === 'qwen2.5-coder:1.5b') return true;
   if (id === 'gemma4:cpu' || id === 'gemma4:latest' || id === 'gemma4') return true;
   if (id.includes('embed')) return true;
   if (id.includes('nomic-embed')) return true;
