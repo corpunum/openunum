@@ -229,6 +229,29 @@
                 <label>Queue depth</label>
                 <input id="mbtQueueDepth" type="number" min="1" max="128" value="8" />
               </div>
+              <div class="field">
+                <label>Auto profile tuning</label>
+                <select id="mbtAutoTune">
+                  <option value="true">Enabled</option>
+                  <option value="false">Disabled</option>
+                </select>
+              </div>
+              <div class="field">
+                <label>Profile switch min samples</label>
+                <input id="mbtMinSamples" type="number" min="1" max="1000" value="6" />
+              </div>
+              <div class="field">
+                <label>Latency weight</label>
+                <input id="mbtLatencyWeight" type="number" min="0" max="1" step="0.05" value="0.35" />
+              </div>
+              <div class="field">
+                <label>Cost weight</label>
+                <input id="mbtCostWeight" type="number" min="0" max="1" step="0.05" value="0.25" />
+              </div>
+              <div class="field">
+                <label>Failure penalty</label>
+                <input id="mbtFailurePenalty" type="number" min="0" max="4" step="0.1" value="0.8" />
+              </div>
             </div>
             <div class="row" style="margin-top:10px;">
               <button class="primary" id="saveToolingRuntime">Save Tooling Runtime</button>

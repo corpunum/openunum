@@ -167,6 +167,11 @@ export function createConfigService({ config, PROVIDER_ORDER, reloadConfigSecret
       if (typeof source.exposeToController === 'boolean') next.exposeToController = source.exposeToController;
       if (Number.isFinite(source.localMaxConcurrency)) next.localMaxConcurrency = Number(source.localMaxConcurrency);
       if (Number.isFinite(source.queueDepth)) next.queueDepth = Number(source.queueDepth);
+      if (typeof source.autoProfileTuningEnabled === 'boolean') next.autoProfileTuningEnabled = source.autoProfileTuningEnabled;
+      if (Number.isFinite(source.profileSwitchMinSamples)) next.profileSwitchMinSamples = Number(source.profileSwitchMinSamples);
+      if (Number.isFinite(source.latencyWeight)) next.latencyWeight = Number(source.latencyWeight);
+      if (Number.isFinite(source.costWeight)) next.costWeight = Number(source.costWeight);
+      if (Number.isFinite(source.failurePenalty)) next.failurePenalty = Number(source.failurePenalty);
       if (source.tools && typeof source.tools === 'object') {
         const nextTools = { ...(next.tools || {}) };
         for (const [toolName, toolCfg] of Object.entries(source.tools)) {

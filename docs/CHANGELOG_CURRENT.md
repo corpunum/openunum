@@ -24,9 +24,23 @@ Date: 2026-04-09
   - runtime toggle controls for `runtime.modelBackedTools.*`
   - tool/skill inventory tables
   - local model rollout controls and download job table
+- Extended tooling UX to provider-vault style interactions:
+  - per-tool `Edit` modal for backend profile configuration
+  - per-tool `Test` execution from the same screen
+  - `Apply Core Defaults` action to seed baseline backend profiles and tuning values
+- Added adaptive backend tuning for model-backed tools:
+  - telemetry capture (per tool/profile success, latency, error, success-rate)
+  - optional auto-profile ordering by observed reliability/latency/cost penalties
+  - new runtime config keys:
+    - `runtime.modelBackedTools.autoProfileTuningEnabled`
+    - `runtime.modelBackedTools.profileSwitchMinSamples`
+    - `runtime.modelBackedTools.latencyWeight`
+    - `runtime.modelBackedTools.costWeight`
+    - `runtime.modelBackedTools.failurePenalty`
 - Added unit test coverage:
   - `tests/unit/runtime-route-tooling-inventory.test.mjs`
   - `tests/unit/model-route-local-downloads.test.mjs`
+  - `tests/unit/model-backed-telemetry.test.mjs`
 
 ## Chat + Search Reliability Hardening (2026-04-09)
 

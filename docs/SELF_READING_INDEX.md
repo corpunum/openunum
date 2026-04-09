@@ -20,7 +20,7 @@ Purpose: curated file map for autonomous code/docs self-reading and update workf
 
 - ✅ `src/secrets/store.mjs` (848 lines)
 - ✅ `docs/CONFIG_SCHEMA.md` (141 lines)
-- ✅ `docs/API_REFERENCE.md` (1078 lines)
+- ✅ `docs/API_REFERENCE.md` (1083 lines)
 
 ## Testing and Gates
 
@@ -35,5 +35,5 @@ Purpose: curated file map for autonomous code/docs self-reading and update workf
 - ✅ `BRAIN.MD` (192 lines)
 - ✅ `docs/AGENT_ONBOARDING.md` (82 lines)
 - ✅ `docs/ROADMAP.md` (165 lines)
-- ✅ `CHANGELOG.md` (856 lines)
+- ✅ `CHANGELOG.md` (882 lines)
 

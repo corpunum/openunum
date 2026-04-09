@@ -192,6 +192,11 @@ export function defaultConfig() {
         exposeToController: true,
         localMaxConcurrency: 1,
         queueDepth: 8,
+        autoProfileTuningEnabled: true,
+        profileSwitchMinSamples: 6,
+        latencyWeight: 0.35,
+        costWeight: 0.25,
+        failurePenalty: 0.8,
         tools: {
           summarize: {
             backendProfiles: [

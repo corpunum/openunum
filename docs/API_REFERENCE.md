@@ -438,9 +438,14 @@ Returns a WebUI-oriented flagship summary:
 
 `GET /api/runtime/tooling-inventory` returns:
 - effective tool catalog (with model-backed metadata)
+- complete discovered tool list (not only currently-allowed tools), with `allowedInCurrentEnvelope`
 - runtime model-backed tool config snapshot
 - skill inventory (`skill_list` projection)
 - local model rollout state (installed models, recommended allowlist, download jobs)
+
+Model-backed metadata includes:
+- `contractTemplate` (purpose, input schema, output schema, validation template)
+- `telemetry` (calls, success/failure, latency, success rate per backend profile)
 
 `GET /api/autonomy/insights` returns:
 - `sessionId`

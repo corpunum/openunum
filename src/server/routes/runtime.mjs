@@ -9,17 +9,43 @@ export async function handleRuntimeRoute({ req, res, url, ctx }) {
   };
 
   const modelBackedContracts = new Set(Object.keys(MODEL_BACKED_TOOL_CONTRACTS || {}));
+  const telemetrySnapshot = () => ctx.agent?.toolRuntime?.modelBackedRegistry?.telemetrySnapshot?.() || {};
+  const telemetryForTool = (toolName) => ctx.agent?.toolRuntime?.modelBackedRegistry?.telemetryForTool?.(toolName) || [];
 
-  function augmentToolCatalog(tools = []) {
+  function summarizeContract(contract = null) {
+    if (!contract) return null;
+    return {
+      name: contract.name,
+      purpose: contract.purpose,
+      inputSchema: contract.parameters || {},
+      outputSchema: contract.outputSchema || {},
+      sideEffects: contract.sideEffects || 'unknown',
+      resourceClass: contract.resourceClass || 'unknown',
+      template: {
+        validationRules: {
+          requiredDataFields: contract.outputSchema?.requiredDataFields || [],
+          confidenceMin: Number(contract.outputSchema?.confidenceMin || 0)
+        },
+        errorSemantics: ['backend_unavailable', 'resource_denied', 'validation_failed', 'backend_failed'],
+        fallbackRules: ['try_next_profile_on_failure', 'preserve_logical_tool_identity']
+      }
+    };
+  }
+
+  function augmentToolCatalog(tools = [], { allowedTools = null } = {}) {
     const mbt = ctx.config.runtime?.modelBackedTools || {};
     const enabled = mbt.enabled === true;
     const exposeToController = mbt.exposeToController !== false;
+    const allowSet = Array.isArray(allowedTools) && allowedTools.length
+      ? new Set(allowedTools.map((item) => String(item || '').trim()).filter(Boolean))
+      : null;
     return (tools || []).map((tool) => {
       const name = String(tool?.name || '').trim();
       const isContractTool = modelBackedContracts.has(name);
       const toolCfg = mbt.tools?.[name] || {};
       const configuredProfiles = Array.isArray(toolCfg.backendProfiles) ? toolCfg.backendProfiles : [];
       const effectiveProfiles = isContractTool ? resolveBackendProfiles(ctx.config, name) : [];
+      const contract = isContractTool ? summarizeContract(MODEL_BACKED_TOOL_CONTRACTS[name]) : null;
       return {
         ...tool,
         model_backed: {
@@ -27,8 +53,11 @@ export async function handleRuntimeRoute({ req, res, url, ctx }) {
           enabled: isContractTool && enabled,
           exposeToController: isContractTool && enabled && exposeToController,
           configuredProfiles,
-          effectiveProfiles
-        }
+          effectiveProfiles,
+          contractTemplate: contract,
+          telemetry: telemetryForTool(name)
+        },
+        allowedInCurrentEnvelope: allowSet ? allowSet.has(name) : true
       };
     });
   }
@@ -48,7 +77,7 @@ export async function handleRuntimeRoute({ req, res, url, ctx }) {
       contract_version: ctx.TOOL_CATALOG_CONTRACT_VERSION,
       enforce_profiles: ctx.config.runtime?.enforceModelExecutionProfiles !== false,
       allowed_tools: executionEnvelope.toolAllowlist || null,
-      tools: augmentToolCatalog(tools)
+      tools: augmentToolCatalog(tools, { allowedTools: executionEnvelope.toolAllowlist })
     });
   }
 
@@ -59,7 +88,8 @@ export async function handleRuntimeRoute({ req, res, url, ctx }) {
       runtime: ctx.config.runtime
     });
     const tools = augmentToolCatalog(
-      ctx.agent.toolRuntime.toolCatalog({ allowedTools: executionEnvelope.toolAllowlist })
+      ctx.agent.toolRuntime.toolCatalog({}),
+      { allowedTools: executionEnvelope.toolAllowlist }
     );
     let skills = [];
     try {
@@ -78,8 +108,17 @@ export async function handleRuntimeRoute({ req, res, url, ctx }) {
         exposeToController: ctx.config.runtime?.modelBackedTools?.exposeToController !== false,
         localMaxConcurrency: Number(ctx.config.runtime?.modelBackedTools?.localMaxConcurrency || 1),
         queueDepth: Number(ctx.config.runtime?.modelBackedTools?.queueDepth || 8),
+        autoProfileTuningEnabled: ctx.config.runtime?.modelBackedTools?.autoProfileTuningEnabled !== false,
+        profileSwitchMinSamples: Number(ctx.config.runtime?.modelBackedTools?.profileSwitchMinSamples || 6),
+        latencyWeight: Number(ctx.config.runtime?.modelBackedTools?.latencyWeight || 0.35),
+        costWeight: Number(ctx.config.runtime?.modelBackedTools?.costWeight || 0.25),
+        failurePenalty: Number(ctx.config.runtime?.modelBackedTools?.failurePenalty || 0.8),
         recommendedLocalModels: ctx.localModelService.recommendedLocalModels(),
-        tools: ctx.config.runtime?.modelBackedTools?.tools || {}
+        tools: ctx.config.runtime?.modelBackedTools?.tools || {},
+        contractTemplates: Object.fromEntries(
+          Object.entries(MODEL_BACKED_TOOL_CONTRACTS).map(([key, contract]) => [key, summarizeContract(contract)])
+        ),
+        telemetry: telemetrySnapshot()
       },
       tools,
       skills,

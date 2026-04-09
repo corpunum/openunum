@@ -4,6 +4,32 @@ All notable changes to OpenUnum are documented in this file.
 
 ---
 
+## [2.3.38] - 2026-04-09
+
+### Added
+- Single-screen Skills+Tools management improvements:
+  - Provider-Vault-style per-tool actions (`Edit`, `Test`) with a dedicated tool backend modal.
+  - Contract-template visibility in the modal (purpose, input/output requirements, validation semantics).
+  - Core-default seeding action for model-backed tools.
+- Adaptive backend selection for model-backed tools:
+  - new telemetry layer `src/tools/backends/telemetry.mjs`
+  - per-tool/profile success-rate + latency tracking
+  - optional auto-profile ordering based on reliability/latency/cost/failure penalties.
+- Unit coverage in `tests/unit/model-backed-telemetry.test.mjs`.
+
+### Changed
+- `/api/runtime/tooling-inventory` now returns full discovered tool inventory (not envelope-filtered), with `allowedInCurrentEnvelope`.
+- `/api/runtime/tooling-inventory` and `/api/tools/catalog` now include richer model-backed metadata (`contractTemplate`, `telemetry`).
+- Model-backed runtime config supports and persists:
+  - `autoProfileTuningEnabled`
+  - `profileSwitchMinSamples`
+  - `latencyWeight`
+  - `costWeight`
+  - `failurePenalty`
+- Local model rollout alias handling improved so `gemma4:cpu` maps safely to installed `gemma4:latest`.
+
+---
+
 ## [2.3.37] - 2026-04-09
 
 ### Added

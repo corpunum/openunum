@@ -49,7 +49,12 @@ export function createSettingsToolingController({
       enabled: mbt.enabled === true,
       exposeToController: mbt.exposeToController !== false,
       localMaxConcurrency: Number(mbt.localMaxConcurrency || 1),
-      queueDepth: Number(mbt.queueDepth || 8)
+      queueDepth: Number(mbt.queueDepth || 8),
+      autoProfileTuningEnabled: mbt.autoProfileTuningEnabled !== false,
+      profileSwitchMinSamples: Number(mbt.profileSwitchMinSamples || 6),
+      latencyWeight: Number(mbt.latencyWeight || 0.35),
+      costWeight: Number(mbt.costWeight || 0.25),
+      failurePenalty: Number(mbt.failurePenalty || 0.8)
     };
   }
 
@@ -84,6 +89,14 @@ export function createSettingsToolingController({
         : mbt.enabled
           ? badge('model-backed enabled', 'good')
           : badge('model-backed disabled', 'warn');
+      const telemetry = Array.isArray(mbt.telemetry) ? mbt.telemetry : [];
+      const lead = telemetry[0] || null;
+      const telemetryText = lead
+        ? `sr=${Math.round((Number(lead.successRate || 0) * 100))}% | lat=${Math.round(Number(lead.avgLatencyMs || 0))}ms | calls=${Number(lead.calls || 0)}`
+        : 'no runtime telemetry yet';
+      const envelopeBadge = tool.allowedInCurrentEnvelope
+        ? badge('allowed in current envelope', 'good')
+        : badge('blocked in current envelope', 'warn');
       const actions = mbt.contract
         ? `
           <button type="button" class="tooling-edit" data-tool="${escapeHtml(tool.name || '')}">Edit</button>
@@ -93,9 +106,9 @@ export function createSettingsToolingController({
       return `
         <tr>
           <td><span class="mono">${escapeHtml(tool.name || '')}</span></td>
-          <td>${status}</td>
+          <td>${status}<div style="margin-top:4px;">${envelopeBadge}</div></td>
           <td>${escapeHtml(tool.class || '-')}</td>
-          <td>${escapeHtml(buildToolSummary(tool))}</td>
+          <td>${escapeHtml(buildToolSummary(tool))}<div class="hint" style="margin-top:4px;">${escapeHtml(telemetryText)}</div></td>
           <td><div class="row compact-actions">${actions}</div></td>
         </tr>
       `;
@@ -187,6 +200,11 @@ export function createSettingsToolingController({
     if (q('mbtExpose')) q('mbtExpose').value = String(rs.exposeToController);
     if (q('mbtConcurrency')) q('mbtConcurrency').value = String(rs.localMaxConcurrency);
     if (q('mbtQueueDepth')) q('mbtQueueDepth').value = String(rs.queueDepth);
+    if (q('mbtAutoTune')) q('mbtAutoTune').value = String(rs.autoProfileTuningEnabled);
+    if (q('mbtMinSamples')) q('mbtMinSamples').value = String(rs.profileSwitchMinSamples);
+    if (q('mbtLatencyWeight')) q('mbtLatencyWeight').value = String(rs.latencyWeight);
+    if (q('mbtCostWeight')) q('mbtCostWeight').value = String(rs.costWeight);
+    if (q('mbtFailurePenalty')) q('mbtFailurePenalty').value = String(rs.failurePenalty);
   }
 
   function renderInventory() {
@@ -256,6 +274,12 @@ export function createSettingsToolingController({
         </div>
       </div>
       <div class="hint">Leave fallback provider/model empty to store only primary profile.</div>
+      <div class="soft-panel" style="margin-top:10px;">
+        <div class="section-title">Contract Template</div>
+        <div class="hint"><strong>Purpose:</strong> ${escapeHtml(inventory?.modelBackedTools?.contractTemplates?.[safeTool]?.purpose || '-')}</div>
+        <div class="hint"><strong>Required Output Fields:</strong> ${escapeHtml((inventory?.modelBackedTools?.contractTemplates?.[safeTool]?.outputSchema?.requiredDataFields || []).join(', ') || '-')}</div>
+        <div class="hint"><strong>Confidence Min:</strong> ${escapeHtml(String(inventory?.modelBackedTools?.contractTemplates?.[safeTool]?.outputSchema?.confidenceMin ?? '-'))}</div>
+      </div>
     `;
     modal.showModal();
   }
@@ -342,7 +366,12 @@ export function createSettingsToolingController({
           enabled: q('mbtEnabled')?.value === 'true',
           exposeToController: q('mbtExpose')?.value === 'true',
           localMaxConcurrency: Number.isFinite(localMaxConcurrency) ? localMaxConcurrency : 1,
-          queueDepth: Number.isFinite(queueDepth) ? queueDepth : 8
+          queueDepth: Number.isFinite(queueDepth) ? queueDepth : 8,
+          autoProfileTuningEnabled: q('mbtAutoTune')?.value === 'true',
+          profileSwitchMinSamples: Number(q('mbtMinSamples')?.value || 6),
+          latencyWeight: Number(q('mbtLatencyWeight')?.value || 0.35),
+          costWeight: Number(q('mbtCostWeight')?.value || 0.25),
+          failurePenalty: Number(q('mbtFailurePenalty')?.value || 0.8)
         }
       }
     });
@@ -363,6 +392,11 @@ export function createSettingsToolingController({
           exposeToController: true,
           localMaxConcurrency: 1,
           queueDepth: 8,
+          autoProfileTuningEnabled: true,
+          profileSwitchMinSamples: 6,
+          latencyWeight: 0.35,
+          costWeight: 0.25,
+          failurePenalty: 0.8,
           recommendedLocalModels: [
             'gemma4:cpu',
             'nomic-embed-text:latest',

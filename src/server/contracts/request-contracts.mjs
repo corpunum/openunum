@@ -130,11 +130,26 @@ export function validateConfigPatch(body, ctx = {}) {
               addTypeError(errors, `runtime.modelBackedTools.${key}`, 'boolean');
             }
           }
+          if (mbt.autoProfileTuningEnabled !== undefined && typeof mbt.autoProfileTuningEnabled !== 'boolean') {
+            addTypeError(errors, 'runtime.modelBackedTools.autoProfileTuningEnabled', 'boolean');
+          }
           if (mbt.localMaxConcurrency !== undefined && !inRange(mbt.localMaxConcurrency, 1, 8)) {
             addTypeError(errors, 'runtime.modelBackedTools.localMaxConcurrency', 'number in [1,8]');
           }
           if (mbt.queueDepth !== undefined && !inRange(mbt.queueDepth, 1, 128)) {
             addTypeError(errors, 'runtime.modelBackedTools.queueDepth', 'number in [1,128]');
+          }
+          if (mbt.profileSwitchMinSamples !== undefined && !inRange(mbt.profileSwitchMinSamples, 1, 1000)) {
+            addTypeError(errors, 'runtime.modelBackedTools.profileSwitchMinSamples', 'number in [1,1000]');
+          }
+          if (mbt.latencyWeight !== undefined && !inRange(mbt.latencyWeight, 0, 1)) {
+            addTypeError(errors, 'runtime.modelBackedTools.latencyWeight', 'number in [0,1]');
+          }
+          if (mbt.costWeight !== undefined && !inRange(mbt.costWeight, 0, 1)) {
+            addTypeError(errors, 'runtime.modelBackedTools.costWeight', 'number in [0,1]');
+          }
+          if (mbt.failurePenalty !== undefined && !inRange(mbt.failurePenalty, 0, 4)) {
+            addTypeError(errors, 'runtime.modelBackedTools.failurePenalty', 'number in [0,4]');
           }
           if (mbt.tools !== undefined) {
             if (!isPlainObject(mbt.tools)) {

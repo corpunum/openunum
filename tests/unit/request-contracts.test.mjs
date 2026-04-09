@@ -59,13 +59,15 @@ describe('request-contracts', () => {
       runtime: {
         modelBackedTools: {
           enabled: 'yes',
-          localMaxConcurrency: 0
+          localMaxConcurrency: 0,
+          latencyWeight: 2
         }
       }
     });
     expect(bad.ok).toBe(false);
     expect(bad.errors.some((e) => e.field === 'runtime.modelBackedTools.enabled')).toBe(true);
     expect(bad.errors.some((e) => e.field === 'runtime.modelBackedTools.localMaxConcurrency')).toBe(true);
+    expect(bad.errors.some((e) => e.field === 'runtime.modelBackedTools.latencyWeight')).toBe(true);
 
     const good = validateConfigPatch({
       runtime: {
@@ -74,6 +76,11 @@ describe('request-contracts', () => {
           exposeToController: true,
           localMaxConcurrency: 1,
           queueDepth: 8,
+          autoProfileTuningEnabled: true,
+          profileSwitchMinSamples: 6,
+          latencyWeight: 0.35,
+          costWeight: 0.25,
+          failurePenalty: 0.8,
           recommendedLocalModels: ['gemma4:cpu', 'nomic-embed-text:latest'],
           tools: {
             summarize: {

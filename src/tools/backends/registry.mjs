@@ -1,6 +1,7 @@
 import { buildModelBackedToolSchemas, MODEL_BACKED_TOOL_CONTRACTS, normalizeModelBackedOutput } from './contracts.mjs';
 import { resolveBackendProfiles } from './profiles.mjs';
 import { ModelBackedToolsGovernor } from './governor.mjs';
+import { ModelBackedToolsTelemetry } from './telemetry.mjs';
 import { executeModelJsonTool } from './adapters/model-json-tool.mjs';
 
 function isLocalProvider(provider) {
@@ -14,6 +15,7 @@ export class ModelBackedToolRegistry {
     this.enabled = config?.runtime?.modelBackedTools?.enabled === true;
     this.exposeToController = config?.runtime?.modelBackedTools?.exposeToController !== false;
     this.governor = new ModelBackedToolsGovernor(config);
+    this.telemetry = new ModelBackedToolsTelemetry(config);
   }
 
   isEnabled() {
@@ -32,13 +34,14 @@ export class ModelBackedToolRegistry {
     const name = String(toolName || '').trim();
     if (!this.has(name)) return { ok: false, error: 'model_backed_tool_not_enabled' };
 
-    const profiles = resolveBackendProfiles(this.config, name);
+    const profiles = this.telemetry.orderProfiles(name, resolveBackendProfiles(this.config, name));
     if (!profiles.length) {
       return { ok: false, error: 'backend_unavailable', details: `no backend profile configured for ${name}` };
     }
 
     let lastError = null;
     for (const profile of profiles) {
+      const start = Date.now();
       const run = async () => executeModelJsonTool({
         config: this.config,
         toolName: name,
@@ -49,8 +52,19 @@ export class ModelBackedToolRegistry {
         ? await this.governor.runLocal(run)
         : await run();
       if (out?.ok) {
-        return normalizeModelBackedOutput(name, out, profile);
+        const normalized = normalizeModelBackedOutput(name, out, profile);
+        this.telemetry.record(name, profile, {
+          ok: normalized?.ok === true,
+          latencyMs: Date.now() - start,
+          error: normalized?.error || ''
+        });
+        return normalized;
       }
+      this.telemetry.record(name, profile, {
+        ok: false,
+        latencyMs: Date.now() - start,
+        error: out?.error || 'backend_failed'
+      });
       lastError = out;
     }
 
@@ -61,9 +75,16 @@ export class ModelBackedToolRegistry {
       details: lastError?.details || null
     };
   }
+
+  telemetrySnapshot() {
+    return this.telemetry.snapshot();
+  }
+
+  telemetryForTool(toolName) {
+    return this.telemetry.getStatsForTool(toolName);
+  }
 }
 
 export function createModelBackedToolRegistry(config = {}) {
   return new ModelBackedToolRegistry(config);
 }
-
