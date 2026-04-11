@@ -382,7 +382,16 @@ function formatBytes(bytes) {
 function buildStatusAnswer({ executedTools = [], toolRuns = 0 }) {
   if (!(toolRuns > 0)) return '';
   const status = overallStatusFromTools(executedTools);
-  const recent = executedTools.slice(-4).map((run) => formatToolResultHuman(run));
+  const recentRaw = executedTools.slice(-8).map((run) => formatToolResultHuman(run));
+  const seen = new Set();
+  const recent = [];
+  for (const line of recentRaw) {
+    const key = String(line || '').trim().toLowerCase();
+    if (!key || seen.has(key)) continue;
+    seen.add(key);
+    recent.push(line);
+    if (recent.length >= 4) break;
+  }
   return [
     `Status: ${status}`,
     'Findings:',
@@ -395,14 +404,32 @@ function buildStepAnswer({ executedTools = [], toolRuns = 0 }) {
   const lines = ['Best next steps from current evidence:'];
   const failed = executedTools.filter((run) => run?.result?.ok === false);
   const succeeded = executedTools.filter((run) => run?.result?.ok);
+  const seen = new Set();
+  const pushUniqueStep = (line) => {
+    const key = String(line || '').trim().toLowerCase();
+    if (!key || seen.has(key)) return false;
+    seen.add(key);
+    lines.push(line);
+    return true;
+  };
   if (failed.length) {
-    for (const run of failed.slice(0, 3)) {
-      lines.push(`1. Resolve the blocked/failed tool path: \`${run.name}\` returned \`${clipText(run.result?.error || 'error', 80)}\`.`);
+    for (const run of failed.slice(0, 8)) {
+      const toolName = String(run?.name || 'tool');
+      const err = clipText(run?.result?.error || 'error', 80);
+      pushUniqueStep(`1. Resolve the blocked/failed tool path: \`${toolName}\` returned \`${err}\`.`);
+      if (lines.length >= 4) break;
     }
   } else if (succeeded.length) {
-    for (const run of succeeded.slice(0, 3)) {
-      lines.push(`1. Use the verified result from \`${run.name}\` as the next execution anchor.`);
+    for (const run of succeeded.slice(-10).reverse()) {
+      const toolName = String(run?.name || 'tool');
+      const pathHint = run?.result?.path ? ` at \`${clipText(run.result.path, 120)}\`` : '';
+      const urlHint = !pathHint && run?.result?.url ? ` from \`${clipText(run.result.url, 120)}\`` : '';
+      pushUniqueStep(`1. Use the verified result from \`${toolName}\`${pathHint || urlHint} as the next execution anchor.`);
+      if (lines.length >= 4) break;
     }
+  }
+  if (lines.length === 1) {
+    lines.push('1. Continue from the most recent verified tool output and avoid repeating the same route unchanged.');
   }
   return lines.join('\n');
 }

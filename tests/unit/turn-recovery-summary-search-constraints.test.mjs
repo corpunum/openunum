@@ -45,5 +45,34 @@ describe('turn recovery search constraints', () => {
     expect(out).toContain('| Rank | Candidate | Notes |');
     expect(out).toContain('owner/repo');
   });
-});
 
+  it('deduplicates repeated step suggestions for identical successful tools', () => {
+    const out = synthesizeToolOnlyAnswer({
+      userMessage: 'read your own code and tell me what will not work for you and how probably we can fix it',
+      toolRuns: 3,
+      executedTools: [
+        { name: 'file_read', result: { ok: true, path: '/home/corp-unum/openunum/src/core/agent.mjs' } },
+        { name: 'file_read', result: { ok: true, path: '/home/corp-unum/openunum/src/core/agent.mjs' } },
+        { name: 'file_read', result: { ok: true, path: '/home/corp-unum/openunum/src/core/agent.mjs' } }
+      ]
+    });
+    const repeatedLine = 'Use the verified result from `file_read` at `/home/corp-unum/openunum/src/core/agent.mjs` as the next execution anchor.';
+    const count = out.split(repeatedLine).length - 1;
+    expect(count).toBe(1);
+  });
+
+  it('deduplicates repeated status findings for identical tool outputs', () => {
+    const out = synthesizeToolOnlyAnswer({
+      userMessage: 'status update please',
+      toolRuns: 3,
+      executedTools: [
+        { name: 'shell_run', result: { ok: true, code: 0, stdout: 'ok' } },
+        { name: 'shell_run', result: { ok: true, code: 0, stdout: 'ok' } },
+        { name: 'shell_run', result: { ok: true, code: 0, stdout: 'ok' } }
+      ]
+    });
+    const line = 'shell_run: ✅ exit 0 — ok';
+    const count = out.split(line).length - 1;
+    expect(count).toBe(1);
+  });
+});
