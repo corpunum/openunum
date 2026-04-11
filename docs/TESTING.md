@@ -16,6 +16,7 @@ Comprehensive testing documentation for the OpenUnum project.
 | **Session Imitation** | `pnpm test:imitation` | Replays chat-session recovery patterns against self-monitor continuation logic |
 | **Docs Gate** | `pnpm docs:gate` | Fails when code changed without documentation updates |
 | **Docs Index Freshness** | `pnpm docs:index:check` | Fails when `docs/SELF_READING_INDEX.md` is stale vs generator output |
+| **Route Registry Freshness Gate** | `pnpm gate:route-registry-freshness` | Fails when `docs/ROUTE_REGISTRY.json` is stale vs active server route conditions |
 | **Compact Profile Gate** | `pnpm gate:compact-profile` | Enforces `phase0:check` when compact-profile/4B-sensitive surfaces changed |
 | **Packet Budget Gate** | `pnpm gate:packet-budget` | Fails when runtime/context packet budgets exceed configured limits |
 | **API Reference Parity Gate** | `pnpm gate:api-reference-parity` | Fails when endpoints documented in `docs/API_REFERENCE.md` are not implemented by active runtime route conditions |
@@ -165,6 +166,7 @@ pnpm test:smoke
 pnpm test:smoke:live
 pnpm test:imitation
 pnpm docs:index:check
+pnpm gate:route-registry-freshness
 pnpm gate:compact-profile
 pnpm gate:packet-budget
 pnpm gate:api-reference-parity

@@ -2,6 +2,22 @@
 
 Date: 2026-04-09
 
+## Route Registry + Drift Guard (2026-04-11)
+
+**Status:** ✅ Implemented and verify-gated
+
+- Added shared route-surface parser:
+  - `scripts/lib/route-surface.mjs`
+  - reused by docs/runtime parity gate and registry generation
+- Added canonical generated route inventory:
+  - `pnpm docs:route-registry`
+  - output file: `docs/ROUTE_REGISTRY.json`
+- Added route-registry freshness gate:
+  - `pnpm gate:route-registry-freshness`
+  - fails when registry JSON is stale against active runtime route conditions
+- Wired freshness gate into canonical `pnpm verify`
+- Refactored `scripts/api-reference-parity-gate.mjs` to use shared parser library
+
 ## API/Runtime Parity Hardening (2026-04-11)
 
 **Status:** ✅ Implemented and verify-gated
