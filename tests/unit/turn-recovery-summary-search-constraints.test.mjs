@@ -1,5 +1,9 @@
 import { describe, it, expect } from 'vitest';
-import { synthesizeToolOnlyAnswer } from '../../src/core/turn-recovery-summary.mjs';
+import {
+  getTurnRecoverySummaryMetrics,
+  resetTurnRecoverySummaryMetrics,
+  synthesizeToolOnlyAnswer
+} from '../../src/core/turn-recovery-summary.mjs';
 
 describe('turn recovery search constraints', () => {
   it('fails closed when strict repo/date constraints are not evidenced', () => {
@@ -47,6 +51,7 @@ describe('turn recovery search constraints', () => {
   });
 
   it('deduplicates repeated step suggestions for identical successful tools', () => {
+    resetTurnRecoverySummaryMetrics();
     const out = synthesizeToolOnlyAnswer({
       userMessage: 'read your own code and tell me what will not work for you and how probably we can fix it',
       toolRuns: 3,
@@ -59,9 +64,12 @@ describe('turn recovery search constraints', () => {
     const repeatedLine = 'Use the verified result from `file_read` at `/home/corp-unum/openunum/src/core/agent.mjs` as the next execution anchor.';
     const count = out.split(repeatedLine).length - 1;
     expect(count).toBe(1);
+    const metrics = getTurnRecoverySummaryMetrics();
+    expect(metrics.stepDedupeDrops).toBeGreaterThan(0);
   });
 
   it('deduplicates repeated status findings for identical tool outputs', () => {
+    resetTurnRecoverySummaryMetrics();
     const out = synthesizeToolOnlyAnswer({
       userMessage: 'status update please',
       toolRuns: 3,
@@ -74,5 +82,27 @@ describe('turn recovery search constraints', () => {
     const line = 'shell_run: ✅ exit 0 — ok';
     const count = out.split(line).length - 1;
     expect(count).toBe(1);
+    const metrics = getTurnRecoverySummaryMetrics();
+    expect(metrics.statusDedupeDrops).toBeGreaterThan(0);
+  });
+
+  it('caps status findings and records cap drops for high-surface runs', () => {
+    resetTurnRecoverySummaryMetrics();
+    const executedTools = Array.from({ length: 10 }, (_, idx) => ({
+      name: `tool_${idx + 1}`,
+      result: { ok: true }
+    }));
+    const out = synthesizeToolOnlyAnswer({
+      userMessage: 'status report',
+      toolRuns: executedTools.length,
+      executedTools
+    });
+    const findingsCount = out
+      .split('\n')
+      .filter((line) => /^tool_\d+:/.test(line.trim()))
+      .length;
+    expect(findingsCount).toBe(6);
+    const metrics = getTurnRecoverySummaryMetrics();
+    expect(metrics.statusLineCapDrops).toBeGreaterThan(0);
   });
 });

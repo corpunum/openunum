@@ -1,5 +1,20 @@
 import { getDatasetKnowledge, scoreDatasetWithKnowledgeBoost } from './dataset-knowledge.mjs';
 
+const recoverySummaryMetrics = {
+  statusDedupeDrops: 0,
+  stepDedupeDrops: 0,
+  statusLineCapDrops: 0,
+  stepLineCapDrops: 0,
+  bodyTruncations: 0,
+  lastBodyLimit: 0
+};
+
+function clampInt(value, min, max) {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return min;
+  return Math.min(max, Math.max(min, Math.round(n)));
+}
+
 function clipText(text, maxChars = 1200) {
   const clean = String(text || '').trim();
   if (clean.length <= maxChars) return clean;
@@ -379,19 +394,54 @@ function formatBytes(bytes) {
   return `${(bytes / (1024 * 1024)).toFixed(1)}MB`;
 }
 
-function buildStatusAnswer({ executedTools = [], toolRuns = 0 }) {
+function countUniqueToolSurfaces(executedTools = []) {
+  const surfaces = new Set();
+  for (const run of executedTools) {
+    const name = String(run?.name || '').trim().toLowerCase();
+    if (!name) continue;
+    const path = String(run?.result?.path || run?.result?.outPath || '').trim().toLowerCase();
+    const url = String(run?.result?.url || '').trim().toLowerCase();
+    const status = Number.isFinite(run?.result?.status) ? String(run.result.status) : '';
+    surfaces.add(`${name}|${path || url || status}`);
+  }
+  return Math.max(0, surfaces.size);
+}
+
+function getAdaptiveLineCap(uniqueSurfaceCount = 0, base = 2, max = 6) {
+  return clampInt(base + Math.max(0, Number(uniqueSurfaceCount) || 0), base, max);
+}
+
+function capSynthesisBody(body = '', uniqueSurfaceCount = 0) {
+  const text = String(body || '').trim();
+  if (!text) return '';
+  const limit = clampInt(1800 + (Math.max(1, Number(uniqueSurfaceCount) || 1) * 180), 1800, 5200);
+  recoverySummaryMetrics.lastBodyLimit = limit;
+  if (text.length <= limit) return text;
+  recoverySummaryMetrics.bodyTruncations += 1;
+  return `${clipText(text, limit - 48)}\n[recovery summary truncated for brevity]`;
+}
+
+function buildStatusAnswer({ executedTools = [], toolRuns = 0, uniqueSurfaceCount = 0 }) {
   if (!(toolRuns > 0)) return '';
   const status = overallStatusFromTools(executedTools);
   const recentRaw = executedTools.slice(-8).map((run) => formatToolResultHuman(run));
   const seen = new Set();
-  const recent = [];
+  const uniqueRecent = [];
+  let dedupeDrops = 0;
   for (const line of recentRaw) {
     const key = String(line || '').trim().toLowerCase();
-    if (!key || seen.has(key)) continue;
+    if (!key) continue;
+    if (seen.has(key)) {
+      dedupeDrops += 1;
+      continue;
+    }
     seen.add(key);
-    recent.push(line);
-    if (recent.length >= 4) break;
+    uniqueRecent.push(line);
   }
+  recoverySummaryMetrics.statusDedupeDrops += dedupeDrops;
+  const lineCap = getAdaptiveLineCap(uniqueSurfaceCount, 2, 6);
+  const recent = uniqueRecent.slice(0, lineCap);
+  recoverySummaryMetrics.statusLineCapDrops += Math.max(0, uniqueRecent.length - recent.length);
   return [
     `Status: ${status}`,
     'Findings:',
@@ -399,15 +449,21 @@ function buildStatusAnswer({ executedTools = [], toolRuns = 0 }) {
   ].join('\n');
 }
 
-function buildStepAnswer({ executedTools = [], toolRuns = 0 }) {
+function buildStepAnswer({ executedTools = [], toolRuns = 0, uniqueSurfaceCount = 0 }) {
   if (!(toolRuns > 0)) return '';
   const lines = ['Best next steps from current evidence:'];
+  const maxSteps = getAdaptiveLineCap(uniqueSurfaceCount, 2, 6);
+  let dedupeDrops = 0;
   const failed = executedTools.filter((run) => run?.result?.ok === false);
   const succeeded = executedTools.filter((run) => run?.result?.ok);
   const seen = new Set();
   const pushUniqueStep = (line) => {
     const key = String(line || '').trim().toLowerCase();
-    if (!key || seen.has(key)) return false;
+    if (!key) return false;
+    if (seen.has(key)) {
+      dedupeDrops += 1;
+      return false;
+    }
     seen.add(key);
     lines.push(line);
     return true;
@@ -417,7 +473,7 @@ function buildStepAnswer({ executedTools = [], toolRuns = 0 }) {
       const toolName = String(run?.name || 'tool');
       const err = clipText(run?.result?.error || 'error', 80);
       pushUniqueStep(`1. Resolve the blocked/failed tool path: \`${toolName}\` returned \`${err}\`.`);
-      if (lines.length >= 4) break;
+      if (lines.length > maxSteps) break;
     }
   } else if (succeeded.length) {
     for (const run of succeeded.slice(-10).reverse()) {
@@ -425,9 +481,12 @@ function buildStepAnswer({ executedTools = [], toolRuns = 0 }) {
       const pathHint = run?.result?.path ? ` at \`${clipText(run.result.path, 120)}\`` : '';
       const urlHint = !pathHint && run?.result?.url ? ` from \`${clipText(run.result.url, 120)}\`` : '';
       pushUniqueStep(`1. Use the verified result from \`${toolName}\`${pathHint || urlHint} as the next execution anchor.`);
-      if (lines.length >= 4) break;
+      if (lines.length > maxSteps) break;
     }
   }
+  recoverySummaryMetrics.stepDedupeDrops += dedupeDrops;
+  recoverySummaryMetrics.stepLineCapDrops += Math.max(0, Math.max(0, lines.length - 1) - maxSteps);
+  if (lines.length > (maxSteps + 1)) lines.splice(maxSteps + 1);
   if (lines.length === 1) {
     lines.push('1. Continue from the most recent verified tool output and avoid repeating the same route unchanged.');
   }
@@ -534,6 +593,7 @@ function buildWebSearchRankingAnswer({ userMessage = '', executedTools = [] }) {
 }
 
 function buildGenericToolSummary({ executedTools = [], toolRuns = 0, requirements = null }) {
+  const uniqueSurfaceCount = countUniqueToolSurfaces(executedTools);
   if (requirements?.asksRanking || requirements?.asksResearch || requirements?.asksComparison || requirements?.asksTable) {
     const ranked = buildWebSearchRankingAnswer({
       userMessage: requirements?.originalUserMessage || '',
@@ -545,9 +605,9 @@ function buildGenericToolSummary({ executedTools = [], toolRuns = 0, requirement
     const research = buildDatasetResearchAnswer({ userMessage: requirements.originalUserMessage || '', executedTools });
     if (research) return research;
   }
-  if (requirements?.asksSteps) return buildStepAnswer({ executedTools, toolRuns });
-  if (requirements?.asksStatus) return buildStatusAnswer({ executedTools, toolRuns });
-  return buildStatusAnswer({ executedTools, toolRuns });
+  if (requirements?.asksSteps) return buildStepAnswer({ executedTools, toolRuns, uniqueSurfaceCount });
+  if (requirements?.asksStatus) return buildStatusAnswer({ executedTools, toolRuns, uniqueSurfaceCount });
+  return buildStatusAnswer({ executedTools, toolRuns, uniqueSurfaceCount });
 }
 
 function buildProvenanceFooter({ executedTools = [], synthesized = false }) {
@@ -562,8 +622,22 @@ export function synthesizeToolOnlyAnswer({ userMessage = '', executedTools = [],
   const body = buildModelRankingAnswer({ userMessage, executedTools }) ||
     buildGenericToolSummary({ executedTools, toolRuns, requirements }) ||
     '';
-  if (!body) return '';
-  return `${body}\n${buildProvenanceFooter({ executedTools, synthesized: true })}`.trim();
+  const cappedBody = capSynthesisBody(body, countUniqueToolSurfaces(executedTools));
+  if (!cappedBody) return '';
+  return `${cappedBody}\n${buildProvenanceFooter({ executedTools, synthesized: true })}`.trim();
+}
+
+export function getTurnRecoverySummaryMetrics() {
+  return { ...recoverySummaryMetrics };
+}
+
+export function resetTurnRecoverySummaryMetrics() {
+  recoverySummaryMetrics.statusDedupeDrops = 0;
+  recoverySummaryMetrics.stepDedupeDrops = 0;
+  recoverySummaryMetrics.statusLineCapDrops = 0;
+  recoverySummaryMetrics.stepLineCapDrops = 0;
+  recoverySummaryMetrics.bodyTruncations = 0;
+  recoverySummaryMetrics.lastBodyLimit = 0;
 }
 
 export function classifyAnswerShape(finalText = '') {
