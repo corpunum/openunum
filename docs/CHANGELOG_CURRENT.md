@@ -2,6 +2,20 @@
 
 Date: 2026-04-09
 
+## API/Runtime Parity Hardening (2026-04-11)
+
+**Status:** ✅ Implemented and verify-gated
+
+- Added strict API reference parity gate:
+  - `scripts/api-reference-parity-gate.mjs`
+  - validates every documented endpoint in `docs/API_REFERENCE.md` maps to active runtime route conditions
+  - supports exact path conditions and dynamic prefix route conditions (`startsWith(...)`)
+- Wired new gate into canonical validation:
+  - `pnpm gate:api-reference-parity`
+  - included in `pnpm verify`
+- Updated testing documentation:
+  - `docs/TESTING.md` now lists the parity gate and command usage
+
 ## Operational Hardening Rollout Surface (2026-04-09)
 
 **Status:** ✅ Implemented and test-gated

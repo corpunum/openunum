@@ -18,6 +18,7 @@ Comprehensive testing documentation for the OpenUnum project.
 | **Docs Index Freshness** | `pnpm docs:index:check` | Fails when `docs/SELF_READING_INDEX.md` is stale vs generator output |
 | **Compact Profile Gate** | `pnpm gate:compact-profile` | Enforces `phase0:check` when compact-profile/4B-sensitive surfaces changed |
 | **Packet Budget Gate** | `pnpm gate:packet-budget` | Fails when runtime/context packet budgets exceed configured limits |
+| **API Reference Parity Gate** | `pnpm gate:api-reference-parity` | Fails when endpoints documented in `docs/API_REFERENCE.md` are not implemented by active runtime route conditions |
 | **Runtime Surface Contract Gate** | `pnpm gate:runtime-surface-contract` | Fails when new server API literals are missing from `docs/API_REFERENCE.md` |
 | **Route Wiring Gate** | `pnpm gate:route-wiring` | Fails when any `src/server/routes/*.mjs` module is not both imported and invoked by `src/server.mjs` |
 | **UI Surface Gate** | `pnpm gate:ui-surface` | Fails when active UI file set under `src/ui/` diverges from canonical modular set (`index.html`, `styles.css`, `app.js`) |
@@ -166,6 +167,7 @@ pnpm test:imitation
 pnpm docs:index:check
 pnpm gate:compact-profile
 pnpm gate:packet-budget
+pnpm gate:api-reference-parity
 pnpm gate:runtime-surface-contract
 pnpm gate:route-wiring
 pnpm gate:ui-surface
