@@ -2,14 +2,13 @@
 
 Config path:
 - default: `~/.openunum/openunum.json`
-- override: `$OPENUNUM_HOME/openunum.json`
+- override root: `$OPENUNUM_HOME/openunum.json`
 
-Secret store path:
-- plaintext backend: `~/.openunum/secrets.json`
-- passphrase backend: `~/.openunum/secrets.enc.json`
-- override root: `$OPENUNUM_HOME/*`
+Secret store paths:
+- plaintext: `~/.openunum/secrets.json`
+- encrypted: `~/.openunum/secrets.enc.json`
 
-## Schema (Current)
+## Current Example
 
 ```json
 {
@@ -28,42 +27,49 @@ Secret store path:
     "executorRetryBackoffMs": 700,
     "providerRequestTimeoutMs": 120000,
     "agentTurnTimeoutMs": 420000,
-    "autonomyMode": "standard",
+    "autonomyMode": "autonomy-first",
     "missionDefaultContinueUntilDone": true,
     "missionDefaultHardStepCap": 120,
     "missionDefaultMaxRetries": 3,
     "missionDefaultIntervalMs": 400,
+    "gitOverviewCacheTtlMs": 15000,
     "modelBackedTools": {
       "enabled": false,
       "exposeToController": true,
       "localMaxConcurrency": 1,
       "queueDepth": 8,
+      "autoProfileTuningEnabled": true,
+      "profileSwitchMinSamples": 6,
+      "latencyWeight": 0.35,
+      "costWeight": 0.25,
+      "failurePenalty": 0.8,
+      "recommendedLocalModels": [
+        "gemma4:cpu",
+        "nomic-embed-text:v1.5"
+      ],
       "tools": {
-        "summarize": {
-          "backendProfiles": []
-        },
-        "classify": {
-          "backendProfiles": []
-        },
-        "extract": {
-          "backendProfiles": []
-        }
+        "summarize": { "backendProfiles": [] },
+        "classify": { "backendProfiles": [] },
+        "extract": { "backendProfiles": [] },
+        "parse_function_args": { "backendProfiles": [] },
+        "embed_text": { "backendProfiles": [] }
       }
     }
   },
   "model": {
-    "provider": "ollama",
-    "model": "ollama/minimax-m2.7:cloud",
+    "provider": "ollama-cloud",
+    "model": "ollama-cloud/qwen3.5:397b-cloud",
     "providerModels": {
-      "ollama": "ollama/minimax-m2.7:cloud",
-      "openrouter": "openrouter/openai/gpt-4o-mini",
+      "ollama-local": "ollama-local/gemma4:cpu",
+      "ollama-cloud": "ollama-cloud/qwen3.5:397b-cloud",
       "nvidia": "nvidia/qwen/qwen3-coder-480b-a35b-instruct",
+      "openrouter": "openrouter/openai/gpt-4o-mini",
       "xiaomimimo": "xiaomimimo/gpt-4o-mini",
       "openai": "openai/gpt-4o-mini"
     },
     "routing": {
       "fallbackEnabled": true,
-      "fallbackProviders": ["ollama", "nvidia", "openrouter", "xiaomimimo", "openai"],
+      "fallbackProviders": ["ollama-cloud", "nvidia", "openrouter", "xiaomimimo", "openai"],
       "forcePrimaryProvider": false
     },
     "behaviorOverrides": {},
@@ -73,12 +79,7 @@ Secret store path:
     "xiaomimimoBaseUrl": "https://token-plan-ams.xiaomimimo.com/v1",
     "xiaomimimoAnthropicBaseUrl": "https://token-plan-ams.xiaomimimo.com/anthropic",
     "openaiBaseUrl": "https://api.openai.com/v1",
-    "genericBaseUrl": "https://api.openai.com/v1",
-    "openrouterApiKey": "",
-    "nvidiaApiKey": "",
-    "xiaomimimoApiKey": "",
-    "openaiApiKey": "",
-    "genericApiKey": ""
+    "genericBaseUrl": "https://api.openai.com/v1"
   },
   "channels": {
     "telegram": {
@@ -89,52 +90,26 @@ Secret store path:
 }
 ```
 
-## Secret Store
+## Important Runtime Notes
 
-Provider and integration credentials are stored separately from `openunum.json`.
+- `GET /api/config` returns sanitized config only.
+- Provider readiness and auth state live behind:
+  - `GET /api/providers/config`
+  - `GET /api/auth/catalog`
+- Mission payload guardrails are enforced at request-validation time:
+  - `maxSteps`: `1..120`
+  - `hardStepCap`: `1..300`
+  - `maxRetries`: `0..20`
+- `autonomyMode` values are:
+  - `autonomy-first`
+  - `compact-local`
+  - `relentless`
+- `runtime.modelBackedTools.*` configures logical local-model-backed tools without changing the main controller/tool-call loop structure.
 
-Default backend is plaintext (`secrets.json`, mode `0600`).
+## Secret Backend
 
-Optional passphrase backend:
-- set `OPENUNUM_SECRETS_BACKEND=passphrase`
-- set `OPENUNUM_SECRETS_PASSPHRASE=<strong passphrase>`
-- store writes encrypted envelope to `secrets.enc.json` (AES-256-GCM + scrypt)
-- plaintext file is removed after encrypted save (unless `OPENUNUM_SECRETS_KEEP_PLAINTEXT=1`)
+Optional encrypted backend:
+- `OPENUNUM_SECRETS_BACKEND=passphrase`
+- `OPENUNUM_SECRETS_PASSPHRASE=<strong passphrase>`
 
-Plaintext format:
-
-```json
-{
-  "contract_version": "2026-04-01.secret-store.v1",
-  "updated_at": "2026-04-01T12:00:00.000Z",
-  "secrets": {
-    "openrouterApiKey": "",
-    "nvidiaApiKey": "",
-    "openaiApiKey": "",
-    "openaiOauthToken": "",
-    "githubToken": "",
-    "copilotGithubToken": "",
-    "huggingfaceApiKey": "",
-    "elevenlabsApiKey": "",
-    "telegramBotToken": ""
-  }
-}
-```
-
-Both `secrets.json` and `secrets.enc.json` are written with file mode `0600`.
-
-## Notes
-
-- `src/config.mjs` applies defaults with `withDefaults(...)` to keep backward compatibility.
-- `src/config.mjs` migrates legacy provider and Telegram secrets out of `openunum.json` into `secrets.json` on load.
-- `GET /api/config` returns sanitized config only; use `GET /api/providers/config` for `has*ApiKey` booleans and `GET /api/auth/catalog` for redacted auth status.
-- `model.behaviorOverrides` can pin behavior classes/tuning per provider (`"ollama"`) or exact provider-model key (`"ollama::ollama/qwen3.5:9b-64k"`).
-- Behavior overrides and learned behavior resets can be managed via:
-  - `GET /api/controller/behavior-classes`
-  - `POST /api/controller/behavior/override`
-  - `POST /api/controller/behavior/override/remove`
-  - `POST /api/controller/behavior/reset`
-  - `POST /api/controller/behavior/reset-all`
-- New fields should always be added to defaults + merged in `withDefaults(...)`.
-- Runtime/API updates should call `agent.reloadTools()` when tool behavior may change.
-- `runtime.modelBackedTools.*` controls logical model-backed tools (`summarize`, `classify`) while keeping the normal controller/tool-call loop unchanged.
+OpenUnum will write encrypted envelope data to `secrets.enc.json` and keep secret-bearing fields out of the main config file.

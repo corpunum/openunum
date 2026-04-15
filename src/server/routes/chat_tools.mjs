@@ -1,8 +1,15 @@
+import crypto from 'node:crypto';
 import { getTaskOrchestrator } from '../../core/autonomy-registry.mjs';
 import { ensureObjectPayload, validateChatRequest } from '../contracts/request-contracts.mjs';
 
 function isPlainObject(value) {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
+}
+
+function ageMsFromIso(value) {
+  const ts = Date.parse(String(value || ''));
+  if (!Number.isFinite(ts)) return null;
+  return Math.max(0, Date.now() - ts);
 }
 
 function summarizeTaskReply(task) {
@@ -57,11 +64,16 @@ export async function handleChatToolsRoute({ req, res, url, ctx }) {
 
     const existing = ctx.pendingChats.get(sessionId);
     if (existing) {
+      const ageMs = ageMsFromIso(existing.startedAt);
       ctx.sendJson(res, 202, {
         ok: true,
         pending: true,
         sessionId,
         startedAt: existing.startedAt,
+        turnId: existing.turnId,
+        ageMs,
+        hardTimeoutMs: ctx.chatRuntime?.hardTimeoutMs || null,
+        timeoutHeadroomMs: ageMs == null ? null : Math.max(0, Number(ctx.chatRuntime?.hardTimeoutMs || 0) - ageMs),
         note: 'chat_already_running_for_session'
       });
       return true;
@@ -77,11 +89,16 @@ export async function handleChatToolsRoute({ req, res, url, ctx }) {
       ctx.agent.memoryStore?.addMessage(sessionId, 'user', message);
       const existingAuto = ctx.pendingChats.get(sessionId);
       if (existingAuto) {
+        const ageMs = ageMsFromIso(existingAuto.startedAt);
         ctx.sendJson(res, 202, {
           ok: true,
           pending: true,
           sessionId,
           startedAt: existingAuto.startedAt,
+          turnId: existingAuto.turnId,
+          ageMs,
+          hardTimeoutMs: ctx.chatRuntime?.hardTimeoutMs || null,
+          timeoutHeadroomMs: ageMs == null ? null : Math.max(0, Number(ctx.chatRuntime?.hardTimeoutMs || 0) - ageMs),
           note: 'chat_already_running_for_session'
         });
         return true;
@@ -107,18 +124,24 @@ export async function handleChatToolsRoute({ req, res, url, ctx }) {
         .finally(() => {
           ctx.pendingChats.delete(sessionId);
         });
-      ctx.pendingChats.set(sessionId, { sessionId, message, startedAt, promise });
+      const turnId = crypto.randomUUID();
+      ctx.pendingChats.set(sessionId, { sessionId, message, startedAt, turnId, promise });
       try {
         const out = await ctx.withTimeout(promise, 20 * 1000, 'chat_timeout');
         ctx.sendJson(res, 200, { ...out, replyHtml: ctx.renderReplyHtml(out.reply) });
         return true;
       } catch (error) {
         if (String(error.message || error) === 'chat_timeout') {
+          const ageMs = ageMsFromIso(startedAt);
           ctx.sendJson(res, 202, {
             ok: true,
             pending: true,
             sessionId,
             startedAt,
+            turnId,
+            ageMs,
+            hardTimeoutMs: ctx.chatRuntime?.hardTimeoutMs || null,
+            timeoutHeadroomMs: ageMs == null ? null : Math.max(0, Number(ctx.chatRuntime?.hardTimeoutMs || 0) - ageMs),
             note: 'chat_still_running'
           });
           return true;
@@ -143,11 +166,16 @@ export async function handleChatToolsRoute({ req, res, url, ctx }) {
       return true;
     } catch (error) {
       if (String(error.message || error) === 'chat_timeout') {
+        const ageMs = ageMsFromIso(entry.startedAt);
         ctx.sendJson(res, 202, {
           ok: true,
           pending: true,
           sessionId,
           startedAt: entry.startedAt,
+          turnId: entry.turnId,
+          ageMs,
+          hardTimeoutMs: ctx.chatRuntime?.hardTimeoutMs || null,
+          timeoutHeadroomMs: ageMs == null ? null : Math.max(0, Number(ctx.chatRuntime?.hardTimeoutMs || 0) - ageMs),
           note: 'chat_still_running'
         });
         return true;
@@ -179,18 +207,35 @@ export async function handleChatToolsRoute({ req, res, url, ctx }) {
       ctx.sendJson(res, 200, { ok: true, pending: false, sessionId });
       return true;
     }
+    const ageMs = ageMsFromIso(existing.startedAt);
     ctx.sendJson(res, 200, {
       ok: true,
       pending: true,
       sessionId,
-      startedAt: existing.startedAt
+      startedAt: existing.startedAt,
+      turnId: existing.turnId,
+      ageMs,
+      hardTimeoutMs: ctx.chatRuntime?.hardTimeoutMs || null,
+      timeoutHeadroomMs: ageMs == null ? null : Math.max(0, Number(ctx.chatRuntime?.hardTimeoutMs || 0) - ageMs),
+      diagnostics: existing?.telemetry || null
     });
+    return true;
+  }
+
+  if (req.method === 'GET' && url.pathname === '/api/chat/diagnostics') {
+    const includeCompleted = String(url.searchParams.get('includeCompleted') || '').trim() === '1';
+    const limit = Number(url.searchParams.get('limit') || 80);
+    const out = ctx.chatRuntime?.getPendingDiagnostics
+      ? ctx.chatRuntime.getPendingDiagnostics({ includeCompleted, limit })
+      : { ok: false, error: 'chat_runtime_diagnostics_unavailable' };
+    ctx.sendJson(res, out.ok ? 200 : 500, out);
     return true;
   }
 
   if (req.method === 'GET' && url.pathname === '/api/chat/stream') {
     const sessionId = String(url.searchParams.get('sessionId') || '').trim();
     const since = String(url.searchParams.get('since') || '').trim();
+    const turnId = String(url.searchParams.get('turnId') || '').trim();
     if (!sessionId) {
       ctx.sendJson(res, 400, { error: 'sessionId is required' });
       return true;
@@ -226,6 +271,9 @@ export async function handleChatToolsRoute({ req, res, url, ctx }) {
     const readSnapshot = () => {
       const pending = ctx.pendingChats.get(sessionId);
       const startedAt = pending?.startedAt || null;
+      const completed = !pending
+        ? ctx.chatRuntime?.getCompletedChat?.(sessionId, { consume: false })
+        : null;
       const toolRuns = typeof ctx.memory.getToolRunsSince === 'function'
         ? ctx.memory.getToolRunsSince(sessionId, since, 80)
         : [];
@@ -235,14 +283,23 @@ export async function handleChatToolsRoute({ req, res, url, ctx }) {
           html: m.role === 'assistant' ? ctx.renderReplyHtml(m.content || '') : null
         }))
         : [];
-      const done = !pending && messages.some((m) => m.role === 'assistant');
+      const matchingTurnCompleted = completed && (!turnId || completed.turnId === turnId);
+      const done = Boolean(matchingTurnCompleted) || (!pending && messages.some((m) => m.role === 'assistant'));
       return {
         ok: true,
         sessionId,
         pending: Boolean(pending),
         startedAt,
+        ageMs: ageMsFromIso(startedAt),
+        turnId: pending?.turnId || completed?.turnId || turnId || null,
         toolRuns,
         messages,
+        completed: matchingTurnCompleted
+          ? {
+            ...completed,
+            replyHtml: completed?.reply ? ctx.renderReplyHtml(completed.reply) : null
+          }
+          : null,
         done,
         ts: new Date().toISOString()
       };

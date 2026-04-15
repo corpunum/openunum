@@ -1,0 +1,23 @@
+{
+  "generated": "2026-04-14T01:45:54Z",
+  "local": {
+    "provider": "ollama",
+    "endpoint": "http://localhost:11434",
+    "models": [
+      {
+        "name": "qwen2.5-coder:1.5b",
+        "status": "available"
+      }
+    ]
+  },
+  "cloud": {
+    "provider": "openrouter",
+    "freeModels": [
+      {
+        "id": "openrouter/elephant-alpha",
+        "status": "available"
+      }
+    ]
+  },
+  "validated": true
+}

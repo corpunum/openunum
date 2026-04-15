@@ -17,8 +17,8 @@ export function createUiShellActions({
       btn.addEventListener('click', () => showView(btn.dataset.view));
     });
 
-    q('vaultEditCloseTop').onclick = closeVaultModal;
-    q('vaultEditClose').onclick = closeVaultModal;
+    q('vaultEditCloseTop').onclick = () => closeVaultModal();
+    q('vaultEditClose').onclick = () => closeVaultModal();
 
     q('vaultEditSave').onclick = () => saveVaultModal().catch((err) => {
       setStatus('providerStatus', `vault save failed: ${String(err.message || err)}`, { type: 'error', title: 'Vault' });

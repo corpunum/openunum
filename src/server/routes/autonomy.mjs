@@ -1,3 +1,6 @@
+import fs from 'node:fs';
+import path from 'node:path';
+import { getHomeDir } from '../../config.mjs';
 import {
   getWorkerOrchestrator,
   getSelfEditPipeline,
@@ -11,10 +14,43 @@ function isPlainObject(value) {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
 }
 
+function readAutonomyCycleSnapshot() {
+  try {
+    const filePath = path.join(getHomeDir(), 'autonomy-cycle-last.json');
+    if (!fs.existsSync(filePath)) {
+      return {
+        ok: true,
+        available: false,
+        filePath,
+        message: 'No scheduled autonomy cycle snapshot found yet.'
+      };
+    }
+    const raw = JSON.parse(fs.readFileSync(filePath, 'utf8'));
+    const ranAt = raw?.ranAt || null;
+    const ageMs = ranAt ? Math.max(0, Date.now() - Date.parse(ranAt)) : null;
+    return {
+      ok: true,
+      available: true,
+      filePath,
+      lastRun: raw,
+      staleness: {
+        ageMs,
+        ageMinutes: ageMs === null ? null : Math.round(ageMs / 60000)
+      }
+    };
+  } catch (error) {
+    return {
+      ok: false,
+      available: false,
+      error: String(error.message || error)
+    };
+  }
+}
+
 export async function handleAutonomyRoute({ req, res, url, ctx }) {
   if (req.method === 'GET' && url.pathname === '/api/autonomy/mode') {
     ctx.sendJson(res, 200, {
-      mode: ctx.config.runtime.autonomyMode || 'standard',
+      mode: ctx.config.runtime.autonomyMode || 'autonomy-first',
       runtime: ctx.config.runtime,
       routing: ctx.config.model.routing
     });
@@ -41,6 +77,12 @@ export async function handleAutonomyRoute({ req, res, url, ctx }) {
 
   if (req.method === 'GET' && url.pathname === '/api/autonomy/master/status') {
     ctx.sendJson(res, 200, { ok: true, status: ctx.autonomyMaster.getStatus() });
+    return true;
+  }
+
+  if (req.method === 'GET' && url.pathname === '/api/autonomy/cycle/status') {
+    const snapshot = readAutonomyCycleSnapshot();
+    ctx.sendJson(res, snapshot.ok ? 200 : 500, snapshot);
     return true;
   }
 
@@ -213,6 +255,95 @@ export async function handleAutonomyRoute({ req, res, url, ctx }) {
     }
     const out = orchestrator.getTask(id);
     ctx.sendJson(res, out.ok ? 200 : 404, out);
+    return true;
+  }
+
+  if (req.method === 'GET' && url.pathname === '/api/autonomy/remediations') {
+    const limit = Number(url.searchParams.get('limit') || 80);
+    const status = String(url.searchParams.get('status') || '').trim();
+    ctx.sendJson(res, 200, ctx.autonomyMaster.listRemediations({ status, limit }));
+    return true;
+  }
+
+  if (req.method === 'GET' && url.pathname === '/api/autonomy/remediations/status') {
+    const id = String(url.searchParams.get('id') || '').trim();
+    if (!id) {
+      ctx.sendJson(res, 400, { ok: false, error: 'id is required' });
+      return true;
+    }
+    const out = ctx.autonomyMaster.getRemediation(id);
+    ctx.sendJson(res, out.ok ? 200 : 404, out);
+    return true;
+  }
+
+  if (req.method === 'POST' && url.pathname === '/api/autonomy/remediations/create') {
+    const body = await ctx.parseBody(req);
+    if (!isPlainObject(body)) {
+      ctx.sendJson(res, 400, { ok: false, error: 'invalid_payload' });
+      return true;
+    }
+    const out = ctx.autonomyMaster.createRemediation(body || {});
+    ctx.sendJson(res, out.ok ? 200 : 400, out);
+    return true;
+  }
+
+  if (req.method === 'POST' && url.pathname === '/api/autonomy/remediations/start') {
+    const body = await ctx.parseBody(req);
+    if (!isPlainObject(body)) {
+      ctx.sendJson(res, 400, { ok: false, error: 'invalid_payload' });
+      return true;
+    }
+    const out = ctx.autonomyMaster.startRemediation(String(body?.id || '').trim());
+    ctx.sendJson(res, out.ok ? 200 : 404, out);
+    return true;
+  }
+
+  if (req.method === 'POST' && url.pathname === '/api/autonomy/remediations/resolve') {
+    const body = await ctx.parseBody(req);
+    if (!isPlainObject(body)) {
+      ctx.sendJson(res, 400, { ok: false, error: 'invalid_payload' });
+      return true;
+    }
+    const out = ctx.autonomyMaster.resolveRemediation(
+      String(body?.id || '').trim(),
+      String(body?.resolution || '').trim()
+    );
+    ctx.sendJson(res, out.ok ? 200 : 404, out);
+    return true;
+  }
+
+  if (req.method === 'POST' && url.pathname === '/api/autonomy/remediations/fail') {
+    const body = await ctx.parseBody(req);
+    if (!isPlainObject(body)) {
+      ctx.sendJson(res, 400, { ok: false, error: 'invalid_payload' });
+      return true;
+    }
+    const out = ctx.autonomyMaster.failRemediation(
+      String(body?.id || '').trim(),
+      String(body?.error || '').trim()
+    );
+    ctx.sendJson(res, out.ok ? 200 : 404, out);
+    return true;
+  }
+
+  if (req.method === 'POST' && url.pathname === '/api/autonomy/remediations/cancel') {
+    const body = await ctx.parseBody(req);
+    if (!isPlainObject(body)) {
+      ctx.sendJson(res, 400, { ok: false, error: 'invalid_payload' });
+      return true;
+    }
+    const out = ctx.autonomyMaster.cancelRemediation(
+      String(body?.id || '').trim(),
+      String(body?.reason || '').trim()
+    );
+    ctx.sendJson(res, out.ok ? 200 : 404, out);
+    return true;
+  }
+
+  if (req.method === 'POST' && url.pathname === '/api/autonomy/remediations/sync-self-awareness') {
+    const status = ctx.autonomyMaster.getStatus();
+    const out = ctx.autonomyMaster.ensureRemediationFromSelfAwareness(status?.selfAwareness || null);
+    ctx.sendJson(res, out.ok ? 200 : 400, out);
     return true;
   }
 

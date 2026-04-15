@@ -1,5 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import { getHomeDir } from '../config.mjs';
 import { logInfo, logError } from '../logger.mjs';
 
 /**
@@ -30,7 +31,7 @@ export class WorkingMemoryAnchor {
     this.workspaceRoot = workspaceRoot || process.cwd();
     this.maxRecentTurns = maxRecentTurns;  // Keep last N turns raw
     this.compactionThreshold = compactionThreshold;  // Compact after N turns
-    this.dataDir = path.join(this.workspaceRoot, 'data', 'working-memory');
+    this.dataDir = resolveWorkingMemoryDir(this.workspaceRoot);
     
     // Ensure data directory exists
     if (!fs.existsSync(this.dataDir)) {
@@ -362,21 +363,30 @@ export class WorkingMemoryAnchor {
    * Load anchor from disk (for session resumption)
    */
   static load(sessionId, workspaceRoot) {
-    const dataDir = path.join(workspaceRoot || process.cwd(), 'data', 'working-memory');
+    const dataDir = resolveWorkingMemoryDir(workspaceRoot);
     const anchorPath = path.join(dataDir, `${sessionId}.json`);
-    
+
     if (!fs.existsSync(anchorPath)) {
+      const legacyDir = path.join(workspaceRoot || process.cwd(), 'data', 'working-memory');
+      const legacyPath = path.join(legacyDir, `${sessionId}.json`);
+      if (legacyDir !== dataDir && fs.existsSync(legacyPath)) {
+        return WorkingMemoryAnchor.loadFromPath(sessionId, workspaceRoot, legacyPath);
+      }
       return null;
     }
 
+    return WorkingMemoryAnchor.loadFromPath(sessionId, workspaceRoot, anchorPath);
+  }
+
+  static loadFromPath(sessionId, workspaceRoot, anchorPath) {
     try {
       const anchorData = JSON.parse(fs.readFileSync(anchorPath, 'utf8'));
       const anchor = new WorkingMemoryAnchor({ sessionId, workspaceRoot });
       anchor.anchor = anchorData;
-      logInfo('working_memory_anchor_loaded', { sessionId });
+      logInfo('working_memory_anchor_loaded', { sessionId, anchorPath });
       return anchor;
     } catch (error) {
-      logError('working_memory_anchor_load_failed', { sessionId, error: error.message });
+      logError('working_memory_anchor_load_failed', { sessionId, error: error.message, anchorPath });
       return null;
     }
   }
@@ -699,6 +709,11 @@ export class WorkingMemoryAnchor {
       .filter(s => s.status === 'completed')
       .map(s => ({ index: s.index, description: s.description, result: s.result }));
   }
+}
+
+export function resolveWorkingMemoryDir(workspaceRoot = '') {
+  const homeDir = getHomeDir();
+  return path.join(homeDir, 'working-memory');
 }
 
 /**

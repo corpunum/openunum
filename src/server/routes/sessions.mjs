@@ -157,6 +157,7 @@ export async function handleSessionsRoute({ req, res, url, ctx }) {
         since: since || null,
         pending: Boolean(pending),
         pendingStartedAt: pending?.startedAt || null,
+        turnId: pending?.turnId || null,
         toolRuns,
         messages,
         runtimeState: getRuntimeState({

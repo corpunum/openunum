@@ -2,7 +2,7 @@
 
 Base URL: `http://127.0.0.1:18880`
 
-**Last Updated:** 2026-04-09 (tooling inventory + local model rollout endpoints)
+**Last Updated:** 2026-04-13 (autonomy remediation + chat diagnostics + self-edit safety envelope)
 
 ## Health
 
@@ -19,9 +19,14 @@ Returns:
 - `GET /api/audit/stats` — Audit log statistics
 - `GET /api/audit/log?limit=100&offset=0` — Retrieve audit log entries
 - `GET /api/audit/verify` — Verify HMAC chain integrity
+- `GET /api/audit/diagnostics` — Verify integrity plus compatibility/issues summary
 - `GET /api/audit/root` — Current Merkle root snapshot
 - `GET /api/audit/types` — Enumerate valid audit event types
 - `POST /api/audit/log` — Append audit event
+
+Notes:
+- `GET /api/audit/verify` returns `valid`, `strictValid`, and compatibility diagnostics.
+- `strictValid: false` with `valid: true` means the chain is still trusted under backward-compatible verification, typically because historical Merkle checkpoints used an older hash schema.
 
 Returns:
 ```json
@@ -185,12 +190,18 @@ or
 ## Autonomy Master
 
 - `GET /api/autonomy/master/status`
+- `GET /api/autonomy/cycle/status`
 - `POST /api/autonomy/master/start`
 - `POST /api/autonomy/master/stop`
 - `POST /api/autonomy/master/cycle`
 - `POST /api/autonomy/master/self-improve`
 - `POST /api/autonomy/master/learn-skills`
 - `POST /api/autonomy/master/self-test`
+
+Status payload highlights:
+- `status.selfAwareness` — quality snapshot (`score`, `status`, `metrics`, `issues`)
+- `status.pendingQueue` — pending queue watchdog telemetry
+- `status.remediation` — remediation queue snapshot
 
 Validation notes:
 - Mutating autonomy endpoints that accept body payloads (`/api/autonomy/mode`, `/api/autonomy/workers/*`, `/api/autonomy/self-edit/run`, `/api/autonomy/model-scout/run`, `/api/autonomy/tasks/*`, `/api/autonomy/daemons/*`) require a JSON object body.
@@ -246,6 +257,11 @@ Behavior:
   - docs-only changes are allowed without runtime canaries
 - rollback uses per-file `file_restore_last`; no OAuth endpoints are invoked by defaults
 - self-edit run records survive restart; in-flight runs are marked failed/interrupted on boot
+- protected path policy is enforced for critical runtime/governance files
+- protected-path mutations require:
+  - `elevatedApproval.approved: true`
+  - `elevatedApproval.reason: string`
+- post-change quality drop beyond canary profile threshold triggers rollback
 
 Run payload (partial):
 ```json
@@ -273,6 +289,48 @@ Run payload (partial):
   ]
 }
 ```
+
+Optional hardening payload fields:
+```json
+{
+  "elevatedApproval": {
+    "approved": true,
+    "reason": "operator-approved protected mutation"
+  },
+  "canaryProfile": {
+    "maxValidationCommands": 10,
+    "maxCanaryChecks": 8,
+    "maxAllowedQualityDrop": 8
+  }
+}
+```
+
+## Chat Diagnostics
+
+- `GET /api/chat/diagnostics?limit=80&includeCompleted=1`
+
+Returns pending queue watchdog telemetry:
+- `pendingCount`
+- `stuckCount`
+- `oldestAgeMs`
+- `thresholds`
+- `pending[]`
+- `completed[]` (optional)
+
+Pending responses now include timing metadata:
+- `GET /api/chat/pending?sessionId=...` includes `ageMs`, `hardTimeoutMs`, `timeoutHeadroomMs`
+- `POST /api/chat` timeout `202` responses include the same timing fields
+
+## Remediation Queue
+
+- `GET /api/autonomy/remediations?limit=80`
+- `GET /api/autonomy/remediations/status?id=...`
+- `POST /api/autonomy/remediations/create`
+- `POST /api/autonomy/remediations/start`
+- `POST /api/autonomy/remediations/resolve`
+- `POST /api/autonomy/remediations/fail`
+- `POST /api/autonomy/remediations/cancel`
+- `POST /api/autonomy/remediations/sync-self-awareness`
 
 Result statuses:
 - `promoted`
@@ -797,11 +855,11 @@ Payload:
 Long-running behavior:
 - When a turn is still running, `POST /api/chat` returns `202` with:
 ```json
-{"ok":true,"pending":true,"sessionId":"abc","startedAt":"...","note":"chat_still_running"}
+{"ok":true,"pending":true,"sessionId":"abc","startedAt":"...","turnId":"...","note":"chat_still_running"}
 ```
 - `GET /api/chat/pending?sessionId=abc` returns:
 ```json
-{"ok":true,"pending":true,"sessionId":"abc","startedAt":"..."}
+{"ok":true,"pending":true,"sessionId":"abc","startedAt":"...","turnId":"..."}
 ```
 or
 ```json
@@ -941,8 +999,10 @@ Error responses now follow:
 - `sessionId`
 - `pending`
 - `startedAt`
+- `turnId`
 - `toolRuns[]`
 - `messages[]` (assistant rows include `html`)
+- `completed` (completion-cache handoff when final reply is already available)
 - `done` (true when final assistant message has persisted and pending ended)
 
 ## Skills
@@ -1016,6 +1076,7 @@ Mission runtime persistence:
 - in-progress missions interrupted by restart are marked `interrupted`
 - `GET /api/missions` and `GET /api/missions/status` read active in-memory missions first, then persisted mission records
 - `GET /api/missions/status`, `GET /api/missions/timeline`, and `POST /api/missions/start` include `runtimeState`
+- mission payloads now expose `effectiveStepLimit` and `limitSource` so the operator can see the real ceiling when `continueUntilDone=true`
 
 Start payload (partial):
 ```json
@@ -1028,6 +1089,11 @@ Start payload (partial):
   "hardStepCap":120
 }
 ```
+
+Validation ranges:
+- `maxSteps`: `1..120`
+- `hardStepCap`: `1..300`
+- `maxRetries`: `0..20`
 
 Schedule payload (partial):
 ```json

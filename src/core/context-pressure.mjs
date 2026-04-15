@@ -10,6 +10,12 @@ export class ContextPressure {
     this.aggressiveThreshold = aggressiveThreshold;
   }
 
+  resolveMaxTokens(overrideMaxTokens = null) {
+    const candidate = Number(overrideMaxTokens);
+    if (Number.isFinite(candidate) && candidate > 0) return candidate;
+    return this.maxTokens;
+  }
+
   /**
    * Rough token estimate (1 token ≈ 4 chars for English)
    */
@@ -31,14 +37,15 @@ export class ContextPressure {
   /**
    * Check if compaction is needed
    */
-  shouldCompact(messages) {
+  shouldCompact(messages, { maxTokens = null } = {}) {
     const totalTokens = this.estimateMessageTokens(messages);
-    const ratio = totalTokens / this.maxTokens;
+    const effectiveMaxTokens = this.resolveMaxTokens(maxTokens);
+    const ratio = totalTokens / effectiveMaxTokens;
     return {
       needed: ratio > this.compactThreshold,
       aggressive: ratio > this.aggressiveThreshold,
       totalTokens,
-      maxTokens: this.maxTokens,
+      maxTokens: effectiveMaxTokens,
       ratio: Math.round(ratio * 100) / 100
     };
   }
@@ -73,8 +80,8 @@ export class ContextPressure {
   /**
    * Get pressure report
    */
-  getReport(messages) {
-    const check = this.shouldCompact(messages);
+  getReport(messages, { maxTokens = null } = {}) {
+    const check = this.shouldCompact(messages, { maxTokens });
     return {
       status: check.aggressive ? 'critical' : check.needed ? 'warning' : 'ok',
       tokensUsed: check.totalTokens,

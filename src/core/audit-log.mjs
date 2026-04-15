@@ -8,12 +8,12 @@
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
-import { createRequire } from 'node:module';
+import { fileURLToPath } from 'node:url';
 
-const require = createRequire(import.meta.url);
-
-// Use workspace data directory
-const DATA_DIR = path.join(process.cwd(), 'data');
+const MODULE_DIR = path.dirname(fileURLToPath(import.meta.url));
+const REPO_ROOT = path.resolve(MODULE_DIR, '..', '..');
+// Canonical audit storage path is repo-root data/, never process.cwd().
+const DATA_DIR = process.env.OPENUNUM_DATA_DIR || path.join(REPO_ROOT, 'data');
 const AUDIT_LOG_PATH = path.join(DATA_DIR, 'audit-log.jsonl');
 const MERKLE_ROOT_INTERVAL = 10; // Compute merkle root every 10 entries
 
@@ -38,6 +38,31 @@ function computeHmac(data) {
 // Compute SHA256 hash
 function computeHash(data) {
   return crypto.createHash('sha256').update(data).digest('hex');
+}
+
+function buildStandardHashPayload(entry) {
+  return {
+    entryId: entry.entryId,
+    timestamp: entry.timestamp,
+    eventType: entry.eventType,
+    correlationId: entry.correlationId,
+    previousHash: entry.previousHash,
+    payload: entry.payload
+  };
+}
+
+function buildLegacyMerkleHashPayload(entry) {
+  if (entry?.eventType !== 'verification' || entry?.payload?.type !== 'merkle_root_computed') {
+    return null;
+  }
+  return {
+    merkleRoot: entry.payload?.merkleRoot,
+    count: entry.payload?.entryCount
+  };
+}
+
+function computeEntryCurrentHash(entry) {
+  return computeHmac(JSON.stringify(buildStandardHashPayload(entry)));
 }
 
 // Hash an entry for chain linking
@@ -125,12 +150,7 @@ export function logEvent(type, payload, correlationId) {
   
   // Compute current hash including previousHash for chain integrity
   entry.currentHash = computeHmac(JSON.stringify({
-    entryId: entry.entryId,
-    timestamp: entry.timestamp,
-    eventType: entry.eventType,
-    correlationId: entry.correlationId,
-    previousHash: entry.previousHash,
-    payload: entry.payload
+    ...buildStandardHashPayload(entry)
   }));
   
   appendEntry(entry);
@@ -147,9 +167,10 @@ export function logEvent(type, payload, correlationId) {
       eventType: 'verification',
       correlationId: entry.correlationId,
       previousHash: entry.currentHash,
-      currentHash: computeHmac(JSON.stringify({ merkleRoot, count: entries.length })),
+      currentHash: null,
       payload: { merkleRoot, entryCount: entries.length, type: 'merkle_root_computed' }
     };
+    merkleEntry.currentHash = computeEntryCurrentHash(merkleEntry);
     appendEntry(merkleEntry);
   }
   
@@ -164,10 +185,18 @@ export function verifyChain() {
   const entries = getAllEntries();
   
   if (entries.length === 0) {
-    return { valid: true, brokenAt: null, entries: [] };
+    return {
+      valid: true,
+      strictValid: true,
+      brokenAt: null,
+      entries: [],
+      diagnostics: { legacyMerkleEntries: 0, hashModeCounts: { standard: 0, legacy_merkle: 0 } }
+    };
   }
   
   let previousHash = '0'.repeat(64);
+  let legacyMerkleEntries = 0;
+  const hashModeCounts = { standard: 0, legacy_merkle: 0 };
   
   for (let i = 0; i < entries.length; i++) {
     const entry = entries[i];
@@ -178,23 +207,45 @@ export function verifyChain() {
     }
     
     // Recompute and verify current hash
-    const expectedHash = computeHmac(JSON.stringify({
-      entryId: entry.entryId,
-      timestamp: entry.timestamp,
-      eventType: entry.eventType,
-      correlationId: entry.correlationId,
-      previousHash: entry.previousHash,
-      payload: entry.payload
-    }));
-    
-    if (entry.currentHash !== expectedHash) {
-      return { valid: false, brokenAt: i, entries };
+    const expectedHash = computeEntryCurrentHash(entry);
+    if (entry.currentHash === expectedHash) {
+      hashModeCounts.standard += 1;
+    } else {
+      const legacyMerklePayload = buildLegacyMerkleHashPayload(entry);
+      const legacyHash = legacyMerklePayload
+        ? computeHmac(JSON.stringify(legacyMerklePayload))
+        : null;
+      if (legacyHash && entry.currentHash === legacyHash) {
+        legacyMerkleEntries += 1;
+        hashModeCounts.legacy_merkle += 1;
+      } else {
+        return {
+          valid: false,
+          strictValid: false,
+          brokenAt: i,
+          entries,
+          diagnostics: {
+            legacyMerkleEntries,
+            hashModeCounts,
+            reason: 'hash_mismatch'
+          }
+        };
+      }
     }
     
     previousHash = entry.currentHash;
   }
   
-  return { valid: true, brokenAt: null, entries };
+  return {
+    valid: true,
+    strictValid: legacyMerkleEntries === 0,
+    brokenAt: null,
+    entries,
+    diagnostics: {
+      legacyMerkleEntries,
+      hashModeCounts
+    }
+  };
 }
 
 /**
@@ -277,6 +328,39 @@ export function getAuditStats() {
     firstEntry: entries.length > 0 ? entries[0].timestamp : null,
     lastEntry: entries.length > 0 ? entries[entries.length - 1].timestamp : null,
     merkleRoot: getMerkleRoot()
+  };
+}
+
+export function getAuditDiagnostics() {
+  const verification = verifyChain();
+  const stats = getAuditStats();
+  const issues = [];
+  const recommendations = [];
+
+  if (!verification.valid) {
+    issues.push({
+      code: 'audit_chain_invalid',
+      severity: 'critical',
+      message: `Audit chain verification failed at entry index ${verification.brokenAt}.`
+    });
+    recommendations.push('Stop trusting audit-derived automation until the broken entry is investigated.');
+    recommendations.push('Read the audit log around the broken index and correlate it with recent tests or manual edits.');
+  } else if (verification.diagnostics?.legacyMerkleEntries > 0) {
+    issues.push({
+      code: 'legacy_merkle_checkpoint_hash',
+      severity: 'warning',
+      message: `${verification.diagnostics.legacyMerkleEntries} legacy Merkle checkpoint entr${verification.diagnostics.legacyMerkleEntries === 1 ? 'y uses' : 'ies use'} the old hash schema.`
+    });
+    recommendations.push('Keep compatibility verification enabled for historical logs.');
+    recommendations.push('Allow new checkpoint entries to use the canonical entry hash schema only.');
+  }
+
+  return {
+    ok: verification.valid,
+    verification,
+    stats,
+    issues,
+    recommendations
   };
 }
 

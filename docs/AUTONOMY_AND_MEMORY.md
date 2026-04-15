@@ -1,125 +1,112 @@
 # Autonomy and Memory
 
-This document explains how OpenUnum persists, retries, and learns.
+This document describes the active autonomy controls, mission semantics, chat pending contract, and canonical memory surfaces.
 
-## 1. Autonomy Controls
+## 1. Autonomy Modes
 
-### Runtime knobs
+Stored in `config.runtime.autonomyMode` and controlled by `POST /api/autonomy/mode`.
 
-Stored in `config.runtime`:
-- `maxToolIterations`
-- `shellEnabled`
-- `executorRetryAttempts`
-- `executorRetryBackoffMs`
-- `autonomyMode`
-- `missionDefaultContinueUntilDone`
-- `missionDefaultHardStepCap`
-- `missionDefaultMaxRetries`
-- `missionDefaultIntervalMs`
+### `autonomy-first`
+- balanced default
+- moderate retry and tool-loop budget
+- mission defaults: `continueUntilDone=true`, `hardStepCap=120`, `maxRetries=3`, `intervalMs=400`
+- fallback routing remains available
 
-### Routing knobs
-
-Stored in `config.model.routing`:
-- `forcePrimaryProvider`
-- `fallbackEnabled`
-- `fallbackProviders`
-
-## 2. Autonomy Presets
-
-Endpoint: `POST /api/autonomy/mode`
-
-### `standard`
-
-- moderate retries
-- standard loop limits
-- keeps existing strict/fallback routing decisions unless missing fallback list
+### `compact-local`
+- constrained local-first operation
+- lower tool iteration budget and smaller mission hard cap
+- stricter routing to the selected provider lane
+- intended for compact/local execution envelopes
 
 ### `relentless`
+- highest retry and mission budget
+- lower inter-step interval and larger mission hard cap
+- strict primary-provider routing
+- use only when the task genuinely benefits from longer autonomous execution
 
-- raises tool loop and executor retries
-- reduces mission interval
-- increases mission retry and hard cap limits
-- forces strict primary-provider route (`forcePrimaryProvider=true`, fallback disabled)
+## 2. Mission Truth Model
 
-## 3. Mission Proof Logic
+Mission runner lives in `src/core/missions.mjs`.
 
-Mission runner (`src/core/missions.mjs`) does not trust text-only completion.
+Key semantics:
+- `maxSteps` is the planner-visible short loop budget
+- `hardStepCap` is the true upper execution ceiling when `continueUntilDone=true`
+- `effectiveStepLimit` is now surfaced in API/UI so operators can see the real bound
+- `limitSource` tells whether the live ceiling came from `maxSteps` or `hardStepCap`
 
-For each step:
-- capture successful tool-run count before step
-- run agent step
-- capture successful tool-run count after step
-- treat as evidence only if successful count increased
+Guardrails:
+- DONE claims still require proof-backed contract checks
+- repeated no-progress turns trigger recovery hints
+- repeated no-progress / repeated-reply stalls now fail early instead of only ending at hard cap
+- start/schedule payloads are validated with bounded ranges:
+  - `maxSteps`: `1..120`
+  - `hardStepCap`: `1..300`
+  - `maxRetries`: `0..20`
 
-If model says `MISSION_STATUS: DONE` without proof:
-- mission increments retry counter
-- records failure strategy outcome
-- continues until retry budget is exhausted
+## 3. Chat Pending Contract
 
-## 4. Persistence Model (SQLite)
+Canonical flow:
+- `POST /api/chat`
+- if long-running, client receives `202` with `pending=true`, `startedAt`, and `turnId`
+- `GET /api/chat/stream?sessionId=...&since=...&turnId=...` is the preferred live channel
+- `GET /api/chat/pending?sessionId=...` remains the completion-cache fallback
 
-DB file: `~/.openunum/openunum.db`
+SSE payload now includes:
+- `sessionId`
+- `pending`
+- `startedAt`
+- `turnId`
+- `toolRuns[]`
+- `messages[]`
+- `completed` payload handoff when final reply is already cached
+- `done`
 
-### Tables
+## 4. Canonical Memory Surfaces
 
-- `sessions`: chat/session identity
-- `messages`: chronological user/assistant messages
-- `facts`: user-remembered facts
-- `tool_runs`: every tool invocation with args/result + success flag
-- `strategy_outcomes`: success/failure outcomes linked to goal/strategy
-- `route_lessons`: learned execution-route signatures with per-run success/failure outcomes
+Primary runtime memory lives in `OPENUNUM_HOME/openunum.db` (default `~/.openunum/openunum.db`).
 
-## 5. Strategy Reuse
+Active SQLite tables/operators should care about:
+- `sessions`
+- `messages`
+- `facts`
+- `tool_runs`
+- `strategy_outcomes`
+- `route_lessons`
+- `memory_artifacts`
+- `session_compactions`
+- `execution_state`
 
-Before each chat run, agent retrieves recent strategy outcomes for related goals and injects them into system guidance.
+There is no single canonical `memories` table.
 
-Effect:
-- biases toward previously successful approaches
-- warns against recently failing approaches
-- improves autonomous retry quality over time
+## 5. Working Memory Anchor
 
-Mission execution now also learns route-level reliability:
-- route signatures are derived from recent tool deltas (e.g., shell command family, HTTP method+path)
-- outcomes are persisted to `route_lessons`
-- runtime hints can recommend:
-  - avoid routes with repeated failures and no successes
-  - prioritize historically reliable routes early
+`src/core/working-memory.mjs` remains the runtime anchor system for long-turn continuity.
 
-## 6. Executor Behavior
+Persistence location:
+- primary: `OPENUNUM_HOME/working-memory/*.json`
+- legacy fallback read path: repo-local `data/working-memory/*.json` when older local artifacts still exist
 
-`ExecutorDaemon` (`src/tools/executor-daemon.mjs`) wraps critical operations with:
-- retry attempts
-- incremental backoff
-- per-attempt JSONL logging
+Treat these files as generated runtime artifacts, not canonical source of product truth.
 
-Log file:
-- `~/.openunum/logs/executor.jsonl`
+## 6. Strategy Reuse and Route Lessons
 
-## 7. Tool Trace in Chat
+Before each turn OpenUnum can retrieve:
+- related `strategy_outcomes`
+- recent `facts`
+- `route_lessons` guidance for failing/reliable routes
+- `memory_artifacts` and compaction artifacts when context is pressured
 
-Chat API returns structured `trace`:
-- provider/model used
-- iterations
-- tool calls per iteration
-- summarized tool results
-- provider failure chain if all attempts fail
+Operational intent:
+- prefer previously reliable routes
+- avoid repeatedly failing routes unchanged
+- keep proofs and route lessons separate from chat prose
 
-UI renders trace as expandable/collapsible panel beneath each assistant response.
+## 7. Completion Honesty
 
-## 8. Practical Tuning
+OpenUnum no longer treats checklist completion alone as sufficient for finalization.
 
-For maximum persistence:
-- set autonomy mode to `relentless`
-- keep `shellEnabled=true`
-- use strict provider lock if model consistency is critical
-- increase mission `hardStepCap` for long workflows
-
-## 9. Behavior Learning Controls
-
-To correct model behavior misclassification quickly:
-- inspect learned behavior: `GET /api/controller/behaviors`
-- inspect available behavior classes: `GET /api/controller/behavior-classes`
-- set per-model override: `POST /api/controller/behavior/override`
-- remove override: `POST /api/controller/behavior/override/remove`
-- reset learned state for one model: `POST /api/controller/behavior/reset`
-- reset all learned state: `POST /api/controller/behavior/reset-all`
+`Task complete` footer now requires:
+- checklist progress at 100%
+- no partial/failure signals in the final answer
+- no active provider-failure chain
+- acceptable final-answer quality score

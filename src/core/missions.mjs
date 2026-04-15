@@ -313,6 +313,35 @@ function findLocalResponseProof(recentToolRuns = []) {
   return null;
 }
 
+export function getMissionEffectiveStepLimit(mission = {}) {
+  const maxSteps = Math.max(1, Number(mission?.maxSteps || 0) || 6);
+  const hardStepCap = Math.max(1, Number(mission?.hardStepCap || 0) || maxSteps);
+  return mission?.continueUntilDone === false ? maxSteps : hardStepCap;
+}
+
+export function getMissionLimitSource(mission = {}) {
+  return mission?.continueUntilDone === false ? 'maxSteps' : 'hardStepCap';
+}
+
+export function getMissionOperatorState(mission = {}) {
+  const effectiveStepLimit = getMissionEffectiveStepLimit(mission);
+  const limitSource = getMissionLimitSource(mission);
+  const noProgressAbortThreshold = Math.max(
+    3,
+    Number(mission?.noProgressAbortThreshold || 0) || Math.min(6, Math.max(3, Math.ceil(effectiveStepLimit / 6)))
+  );
+  const repeatedReplyAbortThreshold = Math.max(
+    2,
+    Number(mission?.repeatedReplyAbortThreshold || 0) || Math.min(3, Math.max(2, Math.ceil(effectiveStepLimit / 24)))
+  );
+  return {
+    effectiveStepLimit,
+    limitSource,
+    noProgressAbortThreshold,
+    repeatedReplyAbortThreshold
+  };
+}
+
 export class MissionRunner {
   constructor({ agent, memoryStore, config = null }) {
     this.agent = agent;
@@ -336,6 +365,8 @@ export class MissionRunner {
       maxSteps: m.maxSteps,
       sessionId: m.sessionId,
       error: m.error || null,
+      effectiveStepLimit: getMissionEffectiveStepLimit(m),
+      limitSource: getMissionLimitSource(m),
       contract: m.contract || null,
       contractFailures: Number(m.contractFailures || 0),
       rollbackAttempts: Number(m.rollbackAttempts || 0)
@@ -356,6 +387,8 @@ export class MissionRunner {
         maxSteps: m.maxSteps,
         sessionId: m.sessionId,
         error: m.error || null,
+        effectiveStepLimit: getMissionEffectiveStepLimit(m),
+        limitSource: getMissionLimitSource(m),
         contract: m.contract || null,
         contractFailures: Number(m.contractFailures || 0),
         rollbackAttempts: Number(m.rollbackAttempts || 0)
@@ -417,6 +450,12 @@ export class MissionRunner {
       lastToolScanAt: new Date().toISOString(),
       routeLessonSeen: Object.create(null)
     };
+    const operatorState = getMissionOperatorState(mission);
+    mission.effectiveStepLimit = operatorState.effectiveStepLimit;
+    mission.limitSource = operatorState.limitSource;
+    mission.noProgressAbortThreshold = operatorState.noProgressAbortThreshold;
+    mission.repeatedReplyAbortThreshold = operatorState.repeatedReplyAbortThreshold;
+    mission.stallRecoveries = 0;
     this.missions.set(id, mission);
     this.persistMission(mission);
     this.run(mission);
@@ -542,7 +581,9 @@ export class MissionRunner {
           90000
         )
       );
-      const stepLimit = mission.continueUntilDone ? mission.hardStepCap : mission.maxSteps;
+      const stepLimit = getMissionEffectiveStepLimit(mission);
+      mission.effectiveStepLimit = stepLimit;
+      mission.limitSource = getMissionLimitSource(mission);
       for (let i = 0; i < stepLimit; i += 1) {
         if (mission.stopRequested) break;
         mission.step = i + 1;
@@ -717,12 +758,37 @@ export class MissionRunner {
         }
         if (timedOutTurn || (!newProof && (mission.noProgressTurns >= 2 || mission.repeatedReplyTurns >= 1))) {
           const recovered = this.tryRecoverMission(mission);
+          mission.stallRecoveries = Number(mission.stallRecoveries || 0) + 1;
           mission.recoveryHint = recovered || 'Previous step produced no new proof. Switch route and verify with a short command.';
           mission.log.push({
             step: mission.step,
             at: new Date().toISOString(),
             recoveryHint: mission.recoveryHint
           });
+        }
+        const noProgressAbortThreshold = Number(mission.noProgressAbortThreshold || 4);
+        const repeatedReplyAbortThreshold = Number(mission.repeatedReplyAbortThreshold || 2);
+        if (
+          !newProof &&
+          (
+            mission.noProgressTurns >= noProgressAbortThreshold ||
+            mission.repeatedReplyTurns >= repeatedReplyAbortThreshold ||
+            Number(mission.stallRecoveries || 0) >= Math.max(2, Math.min(4, mission.maxRetries + 1))
+          )
+        ) {
+          mission.status = 'failed';
+          mission.error = hasProviderFailureSignal(text)
+            ? 'mission_blocked_by_provider_failures'
+            : 'mission_stalled_no_progress';
+          mission.finishedAt = new Date().toISOString();
+          this.memoryStore?.recordStrategyOutcome?.({
+            goal: mission.goal,
+            strategy: 'tool-driven iterative execution',
+            success: false,
+            evidence: mission.error
+          });
+          this.persistMission(mission);
+          return;
         }
         if (mission.intervalMs > 0) await sleep(mission.intervalMs);
       }

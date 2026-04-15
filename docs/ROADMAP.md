@@ -1,164 +1,78 @@
-# Next Tasks
+# Roadmap (Active)
 
-Context: the previous durability/policy tranche is done. Workers persist across restart, self-edit runs persist with promotion gates, planner policies cover more intent classes, and the controller now has a deterministic final-answer fallback when tools succeed but the model stays silent.
+This roadmap is the live remediation plan aligned with `BRAIN.MD`.
 
-## 1. Core Principles Implementation
+## Completed in Current Tranche
 
-Goal:
-- Fully implement the 9 core principles outlined in BRAIN.MD
-- Ensure all agents follow framework-oriented, autonomy-first approach
+1. Mission truthfulness
+- surfaced `effectiveStepLimit` and `limitSource`
+- added earlier stall failure paths for no-progress / repeated-reply loops
+- reduced unsafe mission payload bounds
 
-Priority items:
-- Integrate BRAIN.MD into agent onboarding
-- Create self-modification capabilities following all principles
-- Implement test-first deployment with comprehensive validation
+2. Completion honesty
+- per-turn checklist reset
+- `Task complete` requires non-partial finalization, not checklist state alone
 
-Why:
-- Establish clear operating guidelines for all AI agents
-- Ensure consistent behavior across different models and use cases
+3. Chat delivery reliability
+- `turnId` added to pending/stream flow
+- stream can now hand off completed payloads directly
 
-Deliverables:
-- BRAIN.MD with 9 core principles
-- Updated agent onboarding documentation
-- Self-modification framework with principle enforcement
+4. Evidence synthesis quality
+- `web_fetch` now emits canonical success shape
+- recovery synthesis prefers successful evidence over circuit-open noise
+- strict search-window recovery can use `web_fetch.content`
 
-## 2. Fix Dataset Research Trigger Issue
+5. WebUI/runtime performance
+- cached git overview in runtime summary
+- cached UI asset reads for active static surface
 
-Goal:
-- Prevent false positives with "usable" keyword triggering dataset research
-- Ensure relevant responses only when actually asking about datasets
+6. Memory/runtime cleanup
+- working-memory anchors now prefer `OPENUNUM_HOME/working-memory`
+- onboarding/docs now treat repo-local anchor files as legacy runtime artifacts
 
-Priority items:
-- Narrow regex patterns in extractRequirements function
-- Test various user inputs to prevent irrelevant responses
-- Validate fix with Telegram channel testing
+7. Autonomy hardening loop
+- deterministic user-facing quality lanes expanded (review follow-up, action confirmation, session-quality review, product-improvement prompts)
+- self-awareness scoring integrated into autonomy cycle
+- remediation queue implemented and auto-upserted from degraded signals
 
-Why:
-- Current implementation causes confusion with irrelevant responses
-- Maintains framework orientation without specific dataset bias
+8. Live reliability + watchdog
+- chat diagnostics endpoint added with pending/completed timing telemetry
+- pending queue watchdog integrated into autonomy status and remediation queue
 
-Deliverables:
-- Fixed regex patterns in turn-recovery-summary.mjs
-- Updated unit tests for requirement extraction
-- Verified fix in Telegram channel
+9. Self-edit safety envelope
+- protected path gating with elevated approval requirement
+- bounded canary profile constraints
+- post-change quality-drop rollback guard
 
-## 3. Enhanced Self-Healing Capabilities
+10. Operator autonomy surface
+- WebUI operator panel now shows self-awareness, pending queue watchdog, and remediation queue with lifecycle controls
 
-Goal:
-- Improve automatic error detection and recovery
-- Add rollback mechanisms for failed operations
+## Next Priority Tranche
 
-Priority items:
-- Implement rollback capabilities for system operations
-- Add automatic error detection and recovery patterns
-- Create system integrity monitoring
+1. Deeper frontend split
+- continue breaking large settings/runtime controllers into state, API, renderer, and modal layers
+- keep all mutation flows covered by browser-level tests
 
-Why:
-- Self-healing is a core principle that needs strengthening
-- Automatic recovery reduces user intervention requirements
+2. Memory unification follow-through
+- continue shrinking legacy file-based memory narratives from docs and code comments
+- keep SQLite surfaces as the only product-truth narrative
 
-Deliverables:
-- Rollback mechanism implementation
-- Error detection and recovery patterns
-- System integrity monitoring system
+3. Duplicate-surface retirement
+- continue deprecating legacy compatibility modules once no active runtime/import path depends on them
+- keep archive docs out of onboarding flow
 
-## 4. Secrets At Rest With A Real Threat Model
+4. Autonomy ops consolidation
+- keep `AUTONOMY_OPS.md`, API references, and operator UI controls in strict parity
+- add remediation queue history/filters and canary evidence drill-down
 
-Goal:
-- replace plaintext `~/.openunum/secrets.json` storage with an explicit OS-keychain or passphrase-backed option
+5. Regression expansion
+- turn more real bad sessions into stable imitation/browser regressions
+- keep `pnpm verify` blocking on route/docs/runtime parity
 
-Why:
-- mode `0600` is necessary but not sufficient
-- machine-derived-key encryption is weak and should be avoided
+## Execution Rule
 
-Deliverables:
-- pluggable secret backend
-- migration path from current JSON store
-- operator docs for backup/restore and headless usage
-
-Progress (2026-04-08):
-- Added passphrase-backed encrypted secret backend (`OPENUNUM_SECRETS_BACKEND=passphrase`) using AES-256-GCM + scrypt.
-- Added compatibility migration path (`secrets.json` -> `secrets.enc.json`) on save when passphrase backend is enabled.
-- Added auth catalog visibility for backend/lock state.
-
-## 5. Consolidate Self-Heal Surfaces
-
-Goal:
-- reduce `selfheal.mjs`, `self-heal.mjs`, and `auto-recover.mjs` into one clear runtime path
-
-Why:
-- the overlap makes autonomous self-editing harder
-- operational ownership is unclear
-
-Deliverables:
-- one canonical self-heal module
-- legacy compatibility shims only where needed
-- tests for the chosen surface
-
-Progress (2026-04-08):
-- Added canonical control-plane path `src/core/self-heal-orchestrator.mjs`.
-- `/api/self-heal*` + `/api/health` now route through the orchestrator in `src/server.mjs`.
-- Legacy modules remain for compatibility (`selfheal.mjs`, `self-heal.mjs`, `auto-recover.mjs`) and are next in line for deprecation shims.
-
-Role mode progress (2026-04-08):
-- Added bounded role-mode router (`src/core/role-mode-router.mjs`) with explicit modes (`intent`, `execution`, `proof`, `repair`, `retrieval`) wired into turn system directives and trace metadata.
-
-## 6. Production Hardening
-
-Goal:
-- make the host safer and easier to run unattended
-
-Priority items:
-- HTTP rate limiting
-- deployment guide (`systemd`, Docker, backup/restore)
-- repeatable local model benchmark runner with first-token latency and throughput
-
-Why:
-- these are the remaining operator-grade gaps after the autonomy framework pass
-
-## 7. Training Surface Parity (Harvest from MimoUnum)
-
-Goal:
-- expose a first-class `training/*` API family in OpenUnum that turns real interaction traces into eval/train artifacts
-
-Priority items:
-- `training/report`, `training/collect`, `training/export`, `training/export/file`, `training/cycle`
-- compact WebUI "Autonomy Scorecard" panel (health + quality + export quick-actions)
-- explicit score-factor transparency in API responses
-
-Why:
-- this is the highest-ROI capability harvested from MimoUnum
-- improves self-improvement workflow without weakening OpenUnum's stronger orchestration model
-
-## Implementation Priority
-
-Following the core principles:
-1. **Safety First** - All changes must maintain system integrity
-2. **User Service** - Enhance user experience and capabilities
-3. **Autonomous Operation** - Reduce need for user intervention
-4. **Framework Flexibility** - Support diverse use cases
-5. **Continuous Improvement** - Learn and adapt over time
-
-## Testing Protocol
-
-Every change must follow this sequence:
-1. Write/update unit tests
-2. Run all existing tests to ensure no regressions
-3. Update documentation
-4. Run smoke tests
-5. Deploy to staging
-6. Run E2E tests
-7. Deploy to production
-
-## Core Principles Enforcement
-
-All work must align with the 9 core principles in BRAIN.MD:
-1. Framework Oriented
-2. Autonomy First
-3. Model Agnostic
-4. Servant Relationship
-5. Self Preservation
-6. Self Healing
-7. Test First
-8. Continuous Updates
-9. Self Modification
+No new product surface should be added ahead of:
+- truthful runtime state
+- bounded autonomy
+- wire-verified UI/backend behavior
+- docs/tests updated in the same change

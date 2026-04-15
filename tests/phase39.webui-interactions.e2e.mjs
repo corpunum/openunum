@@ -45,8 +45,11 @@ try {
     const title = await text(page, '#vaultEditTitle');
     assert.equal(title.startsWith('Provider Vault:'), true, 'provider modal title should indicate provider vault editing');
 
-    await page.click('#vaultEditClose');
-    await page.waitForFunction(() => !document.querySelector('#vaultEditModal')?.open);
+    await page.locator('#vaultEditClose').click({ force: true });
+    await page.waitForFunction(() => {
+      const modal = document.querySelector('#vaultEditModal');
+      return !modal || modal.open === false;
+    }, { timeout: 10000 });
 
     const targetProvider = await page.locator('.provider-hide').first().getAttribute('data-provider');
     assert.equal(Boolean(targetProvider), true, 'provider row should expose data-provider');

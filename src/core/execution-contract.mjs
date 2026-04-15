@@ -81,9 +81,11 @@ export function continuationDirective(reason = 'continue_execution') {
 
 export function recoveryDirective() {
   return [
-    'Provide a concise final status update based only on completed tool results.',
+    'Answer the user directly in normal prose based only on completed tool results.',
     'Do not call tools.',
-    'Include what succeeded, what failed, and next concrete step.',
+    'Do not emit operator headings like "Status:", "Findings:", or "Best next steps" unless the user explicitly asked for status or steps.',
+    'If relevant, explain what the evidence means, not only which tools ran.',
+    'Include what succeeded, what failed, and next concrete step only when that helps answer the user.',
     'If no proof exists for completion, explicitly say not done.',
     'Validate completion with evidence scoring before claiming done.'
   ].join(' ');

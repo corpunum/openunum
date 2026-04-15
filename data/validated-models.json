@@ -1,0 +1,30 @@
+{
+  "lastValidated": "2026-04-12T13:32:20.614Z",
+  "sources": {
+    "localOllama": {
+      "endpoint": "http://localhost:11434",
+      "status": "online",
+      "models": []
+    },
+    "openRouter": {
+      "endpoint": "https://openrouter.ai/api/v1/models",
+      "status": "online",
+      "filterApplied": "is_free == true OR pricing.prompt == 0",
+      "models": [
+        {"id": "google/gemma-4-26b-a4b-it:free", "name": "Google: Gemma 4 26B A4B (free)", "is_free": true},
+        {"id": "google/gemma-4-31b-it:free", "name": "Google: Gemma 4 31B IT (free)", "is_free": true},
+        {"id": "meta-llama/llama-3-8b-instruct:free", "name": "Meta: Llama 3 8B Instruct (free)", "is_free": true},
+        {"id": "meta-llama/llama-3-70b-instruct:free", "name": "Meta: Llama 3 70B Instruct (free)", "is_free": true},
+        {"id": "mistralai/mistral-7b-instruct:free", "name": "Mistral: 7B Instruct (free)", "is_free": true},
+        {"id": "mistralai/mixtral-8x7b-instruct:free", "name": "Mistral: Mixtral 8x7B Instruct (free)", "is_free": true},
+        {"id": "microsoft/phi-3-mini-128k-instruct:free", "name": "Microsoft: Phi-3 Mini 128K (free)", "is_free": true},
+        {"id": "microsoft/phi-3-medium-128k-instruct:free", "name": "Microsoft: Phi-3 Medium 128K (free)", "is_free": true},
+        {"id": "qwen/qwen-2-7b-instruct:free", "name": "Qwen: 2 7B Instruct (free)", "is_free": true},
+        {"id": "qwen/qwen-2-72b-instruct:free", "name": "Qwen: 2 72B Instruct (free)", "is_free": true},
+        {"id": "nousresearch/hermes-3-llama-3.1-405b:free", "name": "Nous: Hermes 3 405B Instruct (free)", "is_free": true}
+      ]
+    }
+  },
+  "totalFreeModels": 11,
+  "totalLocalModels": 0
+}

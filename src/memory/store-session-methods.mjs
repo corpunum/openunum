@@ -162,6 +162,32 @@ export class SessionStoreMethods {
     return out;
   }
 
+  clearSessionMessages(sessionId) {
+    const sid = String(sessionId || '').trim();
+    if (!sid) throw new Error('sessionId is required');
+    this.ensureSession(sid);
+    const counts = this.runInTransaction(() => {
+      const deletedMessages = this.db.prepare('DELETE FROM messages WHERE session_id = ?').run(sid);
+      const deletedToolRuns = this.db.prepare('DELETE FROM tool_runs WHERE session_id = ?').run(sid);
+      const deletedCompactions = this.db.prepare('DELETE FROM session_compactions WHERE session_id = ?').run(sid);
+      const deletedArtifacts = this.db.prepare('DELETE FROM memory_artifacts WHERE session_id = ?').run(sid);
+      const deletedRoutes = this.db.prepare('DELETE FROM route_lessons WHERE session_id = ?').run(sid);
+      return {
+        deletedMessages: Number(deletedMessages?.changes || 0),
+        deletedToolRuns: Number(deletedToolRuns?.changes || 0),
+        deletedCompactions: Number(deletedCompactions?.changes || 0),
+        deletedArtifacts: Number(deletedArtifacts?.changes || 0),
+        deletedRoutes: Number(deletedRoutes?.changes || 0)
+      };
+    });
+    return {
+      ok: true,
+      sessionId: sid,
+      cleared: true,
+      ...counts
+    };
+  }
+
   clearSessions({ keepSessionId = '', operationId = '' } = {}) {
     const keep = String(keepSessionId || '').trim();
     const opId = String(operationId || '').trim();

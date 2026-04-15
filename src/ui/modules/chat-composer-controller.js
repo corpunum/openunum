@@ -58,7 +58,7 @@ export function createChatComposerController({
 
       const out = await jpost('/api/chat', { sessionId: requestSessionId, message }, { timeoutMs: fastAckTimeoutMs });
       if (out?.pending) {
-        await resolvePendingReply(typing, out.startedAt || startedAtIso, requestSessionId, requestToken);
+        await resolvePendingReply(typing, out.startedAt || startedAtIso, requestSessionId, requestToken, out.turnId || '');
         return;
       }
 
@@ -88,7 +88,7 @@ export function createChatComposerController({
       const msg = String(error.message || error);
       if (msg.includes('request_timeout')) {
         typing.bubble.textContent = 'Request is still running. Switching to live pending view...';
-        await resolvePendingReply(typing, startedAtIso, requestSessionId, requestToken);
+        await resolvePendingReply(typing, startedAtIso, requestSessionId, requestToken, '');
       } else {
         typing.bubble.textContent = `request failed: ${msg}`;
       }

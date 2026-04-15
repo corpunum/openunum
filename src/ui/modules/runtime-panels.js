@@ -1,7 +1,12 @@
+import { createAutonomyDashboardPanel } from './autonomy-dashboard-panel.js';
+import { createMissionTimelinePanel } from './mission-timeline-panel.js';
+
 export function createRuntimePanelsController({
   q,
   jget,
+  jpost,
   escapeHtml,
+  setStatus,
   showView,
   buildRuntimeOverviewView,
   buildMissionTimelineView,
@@ -12,6 +17,24 @@ export function createRuntimePanelsController({
   setMissionTimelineCache,
   setRuntimeOverview
 }) {
+  const autonomyDashboardPanel = createAutonomyDashboardPanel({
+    q,
+    jget,
+    jpost,
+    escapeHtml,
+    setStatus
+  });
+  const missionTimelinePanel = createMissionTimelinePanel({
+    q,
+    jget,
+    showView,
+    escapeHtml,
+    buildMissionTimelineView,
+    getActiveMissionId,
+    getMissionTimelineCache,
+    setMissionTimelineCache
+  });
+
   async function refreshRuntimeOverview() {
     const runtimeOverview = await jget('/api/runtime/overview');
     setRuntimeOverview(runtimeOverview);
@@ -27,6 +50,8 @@ export function createRuntimePanelsController({
     q('browserCdpValue').textContent = view.browserCdpValue;
     q('browserTabMeta').textContent = view.browserTabMeta;
     await refreshPhase0DiagnosticsLocal();
+    await refreshAutonomyCycleStatusLocal();
+    await autonomyDashboardPanel.refreshAutonomyDashboard();
     await refreshContextStatusLocal();
   }
 
@@ -54,6 +79,27 @@ export function createRuntimePanelsController({
       `tokens=${Number(out.estimatedTokens || 0)} / limit=${Number(budget.contextLimit || 0)} | msgs=${Number(out.messageCount || 0)} | latest=${out.latestCompaction?.createdAt || 'none'}`;
   }
 
+  async function refreshAutonomyCycleStatusLocal() {
+    const out = await jget('/api/autonomy/cycle/status');
+    if (!out?.ok) {
+      q('autonomyCycleValue').textContent = 'Cycle Error';
+      q('autonomyCycleMeta').textContent = String(out?.error || 'failed to read cycle snapshot');
+      return;
+    }
+    if (!out.available) {
+      q('autonomyCycleValue').textContent = 'No Snapshot';
+      q('autonomyCycleMeta').textContent = out.message || 'No scheduled autonomy cycle snapshot found yet.';
+      return;
+    }
+    const status = String(out?.lastRun?.health || 'unknown').toLowerCase();
+    const ageMinutes = Number.isFinite(Number(out?.staleness?.ageMinutes))
+      ? Number(out.staleness.ageMinutes)
+      : null;
+    q('autonomyCycleValue').textContent = status === 'healthy' ? 'Healthy' : status;
+    q('autonomyCycleMeta').textContent =
+      `cycle=${Number(out?.lastRun?.cycle || 0)} | age=${ageMinutes === null ? '-' : `${ageMinutes}m`} | audit=${out?.lastRun?.auditValid === true ? 'ok' : 'check'}`;
+  }
+
   async function refreshTacticalLedger() {
     const out = await jget(`/api/autonomy/insights?sessionId=${encodeURIComponent(getSessionId())}`);
     q('ledgerSummary').textContent =
@@ -72,46 +118,15 @@ export function createRuntimePanelsController({
     `;
   }
 
-  async function refreshMissionTimeline() {
-    const activeMissionId = getActiveMissionId();
-    if (!activeMissionId) {
-      q('missionTimelineSummary').textContent = 'No active mission.';
-      q('missionTimelineLog').innerHTML = '';
-      q('missionTimelineTools').innerHTML = '';
-      q('missionTimelineArtifacts').innerHTML = '';
-      setMissionTimelineCache(null);
-      return;
-    }
-    setMissionTimelineCache(await jget(`/api/missions/timeline?id=${encodeURIComponent(activeMissionId)}`));
-    renderMissionTimeline();
-  }
-
-  function renderMissionTimeline() {
-    const out = getMissionTimelineCache();
-    if (!out) return;
-    const filter = q('missionTimelineFilter')?.value || 'all';
-    const search = String(q('missionTimelineSearch')?.value || '').trim().toLowerCase();
-    const view = buildMissionTimelineView(out, { filter, search, escapeHtml });
-    q('missionTimelineSummary').textContent = view.summaryText;
-    q('missionTimelineLog').innerHTML = view.logHtml;
-    q('missionTimelineTools').innerHTML = view.toolsHtml;
-    q('missionTimelineArtifacts').innerHTML = view.artifactsHtml;
-    q('missionTimelineArtifacts').querySelectorAll('[data-artifact-index]').forEach((btn) => {
-      btn.addEventListener('click', () => {
-        const item = out.artifacts?.[Number(btn.dataset.artifactIndex)];
-        if (!item) return;
-        q('pcOutput').value = JSON.stringify(item, null, 2);
-        showView('operator');
-      });
-    });
-  }
-
   return {
     refreshRuntimeOverview,
     refreshPhase0DiagnosticsLocal,
+    refreshAutonomyCycleStatusLocal,
+    refreshAutonomyDashboardLocal: autonomyDashboardPanel.refreshAutonomyDashboard,
     refreshContextStatusLocal,
     refreshTacticalLedger,
-    refreshMissionTimeline,
-    renderMissionTimeline
+    refreshMissionTimeline: missionTimelinePanel.refreshMissionTimeline,
+    renderMissionTimeline: missionTimelinePanel.renderMissionTimeline,
+    bindAutonomyDashboardActions: autonomyDashboardPanel.bindAutonomyDashboardActions
   };
 }

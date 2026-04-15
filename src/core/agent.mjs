@@ -3,9 +3,10 @@ import { buildProvider } from '../providers/index.mjs';
 import { ToolRuntime } from '../tools/runtime.mjs';
 import { loadSkills } from '../skills/loader.mjs';
 import { buildContextBudgetInfo, estimateMessagesTokens } from './context-budget.mjs';
-import { compactSessionMessages } from './context-compact.mjs';
+import { compactSessionMessages, trimMessagesToTokenBudget } from './context-compact.mjs';
 import {
   assessFinalAnswerQuality,
+  extractRequirements,
   normalizeRecoveredFinalText,
   synthesizeToolOnlyAnswer
 } from './turn-recovery-summary.mjs';
@@ -33,6 +34,13 @@ import { CompletionChecklist } from './completion-checklist.mjs';
 import { getWorkingMemory } from './working-memory.mjs';
 import {
   buildPivotHints,
+  buildChannelCommandOverview,
+  buildDeterministicActionConfirmationReply,
+  buildDeterministicImprovementProposalReply,
+  buildDeterministicSessionHistoryReviewReply,
+  buildDeterministicStandaloneFastReply,
+  buildDeterministicReviewFollowUpReply,
+  buildSessionSupportReply,
   clipText,
   buildSkillPrompt,
   compactToolResult,
@@ -76,9 +84,72 @@ import { FastAwarenessRouter, createFastAwarenessRouter } from './fast-awareness
 import { classifyRoleMode, modeDirective } from './role-mode-router.mjs';
 import { WorkerOrchestrator } from './worker-orchestrator.mjs';
 import { DaemonManager } from './daemon-manager.mjs';
+import { runDeterministicRepoInspection } from './deterministic-repo-inspector.mjs';
+import { createHybridRetriever } from '../memory/recall.mjs';
+import { FastPathRouter } from './fast-path-router.mjs';
+import { logEvent } from './audit-log.mjs';
 import { logInfo, logError } from '../logger.mjs';
 
 export { isConversationalAliveQuestion };
+
+function inferFinalizationState({ finalText = '', trace = null, progress = null }) {
+  const text = String(finalText || '').trim();
+  const failureSignals = [
+    /^status:\s*failed/im,
+    /^status:\s*partial/im,
+    /^status:\s*ok[\s\S]*❌/im,
+    /all configured providers failed/i,
+    /\binsufficient evidence\b/i,
+    /\btool_circuit_open\b/i,
+    /\brequest is taking too long\b/i,
+    /\bpartial proof\b/i,
+    /completion claim was rejected/i,
+    /^mission_status:\s*continue/im,
+    /❌/
+  ];
+  const hasFailureSignal = failureSignals.some((pattern) => pattern.test(text));
+  const providerFailures = Array.isArray(trace?.providerFailures) ? trace.providerFailures.length : 0;
+  const answerScore = Number(trace?.answerAssessment?.score || 0);
+  const weakAnswer = Boolean(trace?.answerAssessment?.shouldReplace) || (answerScore > 0 && answerScore < 70);
+  const hasTask = Boolean(progress?.hasTask);
+  const isComplete = hasTask && Number(progress?.percent || 0) === 100 && !hasFailureSignal && providerFailures === 0 && !weakAnswer;
+  const isInProgress = hasTask && Number(progress?.percent || 0) < 100;
+  return {
+    state: isComplete ? 'complete' : hasFailureSignal || providerFailures > 0 || weakAnswer ? 'partial' : isInProgress ? 'in_progress' : 'none',
+    hasFailureSignal,
+    providerFailures,
+    answerScore
+  };
+}
+
+export { inferFinalizationState };
+
+function enforceVisibleReplyContract({
+  finalText = '',
+  userMessage = '',
+  executedTools = [],
+  toolRuns = 0
+} = {}) {
+  const text = String(finalText || '').trim();
+  if (!text) return text;
+  const requirements = extractRequirements(userMessage);
+  const leakedInternalFormat =
+    (/^Status:\s+\w+/im.test(text) && /Findings:/im.test(text)) ||
+    /^Best next steps from current evidence:/im.test(text);
+  const statusExplicit =
+    Boolean(requirements?.asksStatus) &&
+    !Boolean(requirements?.asksWeather) &&
+    !Boolean(requirements?.asksExplanation) &&
+    !Boolean(requirements?.asksReview);
+  if (!leakedInternalFormat || statusExplicit) return text;
+  const recovered = synthesizeToolOnlyAnswer({
+    userMessage,
+    executedTools,
+    toolRuns
+  });
+  if (recovered && !/^Status:\s+\w+/im.test(recovered)) return recovered;
+  return 'I generated an internal diagnostics summary instead of a direct user answer. Please retry and I will answer directly.';
+}
 
 export class OpenUnumAgent {
   constructor({ config, memoryStore }) {
@@ -135,6 +206,20 @@ export class OpenUnumAgent {
     // Initialize Policy Loader (hierarchical AGENTS.md loading)
     this.policyLoader = new PolicyLoader({
       workspaceRoot: config?.runtime?.workspaceRoot || process.cwd()
+    });
+    
+    // Initialize Hybrid Retriever (R2 - Unified Memory)
+    this.retriever = createHybridRetriever({
+      workspaceRoot: config?.runtime?.workspaceRoot || process.cwd(),
+      memoryStore: this.memoryStore,
+      bm25TopK: 25,
+      finalTopK: 8
+    });
+    
+    this.fastPathRouter = new FastPathRouter({
+      agent: this,
+      memoryStore: this.memoryStore,
+      config: this.config
     });
     
     if (this.memoryStore?.listControllerBehaviors) {
@@ -258,6 +343,78 @@ export class OpenUnumAgent {
     return this.toolRuntime.run(name, args || {}, context || {});
   }
 
+  recordDetachedToolRuns(sessionId, executedTools = []) {
+    if (!sessionId || !this.memoryStore?.recordToolRun) return;
+    for (const run of executedTools) {
+      if (!run?.name) continue;
+      this.memoryStore.recordToolRun({
+        sessionId,
+        toolName: run.name,
+        args: run.args || {},
+        result: run.result || {}
+      });
+    }
+  }
+
+  async tryDeterministicRepoInspection({ message, sessionId }) {
+    const workspaceRoot = this.config?.runtime?.workspaceRoot || process.cwd();
+    const startedAt = Date.now();
+    const inspection = await runDeterministicRepoInspection({
+      message,
+      workspaceRoot,
+      runTool: (name, args, context = {}) => this.toolRuntime.run(name, args, {
+        workspaceRoot,
+        ...context
+      })
+    });
+    if (!inspection?.reply) return null;
+
+    this.memoryStore.addMessage(sessionId, 'user', message);
+    this.recordDetachedToolRuns(sessionId, inspection.executedTools);
+    this.memoryStore.addMessage(sessionId, 'assistant', inspection.reply);
+    for (const fact of extractAutomaticFacts({
+      message,
+      reply: inspection.reply,
+      model: this.getCurrentModel(),
+      trace: null
+    })) {
+      this.memoryStore.rememberFact(fact.key, fact.value);
+    }
+
+    return {
+      sessionId,
+      reply: inspection.reply,
+      model: this.getCurrentModel(),
+      trace: {
+        provider: this.config.model.provider,
+        model: this.config.model.model,
+        note: 'deterministic_repo_inspection',
+        executionProfile: 'deterministic-repo-inspect',
+        deterministicFastPath: true,
+        fastPathCategory: 'repo-inspection',
+        iterations: inspection.iterations,
+        permissionDenials: [],
+        turnSummary: {
+          toolRuns: inspection.executedTools.length,
+          iterationCount: inspection.iterations.length,
+          permissionDenials: 0,
+          routedTools: inspection.executedTools.map((run) => run.name),
+          answerShape: inspection.answerAssessment?.shape || 'summary',
+          answerScore: inspection.answerAssessment?.score || 0
+        },
+        answerAssessment: inspection.answerAssessment,
+        latency: {
+          path: 'deterministic-repo-inspect',
+          awarenessMs: 0,
+          providerMs: 0,
+          continuationMs: 0,
+          persistenceMs: 0,
+          totalMs: Date.now() - startedAt
+        }
+      }
+    };
+  }
+
   reloadTools() {
     this.toolRuntime = new ToolRuntime(this.config, this.memoryStore);
   }
@@ -346,7 +503,9 @@ export class OpenUnumAgent {
     if (slash.name === 'help') {
       return [
         'Available slash commands:',
+        '/start',
         '/status',
+        '/new',
         '/compact',
         '/memory',
         '/cost',
@@ -365,6 +524,21 @@ export class OpenUnumAgent {
         `context_limit: ${status.budget.contextLimit}`,
         `usage_pct: ${(status.budget.usagePct * 100).toFixed(1)}%`,
         `latest_compaction: ${status.latestCompaction ? status.latestCompaction.createdAt : 'none'}`
+      ].join('\n');
+    }
+    if (slash.name === 'start') {
+      return buildChannelCommandOverview(sid);
+    }
+    if (slash.name === 'new') {
+      if (typeof this.memoryStore.clearSessionMessages !== 'function') return 'clearSessionMessages not available';
+      const out = this.memoryStore.clearSessionMessages(sid);
+      return [
+        `session_new ok=${out.ok}`,
+        `session_id=${sid}`,
+        `deleted_messages=${out.deletedMessages}`,
+        `deleted_tool_runs=${out.deletedToolRuns}`,
+        `deleted_compactions=${out.deletedCompactions}`,
+        'Starting fresh — previous context removed.'
       ].join('\n');
     }
     if (slash.name === 'compact') {
@@ -576,6 +750,11 @@ export class OpenUnumAgent {
     trace.permissionDenials = [];
     trace.toolStateTransitions = [];
     let forcedContinueCount = 0;
+    const continuationRequirements = extractRequirements(originalUserMessage);
+    const suppressAutonomousContinuation =
+      continuationRequirements.asksExplanation ||
+      continuationRequirements.asksReview ||
+      continuationRequirements.asksDocumentDiscussion;
 
     for (let i = 0; i < maxIters; i += 1) {
       const elapsed = Date.now() - turnStartedAt;
@@ -684,6 +863,12 @@ export class OpenUnumAgent {
 
       if (!out.toolCalls || out.toolCalls.length === 0) {
         trace.iterations.push(iter);
+        const hasSomeAnswerOrEvidence =
+          Boolean(String(normalizedContent || finalText || '').trim()) ||
+          (Array.isArray(executedTools) && executedTools.length > 0);
+        if (suppressAutonomousContinuation && hasSomeAnswerOrEvidence) {
+          break;
+        }
         const forceContinue = shouldForceContinuation({
           assistantText: normalizedContent || finalText,
           toolCalls: out.toolCalls,
@@ -941,30 +1126,38 @@ export class OpenUnumAgent {
     }
 
     if (!finalText && toolRuns > 0) {
-      try {
-        trace.recoveryUsed = true;
-        const remainingMs = turnBudgetMs - (Date.now() - turnStartedAt);
-        if (remainingMs <= 0) {
-          trace.timedOut = true;
-          trace.timeoutMs = turnBudgetMs;
-          throw new Error('turn_deadline_exceeded');
-        }
-        const recoveryMessages = [
-          ...messages,
-          {
-            role: 'system',
-            content: recoveryDirective()
+      const recoveryRequirements = extractRequirements(originalUserMessage);
+      const shouldDirectSynthesize =
+        recoveryRequirements.asksExplanation ||
+        recoveryRequirements.asksReview ||
+        recoveryRequirements.asksDocumentDiscussion;
+
+      if (!shouldDirectSynthesize) {
+        try {
+          trace.recoveryUsed = true;
+          const remainingMs = turnBudgetMs - (Date.now() - turnStartedAt);
+          if (remainingMs <= 0) {
+            trace.timedOut = true;
+            trace.timeoutMs = turnBudgetMs;
+            throw new Error('turn_deadline_exceeded');
           }
-        ];
-        const recovery = await runtimeProvider.chat({ messages: recoveryMessages, tools: [], timeoutMs: remainingMs });
-        if (recovery?.content) {
-          const normalizedRecoveryContent = normalizeAssistantContent(recovery.content);
-          if (normalizedRecoveryContent) {
-            finalText = normalizedRecoveryContent;
+          const recoveryMessages = [
+            ...messages,
+            {
+              role: 'system',
+              content: recoveryDirective()
+            }
+          ];
+          const recovery = await runtimeProvider.chat({ messages: recoveryMessages, tools: [], timeoutMs: remainingMs });
+          if (recovery?.content) {
+            const normalizedRecoveryContent = normalizeAssistantContent(recovery.content);
+            if (normalizedRecoveryContent) {
+              finalText = normalizedRecoveryContent;
+            }
           }
+        } catch {
+          // ignore and fallback to synthesized summary below
         }
-      } catch {
-        // ignore and fallback to synthesized summary below
       }
     }
 
@@ -1094,131 +1287,22 @@ export class OpenUnumAgent {
     toolsAllow = null,
     sideQuestMode = false
   }) {
-    const slash = parseSlashCommand(message);
-    if (slash) {
-      // Try command registry first
-      let slashReply = null;
-      try {
-        const { getRegistry } = await import('../commands/registry.mjs');
-        const registry = getRegistry();
-        const result = await registry.route(message, {
-          sessionId,
-          agent: this,
-          memoryStore: this.memoryStore,
-          config: this.config
-        });
-        if (result?.handled) {
-          slashReply = result.reply;
-        } else if (result?.error) {
-          slashReply = result.error;
-        }
-      } catch {
-        // Registry not available, fall back to inline handler
-      }
+    const recentMessages = this.memoryStore.getMessagesForContext
+      ? this.memoryStore.getMessagesForContext(sessionId, 16)
+      : [];
+    
+    // R2/R10: FastPathRouter handles deterministic and short-circuit replies
+    const fastPathReply = await this.fastPathRouter.route({
+      message,
+      sessionId,
+      recentMessages,
+      modelForBudget: this.getCurrentModel()
+    });
+    if (fastPathReply) return fastPathReply;
 
-      // Fallback to inline handler if registry didn't handle it
-      if (!slashReply) {
-        slashReply = this.handleSlashCommand(sessionId, slash);
-      }
-
-      if (slashReply) {
-        this.memoryStore.addMessage(sessionId, 'user', message);
-        this.memoryStore.addMessage(sessionId, 'assistant', slashReply);
-        for (const fact of extractAutomaticFacts({
-          message,
-          reply: slashReply,
-          model: this.getCurrentModel(),
-          trace: null
-        })) {
-          this.memoryStore.rememberFact(fact.key, fact.value);
-        }
-        return {
-          sessionId,
-          reply: slashReply,
-          model: this.getCurrentModel(),
-          trace: {
-            provider: this.config.model.provider,
-            model: this.config.model.model,
-            routedTools: [],
-            iterations: [],
-            permissionDenials: [],
-            turnSummary: {
-              toolRuns: 0,
-              iterationCount: 0,
-              permissionDenials: 0,
-              routedTools: []
-            },
-            note: `slash_command:${slash.name}`
-          }
-        };
-      }
-    }
-
-    if (isModelInfoQuestion(message)) {
-      const configuredLabel = providerModelLabel(this.config.model.provider, this.config.model.model);
-      const activeLabel = providerModelLabel(
-        this.lastRuntime?.provider || this.config.model.provider,
-        this.lastRuntime?.model || this.config.model.model
-      );
-      const paramsB = inferParamsB(this.lastRuntime?.model || this.config.model.model);
-      const reply = [
-        `Configured provider/model: ${configuredLabel}`,
-        `Last active provider/model: ${activeLabel}`,
-        paramsB ? `Estimated parameter size: ~${paramsB}B (parsed from model id)` : 'Estimated parameter size: unknown from id',
-        'Context window: not guaranteed from runtime config; provider metadata endpoint is the source of truth.',
-        `Execution tier: ${resolveExecutionEnvelope({
-          provider: this.lastRuntime?.provider || this.config.model.provider,
-          model: this.lastRuntime?.model || this.config.model.model,
-          runtime: this.config.runtime
-        }).tier}`
-      ].join('\n');
-      this.memoryStore.addMessage(sessionId, 'user', message);
-      this.memoryStore.addMessage(sessionId, 'assistant', reply);
-      for (const fact of extractAutomaticFacts({
-        message,
-        reply,
-        model: this.getCurrentModel(),
-        trace: null
-      })) {
-        this.memoryStore.rememberFact(fact.key, fact.value);
-      }
-      return {
-        sessionId,
-        reply,
-        model: this.getCurrentModel(),
-        trace: {
-          provider: this.config.model.provider,
-          model: this.config.model.model,
-          iterations: [],
-          note: 'Model info response generated directly from runtime state.'
-        }
-      };
-    }
-
-    // Handle conversational questions about being alive/dead to prevent inappropriate tool execution
-    if (isConversationalAliveQuestion(message)) {
-      const reply = "Yes, I'm here and operational! I'm ready to help with any tasks you'd like me to work on. What would you like me to do?";
-      this.memoryStore.addMessage(sessionId, 'user', message);
-      this.memoryStore.addMessage(sessionId, 'assistant', reply);
-      for (const fact of extractAutomaticFacts({
-        message,
-        reply,
-        model: this.getCurrentModel(),
-        trace: null
-      })) {
-        this.memoryStore.rememberFact(fact.key, fact.value);
-      }
-      return {
-        sessionId,
-        reply,
-        model: this.getCurrentModel(),
-        trace: {
-          provider: this.config.model.provider,
-          model: this.config.model.model,
-          iterations: [],
-          note: 'Conversational alive/dead question handled directly'
-        }
-      };
+    const deterministicRepoReply = await this.tryDeterministicRepoInspection({ message, sessionId });
+    if (deterministicRepoReply) {
+      return deterministicRepoReply;
     }
 
     const skills = loadSkills();
@@ -1226,6 +1310,14 @@ export class OpenUnumAgent {
 
     this.memoryStore.addMessage(sessionId, 'user', message);
     
+    // R1: Audit mission start
+    try {
+      logEvent('state_change', {
+        action: 'mission_start',
+        message: clipText(message, 150)
+      }, sessionId);
+    } catch (e) { console.error('[audit_log_failed]', e); }
+
     // Start timing for telemetry
     const startTime = Date.now();
     const latency = {
@@ -1256,6 +1348,7 @@ export class OpenUnumAgent {
     }
     
     // Decompose task into explicit steps using taskDecomposer (more sophisticated than detectSteps)
+    this.completionChecklist.reset();
     const decomposition = this.taskDecomposer.decomposeTask(message);
     if (decomposition.decomposed && decomposition.steps.length > 0) {
       this.completionChecklist.initFromSteps(decomposition.steps);
@@ -1309,9 +1402,24 @@ export class OpenUnumAgent {
     const facts = this.memoryStore.retrieveFacts(message, compactController ? 3 : 5)
       .map((f) => `${f.key}: ${clipText(f.value, compactController ? 80 : 160)}`)
       .join('\n');
-    const knowledgeHits = !compactController && this.memoryStore.searchKnowledge
-      ? this.memoryStore.searchKnowledge(message, 6).map((k, idx) => `${idx + 1}. [${k.type}] ${clipText(k.text, 180)}`).join('\n')
-      : '';
+    
+    // Use Unified Hybrid Retriever instead of simple searchKnowledge (R2)
+    let knowledgeHits = '';
+    if (!compactController && this.retriever) {
+      try {
+        const hybridResults = await this.retriever.retrieve(message, {
+          useHybrid: !compactController,
+          fallbackToBM25: true
+        });
+        knowledgeHits = hybridResults
+          .map((k, idx) => `${idx + 1}. [${k.metadata?.type || 'memory'}] ${clipText(k.text, 180)}`)
+          .join('\n');
+        logInfo('hybrid_retrieval_applied', { count: hybridResults.length });
+      } catch (err) {
+        logError('hybrid_retrieval_failed', { error: String(err.message || err) });
+      }
+    }
+    
     const skillPrompt = buildSkillPrompt(
       skills,
       compactController
@@ -1332,7 +1440,9 @@ export class OpenUnumAgent {
     let compactionMeta = null;
     
     // ContextPressure check before building messages
-    const pressureCheck = this.contextPressure.getReport(history);
+    const pressureCheck = this.contextPressure.getReport(history, {
+      maxTokens: triggerInfo.contextLimit
+    });
     if (pressureCheck.status !== 'ok') {
       logInfo('context_pressure', pressureCheck);
       if (pressureCheck.status === 'critical' || pressureCheck.status === 'warning') {
@@ -1372,6 +1482,33 @@ export class OpenUnumAgent {
         postTokens: compacted.postTokens,
         cutoffMessageId: compacted.cutoffMessageId
       };
+    }
+    const hardLimitTokens = Math.floor(triggerInfo.contextLimit * Number(this.config.runtime?.contextHardFailPct || 0.9));
+    const hardLimited = trimMessagesToTokenBudget({
+      messages: history,
+      maxTokens: hardLimitTokens,
+      preserveFirstSystem: true,
+      minRecentMessages: Number(this.config.runtime?.contextProtectRecentTurns || 8) * 2
+    });
+    if (hardLimited.postTokens < estimateMessagesTokens(history)) {
+      history = hardLimited.messages;
+      compactionMeta = {
+        ...(compactionMeta || {}),
+        hardLimited: true,
+        hardLimitTokens,
+        hardLimitPreTokens: hardLimited.preTokens,
+        hardLimitPostTokens: hardLimited.postTokens,
+        hardLimitDroppedCount: hardLimited.droppedCount
+      };
+      logInfo('context_hard_limited', {
+        sessionId,
+        provider: modelForBudget.activeProvider || modelForBudget.provider,
+        model: modelForBudget.activeModel || modelForBudget.model,
+        hardLimitTokens,
+        preTokens: hardLimited.preTokens,
+        postTokens: hardLimited.postTokens,
+        droppedCount: hardLimited.droppedCount
+      });
     }
     const contextPackInputs = {
       routedTools,
@@ -1470,9 +1607,20 @@ export class OpenUnumAgent {
 
     // Phase 2: Use recommended tools from router to optimize tool routing
     if (fastAwarenessResult.recommendedTools && fastAwarenessResult.recommendedTools.length > 0) {
-      routedTools = routedTools.filter((item) => fastAwarenessResult.recommendedTools.includes(item.tool));
-      routeTelemetry.recommendedTools = fastAwarenessResult.recommendedTools;
+      const recommendedTools = [...new Set(fastAwarenessResult.recommendedTools.map((tool) => String(tool || '').trim()).filter(Boolean))];
+      if (routedTools.length > 0) {
+        routedTools = routedTools.filter((item) => recommendedTools.includes(item.tool));
+      } else {
+        routedTools = recommendedTools.map((tool) => ({ tool, score: 1 }));
+      }
+      if (Array.isArray(toolsAllow) && toolsAllow.length > 0) {
+        toolsAllow = toolsAllow.filter((tool) => recommendedTools.includes(tool));
+      } else {
+        toolsAllow = [...recommendedTools];
+      }
+      routeTelemetry.recommendedTools = recommendedTools;
       routeTelemetry.actualRoutedTools = routedTools.map((item) => item.tool);
+      routeTelemetry.effectiveAllowlist = toolsAllow;
     }
     contextPackInputs.routedTools = routedTools;
 
@@ -1631,9 +1779,20 @@ export class OpenUnumAgent {
     }
     
     // Auto-continue if task incomplete (check before storing reply)
-    const executedTools = trace?.iterations?.flatMap((iter) => iter?.toolRuns || []) || [];
+    const executedTools = trace?.iterations?.flatMap((iter) => iter?.toolCalls || []) || [];
+    const toolRuns = executedTools.length;
     const isGreetingFastPath = trace?.fastPathCategory === 'greeting' && trace?.fastPathUsed === true;
-    const shouldContinue = !isGreetingFastPath && this.selfMonitor.shouldAutoContinue(sessionId, finalText, executedTools);
+    const recoveryRequirements = extractRequirements(message);
+    const continuationIntent =
+      Boolean(decomposition?.decomposed) ||
+      /\b(fix|implement|build|create|write|edit|refactor|run|execute|install|remove|delete|update|change|test|verify|deploy|continue|proceed)\b/i.test(message);
+    const shouldBypassContinuation =
+      recoveryRequirements.asksExplanation || recoveryRequirements.asksReview || recoveryRequirements.asksDocumentDiscussion;
+    const shouldContinue =
+      !isGreetingFastPath &&
+      continuationIntent &&
+      !shouldBypassContinuation &&
+      this.selfMonitor.shouldAutoContinue(sessionId, finalText, executedTools);
     if (shouldContinue && (!trace?.providerFailures || trace.providerFailures.length === 0)) {
       const continuationPrompt = this.selfMonitor.generateContinuationPrompt(sessionId, finalText, executedTools);
       const continuationMessages = [
@@ -1674,12 +1833,22 @@ export class OpenUnumAgent {
     
     // Add progress indicator for multi-step tasks
     const progress = this.completionChecklist.getProgress();
+    const finalization = inferFinalizationState({ finalText, trace, progress });
     if (progress.total > 0 && progress.percent < 100) {
       const progressNote = `\n\n📋 Progress: ${progress.complete}/${progress.total} (${progress.percent}%)`;
       finalText = finalText + progressNote;
-    } else if (progress.hasTask && progress.percent === 100) {
+    } else if (finalization.state === 'complete') {
       finalText = finalText + '\n\n✅ Task complete!';
     }
+    if (trace && typeof trace === 'object') {
+      trace.finalization = finalization;
+    }
+    finalText = enforceVisibleReplyContract({
+      finalText,
+      userMessage: message,
+      executedTools,
+      toolRuns
+    });
     
     const persistenceStartedAt = Date.now();
     this.memoryStore.addMessage(sessionId, 'assistant', finalText);
@@ -1720,6 +1889,15 @@ export class OpenUnumAgent {
         withinBudget: breaches.length === 0
       };
     }
+
+    // R1: Audit mission complete
+    try {
+      logEvent('state_change', {
+        action: 'task_complete',
+        replyLength: finalText.length,
+        latencyMs: Date.now() - startTime
+      }, sessionId);
+    } catch (e) { console.error('[audit_log_failed]', e); }
 
     return { sessionId, reply: finalText, model: this.getCurrentModel(), trace, context: { budget: triggerInfo, compaction: compactionMeta } };
   }

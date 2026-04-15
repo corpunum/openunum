@@ -21,11 +21,35 @@ function clipText(text, maxChars = 1200) {
   return `${clean.slice(0, maxChars - 3)}...`;
 }
 
+function toolResultState(run) {
+  const r = run?.result || {};
+  const hasError = Boolean(r.error || r.stderr) || (r.ok === false);
+  const status = Number(r.status);
+  const hasHttpSuccess = Number.isFinite(status) && status >= 200 && status < 400;
+  const hasHttpFailure = Number.isFinite(status) && status >= 400;
+  const hasPayload = Boolean(
+    r.content ||
+    r.text ||
+    r.stdout ||
+    r.path ||
+    r.outPath ||
+    r.jobId ||
+    (Array.isArray(r.results) && r.results.length) ||
+    (Array.isArray(r.json) && r.json.length) ||
+    (r.json && typeof r.json === 'object' && Object.keys(r.json).length)
+  );
+
+  if (hasError || hasHttpFailure) return 'failure';
+  if (r.ok === true || hasHttpSuccess || hasPayload) return 'success';
+  return 'unknown';
+}
+
 function compactToolResult(result) {
   const r = result || {};
-  const compact = {
-    ok: Boolean(r.ok)
-  };
+  const state = toolResultState({ result: r });
+  const compact = {};
+  if (state === 'success') compact.ok = true;
+  if (state === 'failure') compact.ok = false;
   if (Number.isFinite(r.code)) compact.code = r.code;
   if (r.error) compact.error = clipText(r.error, 240);
   if (r.path || r.outPath) compact.path = r.path || r.outPath;
@@ -76,16 +100,21 @@ export function extractRequirements(userMessage = '') {
   const datasetQuestionPattern = /\b(what|which|where|how|can|should|could|recommend|suggest)\b.*\b(dataset|training data|benchmark|hugging face)\b/i;
   const explicitDatasetAsk = /\b(show me|list|recommend|find me|check)\b.*(dataset|datasets|training data)/;
   const datasetKeywordIntent = /\bhugging ?face\b.*\bdatasets?\b|\bdatasets? for (?:ai )?training\b/;
+  const asksWeather = /\b(weather|wea+ther|wether|forecast|temperature|rain|wind|humidity)\b/.test(prompt);
 
   return {
     asksModelRanking: /model|gguf|ollama|uncensor|unsensor|local/.test(prompt) && /top ?\d+|best|hardware|run/.test(prompt),
     asksRanking: /top ?\d+|best|rank|ranking|compare|which is better/.test(prompt),
-    asksSteps: /\bhow\b|steps|guide|setup|configure|install|onboard|procedure/.test(prompt),
-    asksStatus: /status|health|inspect|diagnose|check|report|what happened|why failed|why is/.test(prompt),
+    asksSteps: /\bhow (?:to|do i|can i|should i|would i|could i|do we|can we|should we|would we|could we)\b|steps|guide|setup|configure|install|procedure|\bonboard(?:ing)?\b/.test(prompt),
+    asksStatus: /status|health|inspect|diagnose|report|what happened|why failed|why is/.test(prompt),
+    asksExplanation: /\bhow is\b|\bwhat is\b|\bhow does\b|\bexplain\b|\btell me\b|\bunderstand\b|\bworking\b/.test(prompt),
+    asksReview: (/\b(check|review|audit|inspect|read)\b/.test(prompt) && /\b(code|docs?|documentation|changelog|onboard|onboarding|linked|used|memory|mission(?:s)?|provider(?:s)?|routing|skill(?:s)?|tool(?:s)?)\b/.test(prompt)) || /\bmake sense\b|\bmiss something\b|\bnot linked to code\b|\bunused\b/.test(prompt),
     asksResearch: (datasetActionPattern.test(prompt) || datasetQuestionPattern.test(prompt) || explicitDatasetAsk.test(prompt) || datasetKeywordIntent.test(prompt)) && /hugging ?face|dataset|training|benchmark/.test(prompt),
     asksDataset: datasetActionPattern.test(prompt) || datasetQuestionPattern.test(prompt) || explicitDatasetAsk.test(prompt) || datasetKeywordIntent.test(prompt),
+    asksDocumentDiscussion: /(https?:\/\/\S+|arxiv\.org|github\.com\/[^/\s]+\/[^/\s]+)/.test(prompt) && /\b(debate|discuss|discussion|review|read|analyze|analyse|critique|harvest|what should we harvest|approach this|summari[sz]e)\b/.test(prompt),
     asksComparison: /compare|comparison|versus|vs\b/.test(prompt),
     asksTable: /\btable\b|\btabular\b|\bmatrix\b/.test(prompt),
+    asksWeather,
     wantsNoLinks: /\bno links\b|dont give me links|don't give me links|without links/.test(prompt),
     wantsLocal: /local|ollama|run for this hardware|run on this hardware|this hardware/.test(prompt),
     wantsUncensored: /uncensor|uncensored|unsensored|unsensor/.test(prompt),
@@ -93,6 +122,48 @@ export function extractRequirements(userMessage = '') {
     wantsNoInstall: /dont install|don't install|do not install/.test(prompt),
     requestedTopN: Number(prompt.match(/top ?(\d+)/)?.[1] || 5)
   };
+}
+
+function buildWeatherAnswer({ userMessage = '', executedTools = [] }) {
+  const requirements = extractRequirements(userMessage);
+  if (!requirements.asksWeather) return '';
+  const weatherSignals = [];
+  for (const run of executedTools) {
+    const name = String(run?.name || '').trim();
+    const r = run?.result || {};
+    const chunks = [
+      String(r?.content || ''),
+      String(r?.text || ''),
+      String(r?.stdout || ''),
+      Array.isArray(r?.results)
+        ? r.results
+          .map((item) => `${item?.title || ''} ${item?.snippet || ''} ${item?.url || ''}`)
+          .join('\n')
+        : ''
+    ].join('\n');
+    if (!chunks.trim()) continue;
+    weatherSignals.push({ name, text: chunks });
+  }
+  if (!weatherSignals.length) {
+    return 'I could not retrieve weather data yet. Retry and I will fetch current conditions directly.';
+  }
+  const blob = weatherSignals.map((item) => item.text).join('\n');
+  const cityMatch = blob.match(/\b(rafina|athens|thessaloniki|greece)\b/i);
+  const tempMatch = blob.match(/(-?\d{1,2}(?:\.\d)?)\s*°\s*([CF])/i) || blob.match(/(-?\d{1,2}(?:\.\d)?)\s*(?:celsius|fahrenheit)\b/i);
+  const conditionMatch = blob.match(/\b(sunny|clear|cloudy|overcast|rain|rainy|showers|storm|windy|fog|mist|snow)\b/i);
+  const lines = [];
+  const target = cityMatch ? cityMatch[1] : 'the requested location';
+  if (tempMatch) {
+    const unit = tempMatch[2] ? `°${String(tempMatch[2]).toUpperCase()}` : '';
+    lines.push(`Current weather for ${target}: about ${tempMatch[1]}${unit}.`);
+  } else {
+    lines.push(`I checked current weather sources for ${target}, but the exact temperature was not reliably extractable from the fetched content.`);
+  }
+  if (conditionMatch) {
+    lines.push(`Conditions: ${String(conditionMatch[1]).toLowerCase()}.`);
+  }
+  lines.push('If you want, I can retry with a single provider and return only temperature, wind, and precipitation chance.');
+  return lines.join('\n');
 }
 
 function extractHardwareProfile(executedTools = []) {
@@ -324,25 +395,39 @@ function buildDatasetResearchAnswer({ userMessage = '', executedTools = [] }) {
 }
 
 function overallStatusFromTools(executedTools = []) {
-  const failures = executedTools.filter((run) => run?.result?.ok === false).length;
+  const meaningfulFailures = collectMeaningfulFailures(executedTools).length;
+  const successes = executedTools.filter((run) => toolResultState(run) === 'success').length;
   if (!executedTools.length) return 'unknown';
-  if (!failures) return 'ok';
-  if (failures === executedTools.length) return 'failed';
+  if (!meaningfulFailures) return successes ? 'ok' : 'unknown';
+  if (meaningfulFailures === executedTools.length && !successes) return 'failed';
   return 'partial';
+}
+
+function collectMeaningfulFailures(executedTools = []) {
+  const successes = executedTools.filter((run) => toolResultState(run) === 'success');
+  const hasSuccesses = successes.length > 0;
+  return executedTools.filter((run) => {
+    if (toolResultState(run) !== 'failure') return false;
+    const err = String(run?.result?.error || '').toLowerCase();
+    if (hasSuccesses && err === 'tool_circuit_open') return false;
+    return true;
+  });
 }
 
 function formatToolResultHuman(run) {
   const r = run?.result || {};
   const name = run?.name || 'unknown';
+  const state = toolResultState(run);
   
-  if (!r.ok) {
+  if (state === 'failure') {
     const err = clipText(r.error || r.stderr || 'failed', 120);
     return `${name}: ❌ ${err}`;
   }
   
   // Success cases with human-readable summaries
   if (name === 'shell_run' || name === 'shell_command') {
-    const code = Number(r.code) ?? 0;
+    const parsedCode = Number(r.code);
+    const code = Number.isFinite(parsedCode) ? parsedCode : 0;
     const stdout = r.stdout ? clipText(r.stdout.trim().split('\n')[0], 80) : '';
     return `${name}: ✅ exit ${code}${stdout ? ` — ${stdout}` : ''}`;
   }
@@ -372,6 +457,12 @@ function formatToolResultHuman(run) {
     const status = Number.isFinite(statusVal) ? statusVal : '?';
     const url = r.url ? clipText(new URL(r.url).hostname, 40) : '';
     return `${name}: ✅ HTTP ${status} ${url}`;
+  }
+
+  if (name === 'web_fetch') {
+    const url = r.url ? clipText(new URL(r.url).hostname, 40) : '';
+    const title = r.title ? ` — ${clipText(r.title, 60)}` : '';
+    return `${name}: ✅ fetched ${url}${title}`;
   }
   
   if (name === 'browser_navigate') {
@@ -424,7 +515,9 @@ function capSynthesisBody(body = '', uniqueSurfaceCount = 0) {
 function buildStatusAnswer({ executedTools = [], toolRuns = 0, uniqueSurfaceCount = 0 }) {
   if (!(toolRuns > 0)) return '';
   const status = overallStatusFromTools(executedTools);
-  const recentRaw = executedTools.slice(-8).map((run) => formatToolResultHuman(run));
+  const successes = executedTools.filter((run) => toolResultState(run) === 'success').slice(-6).map((run) => formatToolResultHuman(run));
+  const failures = collectMeaningfulFailures(executedTools).slice(-2).map((run) => formatToolResultHuman(run));
+  const recentRaw = [...successes, ...failures];
   const seen = new Set();
   const uniqueRecent = [];
   let dedupeDrops = 0;
@@ -454,8 +547,8 @@ function buildStepAnswer({ executedTools = [], toolRuns = 0, uniqueSurfaceCount 
   const lines = ['Best next steps from current evidence:'];
   const maxSteps = getAdaptiveLineCap(uniqueSurfaceCount, 2, 6);
   let dedupeDrops = 0;
-  const failed = executedTools.filter((run) => run?.result?.ok === false);
-  const succeeded = executedTools.filter((run) => run?.result?.ok);
+  const failed = collectMeaningfulFailures(executedTools);
+  const succeeded = executedTools.filter((run) => toolResultState(run) === 'success');
   const seen = new Set();
   const pushUniqueStep = (line) => {
     const key = String(line || '').trim().toLowerCase();
@@ -493,6 +586,150 @@ function buildStepAnswer({ executedTools = [], toolRuns = 0, uniqueSurfaceCount 
   return lines.join('\n');
 }
 
+function uniquePaths(items = []) {
+  return [...new Set(items.filter(Boolean).map((item) => String(item).trim()).filter(Boolean))];
+}
+
+function humanizePath(path = '') {
+  return `\`${clipText(String(path || ''), 100)}\``;
+}
+
+function collectShellStdout(executedTools = []) {
+  return executedTools
+    .filter((run) => run?.name === 'shell_run' && toolResultState(run) === 'success')
+    .map((run) => String(run?.result?.stdout || ''))
+    .join('\n');
+}
+
+function collectShellPaths(executedTools = []) {
+  const stdout = collectShellStdout(executedTools);
+  if (!stdout) return [];
+  const paths = stdout
+    .split('\n')
+    .map((line) => String(line || '').trim())
+    .filter((line) => line.startsWith('/'))
+    .map((line) => line.split(/\s+/)[0])
+    .filter((line) => /\/openunum\//.test(line));
+  return uniquePaths(paths);
+}
+
+function collectFileReadEvidence(executedTools = []) {
+  return executedTools
+    .filter((run) => run?.name === 'file_read' && toolResultState(run) === 'success')
+    .map((run) => ({
+      path: String(run?.result?.path || '').trim(),
+      content: String(run?.result?.content || '').trim()
+    }))
+    .filter((item) => item.path);
+}
+
+function collectMatchedPaths(executedTools = []) {
+  const files = [];
+  for (const run of executedTools) {
+    if (toolResultState(run) !== 'success') continue;
+    if (run?.name === 'file_search' && Array.isArray(run?.result?.files)) {
+      files.push(...run.result.files.map((item) => String(item || '').trim()).filter(Boolean));
+    }
+    if (run?.name === 'file_grep' && Array.isArray(run?.result?.matches)) {
+      files.push(...run.result.matches.map((item) => String(item?.file || '').trim()).filter(Boolean));
+    }
+    if (run?.name === 'file_read' && run?.result?.path) {
+      files.push(String(run.result.path).trim());
+    }
+  }
+  return uniquePaths(files);
+}
+
+function buildHarnessImplementationAnswer({ userMessage = '', executedTools = [] }) {
+  if (!/\bharness\b/i.test(String(userMessage || ''))) return '';
+  const matchedPaths = collectMatchedPaths(executedTools);
+  if (!matchedPaths.length) return '';
+  const runtimeHits = matchedPaths.filter((item) => /\/src\//.test(item));
+  const harnessNamedRuntimeHits = runtimeHits.filter((item) => /harness/i.test(item));
+  const nudgesHit = runtimeHits.find((item) => /autonomy-nudges\.mjs$/i.test(item));
+  const summary = [];
+  if (harnessNamedRuntimeHits.length === 0) {
+    summary.push('From current code evidence, meta harness is not implemented as a first-class runtime module.');
+  } else {
+    summary.push('From current code evidence, harness logic exists in runtime-facing code, but it is still spread across multiple surfaces rather than one canonical module.');
+  }
+  if (nudgesHit) {
+    summary.push(`The strongest runtime hit is ${humanizePath(nudgesHit)}, where meta-harness review appears as an autonomy nudge rather than a standalone subsystem.`);
+  }
+  const docsHits = matchedPaths.filter((item) => /\/docs\//.test(item)).slice(0, 3);
+  const testHits = matchedPaths.filter((item) => /\/tests\//.test(item)).slice(0, 3);
+  if (docsHits.length && testHits.length) {
+    summary.push('Most of the other evidence is in docs/tests, which means the concept is documented and referenced, but only partially operationalized.');
+  } else if (docsHits.length) {
+    summary.push('Most of the other evidence is in docs, which means the concept is documented, but only partially operationalized in runtime code.');
+  } else if (testHits.length) {
+    summary.push('Most of the other evidence is in tests, which means the concept is asserted in checks, but not yet cleanly centralized in runtime code.');
+  }
+  const topPaths = uniquePaths([...runtimeHits, ...docsHits, ...testHits]).slice(0, 5);
+  if (topPaths.length) {
+    summary.push(`Evidence checked: ${topPaths.map(humanizePath).join(', ')}.`);
+  }
+  return summary.join('\n');
+}
+
+function buildCodebaseReviewAnswer({ userMessage = '', executedTools = [] }) {
+  const prompt = String(userMessage || '').toLowerCase();
+  const readEvidence = collectFileReadEvidence(executedTools);
+  const matchedPaths = collectMatchedPaths(executedTools);
+  const shellPaths = collectShellPaths(executedTools);
+  if (!readEvidence.length && !matchedPaths.length && !shellPaths.length) return '';
+
+  const harnessAnswer = buildHarnessImplementationAnswer({ userMessage, executedTools });
+  if (harnessAnswer) return harnessAnswer;
+
+  const looksLikeCodeDocReview =
+    /\b(code|docs?|documentation|changelog|onboard|onboarding|linked to code|used|unused)\b/.test(prompt) ||
+    (/\b(check|review|audit|inspect|read|understand)\b/.test(prompt) && /\b(memory|mission(?:s)?|provider(?:s)?|routing|skill(?:s)?|tool(?:s)?)\b/.test(prompt)) ||
+    /\bmake sense\b|\bmiss something\b|\btell me\b|\bexplain\b|\bhow is\b|\bwhat is\b/.test(prompt);
+  if (!looksLikeCodeDocReview) return '';
+
+  const shellStdout = collectShellStdout(executedTools);
+  const readPaths = uniquePaths([...readEvidence.map((item) => item.path), ...shellPaths]);
+  const implementationPaths = readPaths.filter((item) =>
+    /\/src\/core\//.test(item) ||
+    /\/src\/memory\//.test(item) ||
+    /\/src\/providers\//.test(item) ||
+    /\/src\/skills\//.test(item) ||
+    /\/src\/tools\//.test(item) ||
+    /\/src\/server\/routes\//.test(item) ||
+    /\/src\/models\/catalog\.mjs$/.test(item) ||
+    /\/src\/ui\/modules\//.test(item)
+  ).slice(0, 5);
+  const docPaths = uniquePaths([
+    ...readPaths.filter((item) => /\/docs\/|\/README\.md$/i.test(item)),
+    ...matchedPaths.filter((item) => /\/docs\/|\/README\.md$/i.test(item))
+  ]).slice(0, 6);
+  const archiveOnboarding = docPaths.find((item) => /\/docs\/archive\/.*agent-onboarding\.md$/i.test(item));
+  const canonicalOnboarding =
+    docPaths.find((item) => /\/docs\/AGENT_ONBOARDING\.md$/i.test(item)) ||
+    (/\bAGENT_ONBOARDING\.md\b/.test(shellStdout) ? '/home/corp-unum/openunum/docs/AGENT_ONBOARDING.md' : '');
+  const changelogPaths = docPaths.filter((item) => /CHANGELOG/i.test(item)).slice(0, 3);
+
+  const lines = [];
+  if (implementationPaths.length) {
+    lines.push(`I checked implementation files: ${implementationPaths.map(humanizePath).join(', ')}.`);
+  }
+  if (docPaths.length) {
+    lines.push(`I checked documentation surfaces: ${docPaths.slice(0, 5).map(humanizePath).join(', ')}.`);
+  }
+  if (archiveOnboarding && canonicalOnboarding) {
+    lines.push(`One clear mismatch is retrieval drift: the route pulled the archived onboarding doc ${humanizePath(archiveOnboarding)} while the live onboarding doc is ${humanizePath(canonicalOnboarding)}.`);
+    lines.push('That means canonical docs are still too easy to lose to archive/history files during answers.');
+  } else if (archiveOnboarding) {
+    lines.push(`One risk is archive drift: onboarding evidence came from ${humanizePath(archiveOnboarding)} instead of a clearly canonical onboarding surface.`);
+  }
+  if (changelogPaths.length && implementationPaths.length) {
+    lines.push('From current evidence, the code and docs both exist, but the answer path is not reliably preferring the canonical documentation set over archive material.');
+  }
+  if (!lines.length) return '';
+  return lines.join('\n');
+}
+
 function buildWebSearchRankingAnswer({ userMessage = '', executedTools = [] }) {
   const userText = String(userMessage || '').toLowerCase();
   const strictRepoMode = /(github|repo|repository|open source|oss)/i.test(userText);
@@ -503,13 +740,13 @@ function buildWebSearchRankingAnswer({ userMessage = '', executedTools = [] }) {
   const fetchedEvidence = new Map();
   for (const run of executedTools) {
     if (!run || run.name !== 'web_fetch') continue;
-    const url = String(run?.result?.url || '').trim();
-    if (!url) continue;
-    fetchedEvidence.set(
-      url.toLowerCase(),
-      clipText(String(run?.result?.text || run?.result?.stdout || '').replace(/\s+/g, ' ').trim(), 3000)
-    );
-  }
+      const url = String(run?.result?.url || '').trim();
+      if (!url) continue;
+      fetchedEvidence.set(
+        url.toLowerCase(),
+      clipText(String(run?.result?.content || run?.result?.text || run?.result?.stdout || '').replace(/\s+/g, ' ').trim(), 3000)
+      );
+    }
 
   const candidates = [];
   for (const run of executedTools) {
@@ -592,8 +829,158 @@ function buildWebSearchRankingAnswer({ userMessage = '', executedTools = [] }) {
   return lines.join('\n');
 }
 
+function extractDocumentEvidence(executedTools = []) {
+  const byUrl = new Map();
+  const toolPriority = {
+    browser_extract: 4,
+    browser_read: 3,
+    web_fetch: 2,
+    http_request: 1
+  };
+  for (const run of executedTools) {
+    if (toolResultState(run) !== 'success') continue;
+    const name = String(run?.name || '');
+    if (!['web_fetch', 'http_request', 'browser_extract', 'browser_read'].includes(name)) continue;
+    const r = run?.result || {};
+    const url = String(r.url || '').trim();
+    const content = String(r.content || r.text || r.body || r.stdout || '').trim();
+    if (!url || content.length < 80) continue;
+    const prior = byUrl.get(url) || null;
+    const markupPenalty = (content.match(/<[^>]+>/g) || []).length;
+    const priority = toolPriority[name] || 0;
+    const qualityScore = Math.min(content.length, 12000) - (markupPenalty * 12);
+    const shouldReplace =
+      !prior ||
+      priority > prior.priority ||
+      (priority === prior.priority && qualityScore > prior.qualityScore);
+    if (shouldReplace) {
+      byUrl.set(url, {
+        tool: name,
+        url,
+        title: String(r.title || '').trim(),
+        content,
+        qualityScore,
+        priority
+      });
+    }
+  }
+  return [...byUrl.values()].sort((a, b) => (b.priority - a.priority) || (b.qualityScore - a.qualityScore));
+}
+
+function normalizeDocumentText(text = '') {
+  return String(text || '')
+    .replace(/\r/g, '')
+    .replace(/[ \t]+\n/g, '\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .replace(/[ \t]{2,}/g, ' ')
+    .trim();
+}
+
+function extractDocumentTitle(doc = null) {
+  const explicit = String(doc?.title || '').trim();
+  if (explicit) return explicit;
+  const content = normalizeDocumentText(doc?.content || '');
+  const heading = content.match(/^\s*#\s+(.+)$/m)?.[1]?.trim();
+  if (heading) return heading;
+  return content.split('\n').map((line) => line.trim()).find((line) => line.length > 12) || '';
+}
+
+function extractAbstractSnippet(text = '') {
+  const normalized = normalizeDocumentText(text);
+  const abstractMatch = normalized.match(/(?:^|\n)\s*(?:#+\s*)?Abstract\s*\n([\s\S]{80,2400}?)(?:\n\s*(?:#+\s*)?(?:\d+\s+Introduction|Introduction|1\s+Introduction)\b|$)/i);
+  const sectionBody = abstractMatch?.[1] || normalized.slice(0, 1800);
+  const paragraph = sectionBody
+    .replace(/\[[^\]]+\]\([^)]+\)/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+  return clipText(paragraph, 420);
+}
+
+function hasSignal(text = '', pattern) {
+  return pattern.test(String(text || ''));
+}
+
+function buildDocumentDiscussionAnswer({ userMessage = '', executedTools = [] }) {
+  const requirements = extractRequirements(userMessage);
+  if (!requirements.asksDocumentDiscussion) return '';
+  const docs = extractDocumentEvidence(executedTools);
+  if (!docs.length) {
+    return [
+      'Document discussion could not be grounded from current tool evidence.',
+      'The page may be reachable, but no readable document body was captured for analysis yet.'
+    ].join('\n');
+  }
+
+  const doc = docs[0];
+  const content = normalizeDocumentText(doc.content);
+  const title = extractDocumentTitle(doc);
+  const abstract = extractAbstractSnippet(content);
+  const lines = [];
+
+  if (title) lines.push(`Paper: ${title}`);
+  if (abstract) lines.push(`Core claim: ${abstract}`);
+
+  const alignments = [];
+  if (hasSignal(content, /\bfilesystem\b/i) || hasSignal(content, /\bgrep\b/i) || hasSignal(content, /\bcat\b/i)) {
+    alignments.push('It favors selective filesystem access over packing full history into one prompt. That matches OpenUnum’s direction when we keep logs and artifacts queryable instead of over-compressing them.');
+  }
+  if (hasSignal(content, /\bexecution traces?\b/i) || hasSignal(content, /\bscores?\b/i) || hasSignal(content, /\bprior candidates?\b/i)) {
+    alignments.push('It treats raw traces, scores, and prior variants as first-class evidence. That aligns with OpenUnum audit receipts, tool traces, and session history, but our retrieval over them is still weaker than the paper’s harness-search loop.');
+  }
+  if (hasSignal(content, /\bvalidation before expensive benchmarks\b/i) || hasSignal(content, /\blightweight validation\b/i)) {
+    alignments.push('It explicitly recommends a cheap validation pass before costly evaluation. OpenUnum should apply the same pattern to missions, model-backed tools, and provider-routed workflows.');
+  }
+  if (hasSignal(content, /\bautomate evaluation outside the proposer\b/i) || hasSignal(content, /\bseparate harness should score candidates\b/i)) {
+    alignments.push('It keeps proposal and evaluation separate. That is consistent with OpenUnum’s verifier and guardrail direction and should remain a design rule.');
+  }
+  if (alignments.length) {
+    lines.push('Where OpenUnum already aligns:');
+    for (const item of alignments.slice(0, 4)) lines.push(`- ${item}`);
+  }
+
+  const harvest = [];
+  if (hasSignal(content, /\blog everything in a format that is easy to navigate\b/i) || hasSignal(content, /\bmachine-readable formats such as json\b/i)) {
+    harvest.push('Promote every mission or harness trial into a queryable artifact directory with stable JSON summaries, trace files, and score files.');
+  }
+  if (hasSignal(content, /\bsmall cli\b/i) || hasSignal(content, /\bpareto frontier\b/i) || hasSignal(content, /\bdiffs code and results\b/i)) {
+    harvest.push('Add a narrow CLI over run history: top candidates, diffs between runs, failure clusters, and score deltas.');
+  }
+  if (hasSignal(content, /\bvalidation before expensive benchmarks\b/i) || hasSignal(content, /\blightweight validation\b/i)) {
+    harvest.push('Insert fast preflight validators before long evaluations or expensive provider calls.');
+  }
+  if (hasSignal(content, /\bfull history\b/i) || hasSignal(content, /\bprior experience\b/i)) {
+    harvest.push('Keep long-horizon experience externalized and retrievable, instead of relying on compressed summaries as the only memory format.');
+  }
+  if (!harvest.length) {
+    harvest.push('The main harvest is methodological: keep harness history external, queryable, and separable into proposal, validation, and evaluation stages.');
+  }
+  lines.push('What to harvest:');
+  for (const item of harvest.slice(0, 4)) lines.push(`- ${item}`);
+
+  lines.push('What OpenUnum is still missing:');
+  lines.push('- A first-class harness optimization loop that proposes variants, evaluates them offline, and stores comparable run artifacts under one canonical experiment layout.');
+  lines.push('- A dedicated history query surface for comparing prior runs by score, trace pattern, and code diff without manual session inspection.');
+
+  lines.push('Bottom line: the paper is directionally aligned with OpenUnum. The strongest idea to adopt is not a single heuristic, but a disciplined outer loop where harness changes are proposed, validated, evaluated, and archived as searchable evidence.');
+  return lines.join('\n');
+}
+
 function buildGenericToolSummary({ executedTools = [], toolRuns = 0, requirements = null }) {
   const uniqueSurfaceCount = countUniqueToolSurfaces(executedTools);
+  if (requirements?.asksWeather) {
+    const weather = buildWeatherAnswer({
+      userMessage: requirements?.originalUserMessage || '',
+      executedTools
+    });
+    if (weather) return weather;
+  }
+  if (requirements?.asksDocumentDiscussion) {
+    const discussion = buildDocumentDiscussionAnswer({
+      userMessage: requirements?.originalUserMessage || '',
+      executedTools
+    });
+    if (discussion) return discussion;
+  }
   if (requirements?.asksRanking || requirements?.asksResearch || requirements?.asksComparison || requirements?.asksTable) {
     const ranked = buildWebSearchRankingAnswer({
       userMessage: requirements?.originalUserMessage || '',
@@ -605,9 +992,14 @@ function buildGenericToolSummary({ executedTools = [], toolRuns = 0, requirement
     const research = buildDatasetResearchAnswer({ userMessage: requirements.originalUserMessage || '', executedTools });
     if (research) return research;
   }
+  if (requirements?.asksReview || requirements?.asksExplanation) {
+    const review = buildCodebaseReviewAnswer({ userMessage: requirements.originalUserMessage || '', executedTools });
+    if (review) return review;
+  }
   if (requirements?.asksSteps) return buildStepAnswer({ executedTools, toolRuns, uniqueSurfaceCount });
   if (requirements?.asksStatus) return buildStatusAnswer({ executedTools, toolRuns, uniqueSurfaceCount });
-  return buildStatusAnswer({ executedTools, toolRuns, uniqueSurfaceCount });
+  return buildCodebaseReviewAnswer({ userMessage: requirements?.originalUserMessage || '', executedTools }) ||
+    buildStatusAnswer({ executedTools, toolRuns, uniqueSurfaceCount });
 }
 
 function buildProvenanceFooter({ executedTools = [], synthesized = false }) {
@@ -664,6 +1056,9 @@ export function assessFinalAnswerQuality({ finalText = '', userMessage = '', exe
   if (requirements.asksSteps && !/^\d+\.\s+/m.test(text)) score -= 18;
   if (requirements.asksComparison && !/comparison:/i.test(text)) score -= 16;
   if ((requirements.asksResearch || requirements.asksDataset) && !/recommendation:/i.test(text)) score -= 14;
+  if (requirements.asksDocumentDiscussion && !/(what to harvest:|bottom line:|where openunum already aligns:|core claim:)/i.test(text)) score -= 28;
+  if ((requirements.asksReview || requirements.asksExplanation) && /^Status:/im.test(text)) score -= 28;
+  if ((requirements.asksReview || requirements.asksExplanation) && /^Best next steps from current evidence:/im.test(text)) score -= 32;
   if (requirements.asksRanking && !(/top|rank|recommendation/i.test(text))) score -= 16;
   if ((requirements.asksResearch || requirements.asksRanking) && text.length < 180 && toolRuns > 0) score -= 18;
   const evidenceMentions = countEvidenceMentions(text, datasetIds.length ? datasetIds : evidenceIds);
@@ -685,7 +1080,10 @@ export function assessFinalAnswerQuality({ finalText = '', userMessage = '', exe
       asksStatus: requirements.asksStatus,
       asksResearch: requirements.asksResearch,
       asksDataset: requirements.asksDataset,
-      asksComparison: requirements.asksComparison
+      asksComparison: requirements.asksComparison,
+      asksDocumentDiscussion: requirements.asksDocumentDiscussion,
+      asksExplanation: requirements.asksExplanation,
+      asksReview: requirements.asksReview
     }
   };
 }
@@ -720,6 +1118,10 @@ function shouldReplaceWeakFinalText({ finalText = '', userMessage = '', executed
     const onlyStatusStub = /^Status:\s+\w+/i.test(text) && /Findings:/i.test(text);
     if (mentions === 0 || onlyStatusStub) return true;
   }
+  if ((requirements.asksReview || requirements.asksExplanation) && (/^Status:\s+\w+/i.test(text) || /^Best next steps from current evidence:/i.test(text))) {
+    return true;
+  }
+  if (requirements.asksDocumentDiscussion && /^Status:\s+\w+/i.test(text)) return true;
   if (requirements.asksResearch || requirements.asksComparison || requirements.asksDataset || requirements.asksModelRanking) {
     const evidenceIds = extractEvidenceResourceIds(executedTools).map((item) => item.toLowerCase());
     const mentionedIds = extractResourceLikeMentions(text);

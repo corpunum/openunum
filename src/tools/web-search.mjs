@@ -81,9 +81,11 @@ export async function web_fetch({ url, extractMode = 'markdown', maxChars = 1000
       : htmlToMarkdown(html).substring(0, maxChars);
 
     return {
+      ok: true,
       url,
       title,
       content,
+      text: content,
       contentType,
       truncated: html.length > maxChars
     };

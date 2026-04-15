@@ -11,7 +11,7 @@ const escapeHtml = (s) => String(s || '')
 describe('ui missions helpers', () => {
   it('builds filtered mission timeline sections', () => {
     const out = {
-      mission: { status: 'running', step: 2, hardStepCap: 6, retries: 1, sessionId: 's-1' },
+      mission: { status: 'running', step: 2, hardStepCap: 6, effectiveStepLimit: 6, limitSource: 'hardStepCap', retries: 1, sessionId: 's-1' },
       log: [{ step: 2, at: '2026-04-08T00:00:00Z', reply: 'alpha done' }],
       toolRuns: [{ toolName: 'beta-tool', ok: true, createdAt: '2026-04-08T00:00:01Z', result: { ok: true } }],
       recentStrategies: [],
@@ -20,6 +20,7 @@ describe('ui missions helpers', () => {
     };
     const view = buildMissionTimelineView(out, { filter: 'log', search: 'alpha', escapeHtml });
     expect(view.summaryText.includes('status=running')).toBe(true);
+    expect(view.summaryText.includes('limit=hard-cap')).toBe(true);
     expect(view.logHtml.includes('alpha done')).toBe(true);
     expect(view.toolsHtml).toBe('');
   });

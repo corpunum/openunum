@@ -294,6 +294,53 @@ export function compactSessionMessages({
   };
 }
 
+export function trimMessagesToTokenBudget({
+  messages,
+  maxTokens,
+  preserveFirstSystem = true,
+  minRecentMessages = 10
+} = {}) {
+  const rows = Array.isArray(messages) ? messages.map((m) => ({ role: m.role, content: m.content })) : [];
+  const effectiveMaxTokens = Math.max(256, Number(maxTokens || 0));
+  const preTokens = estimateMessagesTokens(rows);
+  if (!rows.length || !Number.isFinite(effectiveMaxTokens) || preTokens <= effectiveMaxTokens) {
+    return {
+      messages: rows,
+      preTokens,
+      postTokens: preTokens,
+      droppedCount: 0
+    };
+  }
+
+  const front = [];
+  const startIndex = preserveFirstSystem && rows[0]?.role === 'system' ? 1 : 0;
+  if (startIndex === 1) front.push(rows[0]);
+
+  const candidates = rows.slice(startIndex);
+  const minKeep = Math.max(1, Number(minRecentMessages || 10));
+  const keptTail = [];
+  let kept = 0;
+
+  for (let i = candidates.length - 1; i >= 0; i -= 1) {
+    const nextTail = [candidates[i], ...keptTail];
+    const nextRows = [...front, ...nextTail];
+    const nextTokens = estimateMessagesTokens(nextRows);
+    if (kept < minKeep || nextTokens <= effectiveMaxTokens) {
+      keptTail.unshift(candidates[i]);
+      kept += 1;
+      continue;
+    }
+  }
+
+  const trimmed = [...front, ...keptTail];
+  return {
+    messages: trimmed,
+    preTokens,
+    postTokens: estimateMessagesTokens(trimmed),
+    droppedCount: Math.max(0, rows.length - trimmed.length)
+  };
+}
+
 /**
  * Create a sleep-aware compaction wrapper (R9).
  */

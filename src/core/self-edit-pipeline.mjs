@@ -1,4 +1,5 @@
 import crypto from 'node:crypto';
+import { buildSelfAwarenessSnapshot } from './self-awareness.mjs';
 
 function nowIso() {
   return new Date().toISOString();
@@ -109,12 +110,73 @@ function evaluatePromotionPolicy(policy) {
   return { ok: violations.length === 0, violations };
 }
 
+const DEFAULT_PROTECTED_PATH_PATTERNS = [
+  /^src\/config\.mjs$/i,
+  /^src\/core\/audit-log\.mjs$/i,
+  /^src\/server\/http\.mjs$/i,
+  /^src\/server\/services\/request_guard_service\.mjs$/i,
+  /^src\/server\/routes\/auth\.mjs$/i,
+  /^src\/server\/routes\/config\.mjs$/i,
+  /^BRAIN\.MD$/i,
+  /^docs\/AGENT_ONBOARDING\.md$/i
+];
+
+function isProtectedPath(pathValue = '', patterns = DEFAULT_PROTECTED_PATH_PATTERNS) {
+  const p = trimString(pathValue);
+  if (!p) return false;
+  return patterns.some((pattern) => pattern.test(p));
+}
+
+function parseProtectedPathRules(runtimeConfig = {}) {
+  const configured = Array.isArray(runtimeConfig?.selfEditProtectedPathPatterns)
+    ? runtimeConfig.selfEditProtectedPathPatterns
+      .map((item) => String(item || '').trim())
+      .filter(Boolean)
+    : [];
+  if (!configured.length) return DEFAULT_PROTECTED_PATH_PATTERNS;
+  const compiled = [];
+  for (const item of configured) {
+    try {
+      compiled.push(new RegExp(item, 'i'));
+    } catch {
+      // ignore malformed pattern
+    }
+  }
+  return compiled.length ? compiled : DEFAULT_PROTECTED_PATH_PATTERNS;
+}
+
+function evaluateQualityDropGuard({ baseline = null, post = null, maxAllowedDrop = 8 } = {}) {
+  const baselineScore = Number(baseline?.score || 0);
+  const postScore = Number(post?.score || 0);
+  const drop = baselineScore - postScore;
+  const violated = Number.isFinite(drop) && drop > Number(maxAllowedDrop || 8);
+  return {
+    baseline,
+    post,
+    baselineScore: Number.isFinite(baselineScore) ? baselineScore : 0,
+    postScore: Number.isFinite(postScore) ? postScore : 0,
+    drop: Number.isFinite(drop) ? Number(drop.toFixed(1)) : 0,
+    maxAllowedDrop: Number(maxAllowedDrop || 8),
+    violated
+  };
+}
+
 export class SelfEditPipeline {
-  constructor({ toolRuntime, memoryStore, workspaceRoot, defaultBaseUrl = 'http://127.0.0.1:18880' }) {
+  constructor({
+    toolRuntime,
+    memoryStore,
+    workspaceRoot,
+    defaultBaseUrl = 'http://127.0.0.1:18880',
+    runtimeConfig = {},
+    awarenessScorer = buildSelfAwarenessSnapshot
+  }) {
     this.toolRuntime = toolRuntime;
     this.memoryStore = memoryStore;
     this.workspaceRoot = workspaceRoot;
     this.defaultBaseUrl = trimString(defaultBaseUrl, 'http://127.0.0.1:18880');
+    this.runtimeConfig = runtimeConfig && typeof runtimeConfig === 'object' ? runtimeConfig : {};
+    this.awarenessScorer = typeof awarenessScorer === 'function' ? awarenessScorer : buildSelfAwarenessSnapshot;
+    this.protectedPathPatterns = parseProtectedPathRules(this.runtimeConfig);
     this.runs = new Map();
     this.memoryStore?.markRunningSelfEditInterrupted?.();
   }
@@ -134,6 +196,9 @@ export class SelfEditPipeline {
       promotedAt: run.promotedAt,
       rolledBackAt: run.rolledBackAt,
       rollbackOnFailure: run.rollbackOnFailure,
+      elevatedApproval: run.elevatedApproval ? { ...run.elevatedApproval } : null,
+      qualityGate: run.qualityGate ? { ...run.qualityGate } : null,
+      canaryProfile: run.canaryProfile ? { ...run.canaryProfile } : null,
       promotionPolicy: run.promotionPolicy ? { ...run.promotionPolicy } : null,
       promotionChecks: Array.isArray(run.promotionChecks) ? [...run.promotionChecks] : [],
       validationCommands: [...run.validationCommands],
@@ -191,6 +256,19 @@ export class SelfEditPipeline {
     const duplicatePaths = paths.filter((item, index) => paths.indexOf(item) !== index);
     if (duplicatePaths.length) {
       return { ok: false, error: `duplicate edit paths are not allowed: ${[...new Set(duplicatePaths)].join(', ')}` };
+    }
+    const protectedTouched = paths.filter((item) => isProtectedPath(item, this.protectedPathPatterns));
+    const elevatedApproval = payload?.elevatedApproval && typeof payload.elevatedApproval === 'object'
+      ? {
+        approved: payload.elevatedApproval.approved === true,
+        reason: trimString(payload.elevatedApproval.reason)
+      }
+      : { approved: false, reason: '' };
+    if (protectedTouched.length > 0 && (!elevatedApproval.approved || !elevatedApproval.reason)) {
+      return {
+        ok: false,
+        error: `protected_path_requires_elevated_approval:${protectedTouched.join(', ')}`
+      };
     }
     return { ok: true, edits };
   }
@@ -306,6 +384,18 @@ export class SelfEditPipeline {
         expectStatus: Number.isFinite(Number(item?.expectStatus)) ? Number(item.expectStatus) : 200
       }))
       .filter((item) => item.url);
+    const canaryProfile = {
+      maxValidationCommands: cap(payload?.canaryProfile?.maxValidationCommands, 1, 24, cap(this.runtimeConfig?.selfEditMaxValidationCommands, 1, 24, 10)),
+      maxCanaryChecks: cap(payload?.canaryProfile?.maxCanaryChecks, 1, 16, cap(this.runtimeConfig?.selfEditMaxCanaryChecks, 1, 16, 8)),
+      maxAllowedQualityDrop: cap(payload?.canaryProfile?.maxAllowedQualityDrop, 0, 40, cap(this.runtimeConfig?.selfEditMaxAllowedQualityDrop, 0, 40, 8)),
+      allowedTools: ['file_patch', 'file_write', 'file_restore_last', 'shell_run']
+    };
+    if (validationCommands.length > canaryProfile.maxValidationCommands) {
+      return { ok: false, error: `too_many_validation_commands:max=${canaryProfile.maxValidationCommands}` };
+    }
+    if (canaryChecks.length > canaryProfile.maxCanaryChecks) {
+      return { ok: false, error: `too_many_canary_checks:max=${canaryProfile.maxCanaryChecks}` };
+    }
     const promotionPolicy = buildPromotionPolicy(
       baseUrl,
       edits.map((item) => trimString(item.args?.path)),
@@ -328,6 +418,14 @@ export class SelfEditPipeline {
       promotedAt: null,
       rolledBackAt: null,
       rollbackOnFailure: payload.rollbackOnFailure !== false,
+      elevatedApproval: payload?.elevatedApproval && typeof payload.elevatedApproval === 'object'
+        ? {
+          approved: payload.elevatedApproval.approved === true,
+          reason: trimString(payload.elevatedApproval.reason)
+        }
+        : null,
+      qualityGate: null,
+      canaryProfile,
       promotionPolicy,
       promotionChecks,
       validationCommands,
@@ -343,10 +441,11 @@ export class SelfEditPipeline {
     this.persistRun(run);
 
     try {
+      const baselineQuality = this.awarenessScorer({ memoryStore: this.memoryStore });
       for (const edit of edits) {
         const result = await this.toolRuntime.run(edit.tool, edit.args, {
           sessionId,
-          allowedTools: ['file_patch', 'file_write', 'file_restore_last', 'shell_run'],
+          allowedTools: canaryProfile.allowedTools,
           policyMode: 'execute'
         });
         const summary = {
@@ -384,6 +483,18 @@ export class SelfEditPipeline {
       this.persistRun(run);
       if (!policyEvaluation.ok) {
         run.lastError = policyEvaluation.violations.join(';');
+        throw new Error(run.lastError);
+      }
+
+      const postQuality = this.awarenessScorer({ memoryStore: this.memoryStore });
+      run.qualityGate = evaluateQualityDropGuard({
+        baseline: baselineQuality,
+        post: postQuality,
+        maxAllowedDrop: canaryProfile.maxAllowedQualityDrop
+      });
+      this.persistRun(run);
+      if (run.qualityGate.violated) {
+        run.lastError = `quality_regression_detected:drop=${run.qualityGate.drop}`;
         throw new Error(run.lastError);
       }
 

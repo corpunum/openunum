@@ -4,9 +4,19 @@ import {
   validateMissionStartRequest,
   validateMissionStopRequest
 } from '../contracts/request-contracts.mjs';
+import { getMissionEffectiveStepLimit, getMissionLimitSource } from '../../core/missions.mjs';
 
 function toFiniteNumber(value, fallback = null) {
   return Number.isFinite(value) ? Number(value) : fallback;
+}
+
+function decorateMission(mission) {
+  if (!mission || typeof mission !== 'object') return mission;
+  return {
+    ...mission,
+    effectiveStepLimit: getMissionEffectiveStepLimit(mission),
+    limitSource: getMissionLimitSource(mission)
+  };
 }
 
 export async function handleMissionsRoute({ req, res, url, ctx }) {
@@ -20,7 +30,7 @@ export async function handleMissionsRoute({ req, res, url, ctx }) {
     const schedules = ctx.missions.listSchedules();
     // Wrap schedules in a similar format or just provide them alongside
     ctx.sendJson(res, 200, { 
-      missions: list,
+      missions: list.map(decorateMission),
       schedules: schedules.map(s => ({
         ...s,
         isSchedule: true,
@@ -38,7 +48,7 @@ export async function handleMissionsRoute({ req, res, url, ctx }) {
       return true;
     }
     ctx.sendJson(res, 200, {
-      mission,
+      mission: decorateMission(mission),
       runtimeState: getRuntimeState({
         sessionId: mission.sessionId,
         goal: mission.goal,
@@ -56,7 +66,7 @@ export async function handleMissionsRoute({ req, res, url, ctx }) {
       return true;
     }
     ctx.sendJson(res, 200, {
-      ...ctx.buildMissionTimeline(mission),
+      ...ctx.buildMissionTimeline(decorateMission(mission)),
       runtimeState: getRuntimeState({
         sessionId: mission.sessionId,
         goal: mission.goal,

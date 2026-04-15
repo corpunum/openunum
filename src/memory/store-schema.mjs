@@ -1,4 +1,16 @@
+const MEMORY_STORE_SCHEMA_VERSION = 1;
+
+function getSchemaVersion(db) {
+  try {
+    const row = db.prepare('PRAGMA user_version').get();
+    return Number(row?.user_version || 0);
+  } catch {
+    return 0;
+  }
+}
+
 export function initializeMemoryStoreSchema(db) {
+  if (getSchemaVersion(db) >= MEMORY_STORE_SCHEMA_VERSION) return;
   db.exec(`
 CREATE TABLE IF NOT EXISTS sessions (
   id TEXT PRIMARY KEY,
@@ -218,5 +230,6 @@ CREATE INDEX IF NOT EXISTS idx_execution_state_type_status ON execution_state(ty
 CREATE INDEX IF NOT EXISTS idx_execution_state_session_updated ON execution_state(session_id, updated_at DESC);
 CREATE INDEX IF NOT EXISTS idx_execution_state_created ON execution_state(created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_execution_state_status_updated ON execution_state(status, updated_at DESC);
-  `);
+PRAGMA user_version = ${MEMORY_STORE_SCHEMA_VERSION};
+`);
 }

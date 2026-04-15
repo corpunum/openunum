@@ -4,6 +4,21 @@ All notable changes to OpenUnum are documented in this file.
 
 ---
 
+## [2.4.0] - 2026-04-15
+
+### Added
+- **Unified Hybrid Memory Retrieval**: `HybridRetriever` now pulls fresh memories directly from SQLite `MemoryStore` in addition to legacy flat files.
+- **Cryptographic Audit Trail**: Every tool execution and critical mission state change (start/complete) is now logged with HMAC-SHA256 chain hashing for tamper-evident verification.
+- **Autonomous Sleep Cycles**: Integrated `SleepCycle` and `MemoryConsolidator` into `AutonomyMaster` heartbeat for 24/7 background maintenance and "Hippocampal Replay" consolidation.
+- **FastPathRouter**: New specialized router for deterministic and short-circuit replies, significantly reducing LLM token waste on routine turns.
+
+### Changed
+- **Streamlined Agent Core**: Refactored `src/core/agent.mjs` to focus on cognitive tasks by offloading deterministic logic to `FastPathRouter`.
+- **Enhanced MemoryStore**: Added `getAllSearchableRecords` to provide a unified data stream for the retrieval pipeline.
+- **Wired Advanced Features**: Directly connected isolated advanced modules (Audit, Hybrid Memory, Sleep) into the main execution loop, fixing the "Disconnected Architecture" anti-pattern.
+
+---
+
 ## [2.3.39] - 2026-04-09
 
 ### Added

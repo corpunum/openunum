@@ -281,10 +281,10 @@ export function validateMissionStartRequest(body) {
   const errors = [];
   if (!String(body.goal || '').trim()) errors.push({ field: 'goal', issue: 'required non-empty string' });
   for (const [key, min, max] of [
-    ['maxSteps', 1, 10000],
+    ['maxSteps', 1, 120],
     ['intervalMs', 10, 60000],
-    ['maxRetries', 0, 50],
-    ['hardStepCap', 1, 10000]
+    ['maxRetries', 0, 20],
+    ['hardStepCap', 1, 300]
   ]) {
     if (body[key] !== undefined && !inRange(body[key], min, max)) {
       addTypeError(errors, key, `number in [${min},${max}]`);
@@ -312,9 +312,9 @@ export function validateMissionScheduleRequest(body) {
   for (const [key, min, max] of [
     ['delayMs', 0, 31536000000],
     ['intervalMs', 10, 31536000000],
-    ['maxSteps', 1, 10000],
-    ['maxRetries', 0, 50],
-    ['hardStepCap', 1, 10000],
+    ['maxSteps', 1, 120],
+    ['maxRetries', 0, 20],
+    ['hardStepCap', 1, 300],
     ['missionIntervalMs', 10, 60000]
   ]) {
     if (body[key] !== undefined && !inRange(body[key], min, max)) {

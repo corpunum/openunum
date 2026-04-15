@@ -9,8 +9,13 @@ export class CompletionChecklist {
     this.initialized = false;
   }
 
-  initFromSteps(steps) {
+  reset() {
     this.items.clear();
+    this.initialized = false;
+  }
+
+  initFromSteps(steps) {
+    this.reset();
     steps.forEach((step, i) => {
       this.items.set(`step-${i}`, {
         description: step,

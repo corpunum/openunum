@@ -1,67 +1,65 @@
 # OpenUnum Memory System
 
-**Version:** 2.1.0  
-**Last Updated:** 2026-04-05
+**Version:** 2.4.0  
+**Last Updated:** 2026-04-15
 
 ---
 
 ## Overview
 
-OpenUnum uses a **hybrid memory architecture** combining:
-- **Session memory** — Chat history with compaction
-- **Long-term memory** — Persisted knowledge for retrieval
-- **Working memory** — Task anchor for drift prevention
+OpenUnum uses a **unified hybrid memory architecture** combining high-performance SQLite storage for active sessions and learned facts with file-based archival memory for long-term persistence.
 
 ---
 
 ## Memory Layers
 
-### 1. Session Memory
-**Location:** `data/sessions/*.json`  
-**Purpose:** Persist chat history across refreshes  
-**Retention:** Indefinite (user-managed)
+### 1. Primary Knowledge Store (SQLite)
+**Location:** `~/.openunum/openunum.db`  
+**Purpose:** Canonical source for agent-learned facts, strategies, and artifacts.  
+**Searchable Streams:**
+- `facts` — Explicitly remembered key-value pairs
+- `strategy_outcomes` — Results of previous autonomous decisions
+- `memory_artifacts` — Consolidated patterns from sleep-cycle replay
 
-Structure:
-```json
-{
-  "id": "session_1774970079541_a3gq29",
-  "title": "Hybrid Retrieval Implementation",
-  "createdAt": "2026-04-05T12:00:00.000Z",
-  "updatedAt": "2026-04-05T14:30:00.000Z",
-  "messages": [
-    { "role": "user", "content": "...", "timestamp": "..." },
-    { "role": "assistant", "content": "...", "timestamp": "..." }
-  ],
-  "messageCount": 24
-}
-```
-
-Features:
-- Auto-generated titles from first message
-- Selectable history in UI sidebar
-- Compaction after ~12 turns
-- Pending run recovery (survives refresh)
+### 2. Archival Memory (Flat Files)
+**Location:** `data/memory/*.md`, `data/memory/*.json`  
+**Purpose:** Legacy documentation and large-scale knowledge dumps.  
+**Format:** Markdown or JSON with metadata.
 
 ---
 
-### 2. Long-Term Memory (Hybrid Retrieval)
-**Location:** `data/memory/*.md`  
-**Purpose:** Knowledge base for semantic retrieval  
-**Retention:** Indefinite (curated)
+## Retrieval Pipeline (Unified Hybrid Retriever)
 
-#### Retrieval Pipeline
+The `HybridRetriever` acts as a bridge between the SQLite store and the file system, ensuring the agent sees its own live learnings alongside its archival data.
 
 ```
 User Query
     ↓
-BM25 Search (top-20 candidates)
+Source Unification (SQLite + File System)
+    ↓
+BM25 Search (top-25 candidates)
     ↓
 Embedding Generation (Ollama nomic-embed-text)
     ↓
-Cosine Similarity Reranking
+Reciprocal Rank Fusion Reranking
     ↓
-Top-5 Results (with dual scores)
+Top-8 Results (injected into Context Compiler)
 ```
+
+**Bridge Implementation:**
+The agent uses `MemoryStore.getAllSearchableRecords()` to provide a unified stream of candidates to the `HybridRetriever`, ensuring a seamless memory surface.
+
+---
+
+## Background Maintenance (R2, R9)
+
+### Sleep Cycles & Hippocampal Replay
+Managed by `AutonomyMaster`, the system identifies idle periods to perform memory consolidation:
+1. **Idle Detection:** No active user sessions for 60 minutes.
+2. **Maintenance Trigger:** `MemoryConsolidator.runReplayCycle()` extracts successful and failed patterns from recent turns.
+3. **Consolidation:** Patterns are stored back into the `MemoryStore` as boosted artifacts, ready for next-day retrieval.
+
+---
 
 **Example:**
 ```javascript
@@ -129,7 +127,7 @@ Structure:
 }
 ```
 
-**Persistence:** `data/working-memory/*.json`
+**Persistence:** `OPENUNUM_HOME/working-memory/*.json` (repo-local `data/working-memory/*.json` is legacy fallback/debug state only)
 
 ---
 

@@ -128,6 +128,7 @@ describe('Builtin Commands', () => {
     const cmds = registry.list();
     const names = cmds.map(c => c.name);
     expect(names).toContain('help');
+    expect(names).toContain('start');
     expect(names).toContain('status');
     expect(names).toContain('new');
     expect(names).toContain('compact');
@@ -145,6 +146,14 @@ describe('Builtin Commands', () => {
     expect(result.handled).toBe(true);
     expect(result.reply).toContain('Available slash commands');
     expect(result.reply).toContain('/help');
+    expect(result.reply).toContain('/start');
+    expect(result.reply).toContain('/status');
+  });
+
+  it('start should work as a quick channel bootstrap command', async () => {
+    const result = await registry.route('/start', { sessionId: 'telegram:7277166932' });
+    expect(result.handled).toBe(true);
+    expect(result.reply).toContain('/new');
     expect(result.reply).toContain('/status');
   });
 

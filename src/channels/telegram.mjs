@@ -17,6 +17,21 @@ export class TelegramChannel {
     return `https://api.telegram.org/bot${this.config.botToken}${path}`;
   }
 
+  collapsePendingMessages(messages = []) {
+    const items = messages.map((item) => String(item || '').trim()).filter(Boolean);
+    if (!items.length) return '';
+    if (items.length === 1) return items[0];
+    const latest = items[items.length - 1];
+    const earlier = items.slice(0, -1).slice(-3);
+    return [
+      'Queued Telegram messages arrived before the previous reply completed.',
+      `Latest message: ${latest}`,
+      earlier.length ? 'Earlier pending messages for context only:' : '',
+      ...earlier.map((item, index) => `${index + 1}. ${item}`),
+      'Answer the latest message directly. Use earlier messages only as context.'
+    ].filter(Boolean).join('\n');
+  }
+
   // Split long messages at natural breakpoints (paragraphs, code blocks)
   chunkMessage(text) {
     const chunks = [];
@@ -79,12 +94,30 @@ export class TelegramChannel {
     // Remove tool_call artifacts that leaked through
     cleaned = cleaned.replace(/<\s*tool_call[^>]*>[\s\S]*?<\s*\/\s*tool_call\s*>/gi, '');
     cleaned = cleaned.replace(/<\s*function_call[^>]*>[\s\S]*?<\s*\/\s*function_call\s*>/gi, '');
+
+    // Fail-safe: never deliver internal recovery stubs as user-facing Telegram output.
+    if ((/^Status:\s+\w+/i.test(cleaned) && /Findings:/i.test(cleaned)) || /^Best next steps from current evidence:/i.test(cleaned)) {
+      cleaned = 'I produced an internal diagnostics summary instead of a direct answer. Please resend your last request, and I will answer it directly.';
+    }
     
     // Clean up excessive whitespace
     cleaned = cleaned.replace(/\n{3,}/g, '\n\n');
     cleaned = cleaned.trim();
     
     return cleaned;
+  }
+
+  async clearWebhook({ dropPendingUpdates = false } = {}) {
+    const res = await fetch(this.api('/deleteWebhook'), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ drop_pending_updates: Boolean(dropPendingUpdates) })
+    });
+    if (!res.ok) {
+      const body = await res.text().catch(() => '');
+      throw new Error(`Telegram deleteWebhook failed: ${res.status} ${res.statusText} ${body}`.trim());
+    }
+    return res.json().catch(() => ({ ok: true }));
   }
 
   async send(chatId, text) {
@@ -157,19 +190,37 @@ export class TelegramChannel {
       });
       
       if (!res.ok) {
-        throw new Error(`Telegram poll failed: ${res.status} ${res.statusText}`);
+        const body = await res.text().catch(() => '');
+        throw new Error(`Telegram poll failed: ${res.status} ${res.statusText}${body ? ` - ${body}` : ''}`);
       }
       
       const data = await res.json();
       const updates = data?.result || [];
-      
+
+      const pendingByChat = new Map();
       for (const u of updates) {
         this.offset = Math.max(this.offset, u.update_id + 1);
         const msg = u.message?.text;
         const chatId = u.message?.chat?.id;
         if (!msg || !chatId) continue;
-        const reply = await this.onMessage(msg, `telegram:${chatId}`);
-        await this.send(chatId, reply);
+        const queue = pendingByChat.get(chatId) || [];
+        queue.push(msg);
+        pendingByChat.set(chatId, queue);
+      }
+
+      for (const [chatId, messages] of pendingByChat.entries()) {
+        const collapsed = this.collapsePendingMessages(messages);
+        if (!collapsed) continue;
+        try {
+          const reply = await this.onMessage(collapsed, `telegram:${chatId}`);
+          await this.send(chatId, reply);
+        } catch (chatError) {
+          const fallback = 'I hit an internal processing error for your message. Please retry.';
+          try {
+            await this.send(chatId, fallback);
+          } catch {}
+          // Do not fail the entire polling pass for one chat.
+        }
       }
     } catch (err) {
       if (retryCount < maxRetries) {

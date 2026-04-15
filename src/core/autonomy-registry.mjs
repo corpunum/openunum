@@ -27,13 +27,15 @@ function syncSelfEditPipeline(ctx) {
       toolRuntime: ctx.agent.toolRuntime,
       memoryStore: ctx.memory,
       workspaceRoot: ctx.config.runtime?.workspaceRoot || process.cwd(),
-      defaultBaseUrl: `http://127.0.0.1:${ctx.config.server?.port || 18880}`
+      defaultBaseUrl: `http://127.0.0.1:${ctx.config.server?.port || 18880}`,
+      runtimeConfig: ctx.config.runtime
     });
   }
   selfEditPipeline.toolRuntime = ctx.agent.toolRuntime;
   selfEditPipeline.memoryStore = ctx.memory;
   selfEditPipeline.workspaceRoot = ctx.config.runtime?.workspaceRoot || process.cwd();
   selfEditPipeline.defaultBaseUrl = `http://127.0.0.1:${ctx.config.server?.port || 18880}`;
+  selfEditPipeline.runtimeConfig = ctx.config.runtime || {};
   return selfEditPipeline;
 }
 

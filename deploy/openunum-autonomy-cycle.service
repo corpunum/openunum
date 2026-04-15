@@ -1,0 +1,10 @@
+[Unit]
+Description=OpenUnum Autonomy Cycle
+After=openunum.service
+Requires=openunum.service
+
+[Service]
+Type=oneshot
+WorkingDirectory=%h/openunum
+Environment=OPENUNUM_BASE_URL=http://127.0.0.1:18880
+ExecStart=/usr/bin/env node %h/openunum/scripts/autonomy-cycle.mjs

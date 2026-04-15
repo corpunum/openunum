@@ -100,6 +100,9 @@ Install:
 ```bash
 cd "$OPENUNUM_REPO_ROOT"
 bash scripts/install-systemd.sh
+# installs and enables:
+# - openunum.service
+# - openunum-autonomy-cycle.timer
 ```
 
 Manual controls:
@@ -142,7 +145,8 @@ Notes:
    ```bash
    curl -sS http://127.0.0.1:18880/api/health
    curl -sS http://127.0.0.1:18880/api/config
-   curl -sS http://127.0.0.1:18880/api/audit/stats
+curl -sS http://127.0.0.1:18880/api/audit/stats
+curl -sS http://127.0.0.1:18880/api/audit/diagnostics
    curl -sS http://127.0.0.1:18880/api/verifier/stats
    ```
 
@@ -386,7 +390,7 @@ curl -sS http://127.0.0.1:18880/api/providers/config
 curl -sS http://127.0.0.1:18880/api/audit/log?limit=10
 
 # Verify chain integrity
-curl -sS -X POST http://127.0.0.1:18880/api/audit/verify
+curl -sS http://127.0.0.1:18880/api/audit/verify
 
 # If broken, check for manual DB edits or disk corruption
 ```

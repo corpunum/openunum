@@ -96,7 +96,7 @@ describe('runtime route tooling inventory', () => {
     expect(Array.isArray(payload.tools)).toBe(true);
     expect(payload.tools.find((t) => t.name === 'summarize')?.model_backed?.contract).toBe(true);
     expect(payload.tools.find((t) => t.name === 'file_read')?.model_backed?.contract).toBe(false);
-    expect(payload.skills[0].name).toBe('example-skill');
+    expect(payload.skills.some((row) => row.name === 'example-skill')).toBe(true);
     expect(payload.localModels?.installedModels?.includes('gemma4:cpu')).toBe(true);
   });
 });

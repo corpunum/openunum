@@ -24,9 +24,9 @@ export function createChatPendingController({
   addPendingSession,
   removePendingSession
 }) {
-  async function resolvePendingReplyViaStream(typing, startedAtIso, requestSessionId, requestToken, deadline) {
+  async function resolvePendingReplyViaStream(typing, startedAtIso, requestSessionId, requestTurnId, requestToken, deadline) {
     if (typeof EventSource === 'undefined') return null;
-    const url = `/api/chat/stream?sessionId=${encodeURIComponent(requestSessionId)}&since=${encodeURIComponent(startedAtIso)}`;
+    const url = `/api/chat/stream?sessionId=${encodeURIComponent(requestSessionId)}&since=${encodeURIComponent(startedAtIso)}&turnId=${encodeURIComponent(requestTurnId || '')}`;
     return await new Promise((resolve) => {
       let settled = false;
       const source = new EventSource(url);
@@ -68,6 +68,16 @@ export function createChatPendingController({
         } else {
           typing.bubble.textContent = statusText;
         }
+        if (payload?.completed?.reply) {
+          markPendingTelemetryFinal(typing.pendingTelemetry);
+          const timingSummary = summarizePendingTelemetry(typing.pendingTelemetry);
+          if (timingSummary) addLiveEvent(typing, formatPendingTelemetrySummary(timingSummary));
+          addLiveEvent(typing, 'assistant final response received');
+          typing.bubble.innerHTML = payload.completed.replyHtml || `<pre>${escapeHtml(payload.completed.reply)}</pre>`;
+          void refreshSessionList();
+          cleanup(true);
+          return;
+        }
         if (msgFromActivity?.content) {
           markPendingTelemetryFinal(typing.pendingTelemetry);
           const timingSummary = summarizePendingTelemetry(typing.pendingTelemetry);
@@ -90,7 +100,7 @@ export function createChatPendingController({
     });
   }
 
-  async function resolvePendingReply(typing, startedAtIso, requestSessionId, requestToken) {
+  async function resolvePendingReply(typing, startedAtIso, requestSessionId, requestToken, requestTurnId = '') {
     const deadline = Date.now() + 10 * 60 * 1000;
     typing.pendingTelemetry = createPendingTelemetry(startedAtIso);
     addPendingSession(requestSessionId);
@@ -100,6 +110,7 @@ export function createChatPendingController({
         typing,
         startedAtIso,
         requestSessionId,
+        requestTurnId,
         requestToken,
         deadline
       );
@@ -141,14 +152,15 @@ export function createChatPendingController({
         if (pendingState.pending) continue;
         markPendingTelemetryCleared(typing.pendingTelemetry);
         let msg = null;
-        for (let i = 0; i < 3; i += 1) {
-          if (i > 0) await sleep(250);
-          const recheck = await jget(`/api/sessions/${encodeURIComponent(requestSessionId)}/activity?since=${encodeURIComponent(startedAtIso)}`);
-          const recheckMsg = newestAssistantSince(recheck.messages || [], startedAtIso);
-          if (recheckMsg?.content) {
-            msg = recheckMsg;
-            break;
-          }
+        const pendingCheck = await jget(`/api/chat/pending?sessionId=${encodeURIComponent(requestSessionId)}`);
+        if (pendingCheck?.completed && pendingCheck?.reply) {
+          markPendingTelemetryFinal(typing.pendingTelemetry);
+          const timingSummary = summarizePendingTelemetry(typing.pendingTelemetry);
+          if (timingSummary) addLiveEvent(typing, formatPendingTelemetrySummary(timingSummary));
+          addLiveEvent(typing, 'assistant final response received');
+          typing.bubble.innerHTML = pendingCheck.replyHtml || `<pre>${escapeHtml(pendingCheck.reply)}</pre>`;
+          await refreshSessionList();
+          return true;
         }
         if (!msg) {
           const out = await jget(`/api/sessions/${encodeURIComponent(requestSessionId)}`);
@@ -194,7 +206,7 @@ export function createChatPendingController({
     typing.lastToolCount = Array.isArray(activity.toolRuns) ? activity.toolRuns.length : 0;
     renderLiveBubble(typing, buildPendingStatus(typing, activity, activity), activity.toolRuns || []);
     const requestToken = nextRequestToken();
-    resolvePendingReply(typing, activity.pendingStartedAt, sid, requestToken).catch((error) => {
+    resolvePendingReply(typing, activity.pendingStartedAt, sid, requestToken, activity.turnId || '').catch((error) => {
       typing.bubble.textContent = `Pending recovery failed: ${String(error?.message || error)}`;
     });
     return true;

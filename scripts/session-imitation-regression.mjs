@@ -3,6 +3,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { getSelfMonitor } from '../src/core/self-monitor.mjs';
+import { resolveWorkingMemoryDir } from '../src/core/working-memory.mjs';
 
 function loadWorkingMemoryAnchors(rootDir) {
   if (!fs.existsSync(rootDir)) return [];
@@ -38,8 +39,12 @@ function buildFailedToolRuns() {
 
 async function main() {
   const workspaceRoot = process.cwd();
-  const workingMemoryDir = path.join(workspaceRoot, 'data', 'working-memory');
-  const anchors = loadWorkingMemoryAnchors(workingMemoryDir);
+  const primaryWorkingMemoryDir = resolveWorkingMemoryDir(workspaceRoot);
+  const legacyWorkingMemoryDir = path.join(workspaceRoot, 'data', 'working-memory');
+  const anchors = [
+    ...loadWorkingMemoryAnchors(primaryWorkingMemoryDir),
+    ...(legacyWorkingMemoryDir === primaryWorkingMemoryDir ? [] : loadWorkingMemoryAnchors(legacyWorkingMemoryDir))
+  ];
   const goals = extractRecoveryGoals(anchors);
 
   console.log('Session Imitation Regression');

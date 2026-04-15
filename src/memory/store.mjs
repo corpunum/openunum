@@ -15,6 +15,15 @@ export class MemoryStore {
   }
 
   init() {
+    try {
+      this.db.exec('PRAGMA busy_timeout = 5000;');
+    } catch {}
+    try {
+      this.db.exec('PRAGMA journal_mode = WAL;');
+    } catch {}
+    try {
+      this.db.exec('PRAGMA synchronous = NORMAL;');
+    } catch {}
     initializeMemoryStoreSchema(this.db);
   }
 
@@ -708,6 +717,50 @@ export class MemoryStore {
         return null;
       }
     }).filter(Boolean);
+  }
+
+  /**
+   * Get all searchable records from facts, strategy_outcomes, and memory_artifacts (R5)
+   * for the HybridRetriever pipeline.
+   * @param {number} limit - Max records to return
+   * @returns {Array<{id: string, text: string, type: string, createdAt: string}>}
+   */
+  getAllSearchableRecords(limit = 1000) {
+    const rowLimit = Math.max(1, Math.min(2000, Number(limit || 1000)));
+    
+    const facts = this.db
+      .prepare('SELECT id, key, value, created_at FROM facts ORDER BY id DESC LIMIT ?')
+      .all(rowLimit)
+      .map(r => ({
+        id: `fact-${r.id}`,
+        text: `${r.key}: ${r.value}`,
+        type: 'fact',
+        createdAt: r.created_at
+      }));
+
+    const strategies = this.db
+      .prepare('SELECT id, goal, strategy, success, evidence, created_at FROM strategy_outcomes ORDER BY id DESC LIMIT ?')
+      .all(rowLimit)
+      .map(r => ({
+        id: `strategy-${r.id}`,
+        text: `${r.goal} | ${r.strategy} | ${r.success ? 'SUCCESS' : 'FAIL'} | ${r.evidence}`,
+        type: 'strategy',
+        createdAt: r.created_at
+      }));
+
+    const artifacts = this.db
+      .prepare('SELECT id, artifact_type, content, created_at FROM memory_artifacts ORDER BY id DESC LIMIT ?')
+      .all(rowLimit)
+      .map(r => ({
+        id: `artifact-${r.id}`,
+        text: String(r.content || ''),
+        type: r.artifact_type,
+        createdAt: r.created_at
+      }));
+
+    return [...facts, ...strategies, ...artifacts]
+      .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
+      .slice(0, rowLimit);
   }
 }
 

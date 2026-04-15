@@ -19,6 +19,7 @@ import { web_search, web_fetch, toolDefinitions as webSearchTools } from './web-
 import { assessSearchEvidenceQuality, buildSearchBackendChain } from './search-policy.mjs';
 import { buildCoreToolSchemas } from './tool-contracts.mjs';
 import { createModelBackedToolRegistry } from './backends/registry.mjs';
+import { logEvent } from '../core/audit-log.mjs';
 
 import {
   TOOL_CAPABILITY_META,
@@ -169,6 +170,20 @@ export class ToolRuntime {
 
   logRun(context, toolName, args, result) {
     const sessionId = context?.sessionId;
+    
+    // R1: Tamper-Evident Audit Logging
+    try {
+      logEvent('tool_call', {
+        tool: toolName,
+        args: args || {},
+        ok: result?.ok !== false,
+        error: result?.error || null
+      }, sessionId);
+    } catch (e) {
+      // Don't crash tool execution if audit logging fails, but log it
+      console.error('[audit_log_failed]', e);
+    }
+
     if (!sessionId || !this.memoryStore?.recordToolRun) return;
     this.memoryStore.recordToolRun({
       sessionId,

@@ -89,6 +89,23 @@ describe('FastAwarenessRouter', () => {
         const r = router.classify('what is app ?');
         expect(r.category).not.toBe('light-chat');
       });
+
+      it('should not classify greeting-prefixed task requests as greeting', () => {
+        const r = router.classify('hello can you check the weather in rafina greece');
+        expect(r.category).not.toBe('greeting');
+      });
+
+      it('should not classify misspelled weather request as greeting', () => {
+        const r = router.classify('hello can you check the weaather in rafina greece');
+        expect(r.category).not.toBe('greeting');
+      });
+
+      it('should route weather requests to external full-search tools', () => {
+        const r = router.classify('check weather in rafina greece now');
+        expect(r.category).toBe('external');
+        expect(r.strategy).toBe('full-search');
+        expect(r.recommendedTools).toEqual(['web_search', 'web_fetch']);
+      });
     });
 
     describe('task-meta questions (skip-retrieval)', () => {

@@ -31,6 +31,30 @@ export function summarizeToolResult(toolName, result, maxChars = DEFAULT_MAX_CHA
       summary.content = truncateMiddle(result.content, 350);
       break;
 
+    case 'file_search':
+      summary.root = result.root;
+      summary.pattern = result.pattern;
+      summary.count = Number.isFinite(result.count) ? result.count : undefined;
+      summary.truncated = Boolean(result.truncated);
+      summary.files = Array.isArray(result.files)
+        ? result.files.slice(0, 12).map((item) => truncateMiddle(item, 220))
+        : [];
+      break;
+
+    case 'file_grep':
+      summary.search = result.search;
+      summary.pattern = result.pattern;
+      summary.totalMatches = Number.isFinite(result.totalMatches) ? result.totalMatches : undefined;
+      summary.truncated = Boolean(result.truncated);
+      summary.matches = Array.isArray(result.matches)
+        ? result.matches.slice(0, 10).map((item) => ({
+          file: item?.file || '',
+          lineNum: Number.isFinite(item?.lineNum) ? item.lineNum : undefined,
+          line: truncateMiddle(item?.line || item?.content || '', 180)
+        }))
+        : [];
+      break;
+
     case 'http_request':
       summary.status = result.status;
       summary.body = truncateMiddle(
@@ -52,6 +76,13 @@ export function summarizeToolResult(toolName, result, maxChars = DEFAULT_MAX_CHA
       if (Array.isArray(result.searchAttempts)) {
         summary.searchAttempts = result.searchAttempts.slice(0, 4);
       }
+      break;
+
+    case 'web_fetch':
+      summary.url = result.url;
+      summary.title = truncateMiddle(result.title || '', 180);
+      summary.content = truncateMiddle(result.content || result.text || '', 320);
+      summary.contentType = result.contentType;
       break;
 
     case 'browser_extract':

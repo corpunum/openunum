@@ -8,6 +8,7 @@ import {
   validateCanonicalRuntimeState
 } from '../../core/runtime-state-contract.mjs';
 import { buildConfigParityReport } from '../../core/config-parity-check.mjs';
+import { getMissionEffectiveStepLimit, getMissionLimitSource } from '../../core/missions.mjs';
 
 function readGitOverview(workspaceRoot) {
   const cwd = String(workspaceRoot || process.cwd());
@@ -51,6 +52,27 @@ export function createRuntimeService({
   normalizeModelSettings,
   buildModelCatalog
 }) {
+  let gitOverviewCache = {
+    workspaceRoot: '',
+    expiresAt: 0,
+    value: null
+  };
+
+  function getCachedGitOverview(workspaceRoot) {
+    const cwd = String(workspaceRoot || process.cwd());
+    const ttlMs = Math.max(1000, Number(config?.runtime?.gitOverviewCacheTtlMs || 15000));
+    if (gitOverviewCache.value && gitOverviewCache.workspaceRoot === cwd && Date.now() < gitOverviewCache.expiresAt) {
+      return gitOverviewCache.value;
+    }
+    const value = readGitOverview(cwd);
+    gitOverviewCache = {
+      workspaceRoot: cwd,
+      expiresAt: Date.now() + ttlMs,
+      value
+    };
+    return value;
+  }
+
   async function buildRuntimeOverview(getBrowser) {
     normalizeModelSettings();
     const [browserStatus, catalog] = await Promise.all([
@@ -71,7 +93,7 @@ export function createRuntimeService({
         enforceSelfProtection: config.runtime?.autonomyPolicy?.enforceSelfProtection !== false
       },
       browser: browserStatus,
-      git: readGitOverview(config.runtime?.workspaceRoot || process.cwd()),
+      git: getCachedGitOverview(config.runtime?.workspaceRoot || process.cwd()),
       selectedModel: catalog.selected,
       fallbackModel: catalog.fallback,
       providers: catalog.providers.map((provider) => ({
@@ -258,6 +280,7 @@ export function createRuntimeService({
   function buildMissionTimeline(mission) {
     if (!mission) return null;
     const sessionId = mission.sessionId;
+    const effectiveStepLimit = getMissionEffectiveStepLimit(mission);
     return {
       mission: {
         id: mission.id,
@@ -266,6 +289,8 @@ export function createRuntimeService({
         step: mission.step,
         maxSteps: mission.maxSteps,
         hardStepCap: mission.hardStepCap,
+        effectiveStepLimit,
+        limitSource: getMissionLimitSource(mission),
         retries: mission.retries,
         contract: mission.contract || null,
         contractFailures: Number(mission.contractFailures || 0),

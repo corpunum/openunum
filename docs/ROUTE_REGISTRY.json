@@ -5,7 +5,7 @@
     "routes": "src/server/routes/*.mjs"
   },
   "stats": {
-    "exactCount": 148,
+    "exactCount": 150,
     "prefixCount": 6,
     "methods": [
       "DELETE",
@@ -19,6 +19,7 @@
       "GET /",
       "GET /api/approvals/pending",
       "GET /api/approvals/stats",
+      "GET /api/audit/diagnostics",
       "GET /api/audit/log",
       "GET /api/audit/root",
       "GET /api/audit/stats",
@@ -26,6 +27,7 @@
       "GET /api/audit/verify",
       "GET /api/auth/catalog",
       "GET /api/auth/job",
+      "GET /api/autonomy/cycle/status",
       "GET /api/autonomy/daemons",
       "GET /api/autonomy/daemons/stats",
       "GET /api/autonomy/daemons/status",
@@ -261,6 +263,7 @@
       "req.method === 'GET' && /^/api/models/local/downloads/[^/]+$/.test(url.pathname)",
       "req.method === 'GET' && url.pathname === '/api/approvals/pending'",
       "req.method === 'GET' && url.pathname === '/api/approvals/stats'",
+      "req.method === 'GET' && url.pathname === '/api/audit/diagnostics'",
       "req.method === 'GET' && url.pathname === '/api/audit/log'",
       "req.method === 'GET' && url.pathname === '/api/audit/root'",
       "req.method === 'GET' && url.pathname === '/api/audit/stats'",
@@ -268,6 +271,7 @@
       "req.method === 'GET' && url.pathname === '/api/audit/verify'",
       "req.method === 'GET' && url.pathname === '/api/auth/catalog'",
       "req.method === 'GET' && url.pathname === '/api/auth/job'",
+      "req.method === 'GET' && url.pathname === '/api/autonomy/cycle/status'",
       "req.method === 'GET' && url.pathname === '/api/autonomy/daemons'",
       "req.method === 'GET' && url.pathname === '/api/autonomy/daemons/stats'",
       "req.method === 'GET' && url.pathname === '/api/autonomy/daemons/status'",

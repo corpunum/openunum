@@ -225,7 +225,7 @@ export class AutonomyEngine {
    */
   disableAutonomy() {
     this.isAutonomous = false;
-    this.config.runtime.autonomyMode = 'standard';
+    this.config.runtime.autonomyMode = 'autonomy-first';
     this.config.runtime.maxToolIterations = 8;
     this.config.runtime.executorRetryAttempts = 3;
     this.config.runtime.missionDefaultMaxRetries = 3;
@@ -234,8 +234,8 @@ export class AutonomyEngine {
     
     return {
       ok: true,
-      mode: 'standard',
-      message: 'Autonomous mode disabled - back to standard assistance'
+      mode: 'autonomy-first',
+      message: 'Autonomous mode disabled - back to autonomy-first assistance'
     };
   }
 

@@ -1,30 +1,27 @@
 # OpenUnum
 
-OpenUnum is an Ubuntu-first autonomous assistant framework focused on high tool reliability, strict model control, and agent-operable runtime behavior.
+OpenUnum is an Ubuntu-first autonomous agent framework built around the principles in `BRAIN.MD`: framework orientation, bounded autonomy, model agnosticism, truthful completion, continuous validation, and self-improvement through memory.
 
-**Current State (2026-04-09):**
-- ✅ **Phase 0-10 Complete** — Runtime contracts, control-plane hardening, route canonicalization, provider/runtime contracts, WebUI modularization, fast-path and reliability remediation
-- Web UI with Gemini-inspired glass styling while preserving full backend feature coverage
-- Visible/traceable tool execution from chat (expand/collapse execution traces)
-- Multi-provider model handling with strict primary-provider lock option
-- Model-execution envelopes (`compact` / `balanced` / `full`) to constrain tool/memory exposure for smaller models
-- Autonomous execution-policy engine with self-preservation defaults and local file-restore path (`file_restore_last`)
-- Browser automation via Chrome DevTools Protocol (CDP)
-- Telegram channel loop
-- Mission runner with retry and proof-based completion
-- Persistent self-learning memory from tool outcomes, strategy outcomes, and route-signature lessons
-- Manual model-behavior controls (override/reset) for operator correction
-- Autonomy mode presets (`standard`, `relentless`)
-- Pending chat handling (`/api/chat` + `/api/chat/pending`) with completion payload handoff (`completed: true`) to avoid poll-race "stuck loading"
-- Session-aware pending handling in UI to prevent cross-session reply bleed when switching chats
-- Local session history persistence in SQLite until user clicks `New Chat`
-- **Council Validation Framework** — 6 domain inspirations, latest consolidated maturity tracked in `OPENUNUM_EXPLAINED.md`
-- **Phase 0 Runtime Foundations** — Canonical runtime-state contract + config parity diagnostics (`/api/runtime/state-contract`, `/api/runtime/config-parity`)
-- **Phase 10 Generic-Core Closure** — Removed UI-specific execution hacks from agent core + added deterministic fast-path regression (`phase48`)
-- **Phase 10/11 Runtime Reliability Additions** — search backend quality gating + model-native-first fallback chain + circuit-loop guardrails + pending completion-cache regression (`phase49`)
-- **Model-Backed Tools Substrate (Phase 1 slice)** — logical tools (`summarize`, `classify`, `extract`) can be exposed via runtime feature flag and backed by swappable model profiles under `src/tools/backends/*`
-- **Skill Bundle Pipeline** — native tool-driven bundle authoring (`skill_forge`), context injection (`skill_load`), review/approval lifecycle, and executable bundle support under `~/.openunum/skills/custom/*`
-- **Operational Rollout Surface (2026-04-09)** — Settings -> Tooling and Skills is wired to `/api/runtime/tooling-inventory` and allowlisted local model rollout endpoints under `/api/models/local/*`
+## Current State (2026-04-11)
+
+Implemented and active:
+- modular WebUI backed by the active server/runtime routes
+- multi-provider runtime with explicit `ollama-local` and `ollama-cloud` lanes
+- chat trace visibility, pending SSE updates, and completion-cache handoff
+- mission runner with proof-aware completion, effective step-limit reporting, and stall guardrails
+- SQLite-backed runtime memory (`facts`, `tool_runs`, `strategy_outcomes`, `route_lessons`, `memory_artifacts`, `session_compactions`)
+- model-backed logical tools and native skill-bundle lifecycle
+- route-registry and API-reference parity gates in `pnpm verify`
+
+Recent hardening in this tranche:
+- per-turn completion checklist reset to prevent cross-turn false completion state
+- `Task complete` footer now requires both 100% checklist progress and a non-partial final answer
+- mission UI/API now expose `effectiveStepLimit` and whether it came from `maxSteps` or `hardStepCap`
+- mission loops fail earlier on repeated no-progress/repeated-reply stalls instead of burning to hard cap
+- `/api/chat/stream` now includes `turnId` and completion payload handoff for more reliable pending resolution
+- `web_fetch` now returns canonical success shape (`ok: true`) and recovery synthesis now prefers successful evidence over circuit-open noise
+- runtime overview and UI asset serving now cache low-volatility reads to reduce WebUI overhead
+- working-memory anchors now prefer `OPENUNUM_HOME/working-memory` over repo-local generated state
 
 ## Fast Start
 
@@ -33,108 +30,86 @@ OpenUnum is an Ubuntu-first autonomous assistant framework focused on high tool 
 pnpm install
 ```
 
-2. Start server:
+2. Start the server:
 ```bash
 node src/server.mjs
 ```
 
-3. Open Web UI:
-- http://127.0.0.1:18880 (Primary Web UI)
+3. Open the WebUI:
+- `http://127.0.0.1:18880`
 
-4. Optional full test gate:
+## Canonical Validation
+
+Minimum trust gate before merge/deploy:
+```bash
+pnpm test:unit
+pnpm test:smoke
+pnpm smoke:ui:noauth
+pnpm test:imitation
+pnpm e2e
+pnpm docs:gate
+pnpm docs:index:check
+pnpm gate:route-registry-freshness
+pnpm gate:api-reference-parity
+pnpm gate:runtime-surface-contract
+pnpm gate:route-wiring
+pnpm gate:ui-surface
+pnpm gate:repo-hygiene
+```
+
+Canonical umbrella gate:
 ```bash
 pnpm verify
 ```
 
-5. Optional isolated API smoke gate (self-starts temp server):
-```bash
-pnpm test:smoke
-```
+## New-Agent Read Order
 
-6. Optional live-service smoke gate (checks running deployment):
-```bash
-pnpm test:smoke:live
-```
+1. `BRAIN.MD`
+2. `docs/INDEX.md`
+3. `docs/CURRENT_STATE_MATRIX.md`
+4. `docs/ROADMAP.md`
+5. `docs/AGENT_ONBOARDING.md`
+6. `docs/CODEBASE_MAP.md`
+7. `docs/API_REFERENCE.md`
+8. `docs/AUTONOMY_AND_MEMORY.md`
+9. `docs/AUTONOMY_OPS.md`
+10. `docs/TESTING.md`
+11. `docs/CHANGELOG_CURRENT.md`
 
-7. Optional safe UI smoke gate (no OAuth popups):
-```bash
-pnpm smoke:ui:noauth
-```
-
-8. Phase 0 foundation readiness check:
-```bash
-pnpm phase0:check
-```
-
-## New Session Onboarding (for another agent)
-
-Read in this exact order:
-1. [docs/INDEX.md](docs/INDEX.md)
-2. [docs/AGENT_ONBOARDING.md](docs/AGENT_ONBOARDING.md)
-3. [BRAIN.MD](BRAIN.MD) — Core Operating Principles (9 principles)
-4. [docs/COUNCIL_ARCHITECTURE.md](docs/COUNCIL_ARCHITECTURE.md) — Council validation framework
-5. [docs/OPENUNUM_STRICT_HANDOFF_2026-04-09.md](docs/OPENUNUM_STRICT_HANDOFF_2026-04-09.md) — Canonical phase execution and implementation handoff
-6. [docs/CODEBASE_MAP.md](docs/CODEBASE_MAP.md)
-7. [docs/API_REFERENCE.md](docs/API_REFERENCE.md)
-8. [docs/AUTONOMY_AND_MEMORY.md](docs/AUTONOMY_AND_MEMORY.md)
-9. [docs/OPERATIONS_RUNBOOK.md](docs/OPERATIONS_RUNBOOK.md)
-10. [docs/MODEL_BACKED_TOOLS.md](docs/MODEL_BACKED_TOOLS.md)
-11. [docs/SKILL_BUNDLES.md](docs/SKILL_BUNDLES.md)
-12. [docs/TESTING.md](docs/TESTING.md)
-
-**Quick Reference:**
-- **Phase 0-10 Status:** ✅ Complete
-- **Council Maturity:** 🟡 Amber (see latest report links in docs index)
-- **Next Milestone:** reliability and operator-surface hardening from strict handoff
-- **Test Coverage:** 45+ unit, 41 E2E phases, 8 smoke scripts (+ browser-interaction phase gate)
-
-## Commands
+## Common Commands
 
 ```bash
 pnpm start
-pnpm lint
-pnpm format:check
 pnpm verify
 pnpm e2e
+pnpm test:unit
 pnpm test:smoke
-pnpm test:smoke:live
 pnpm smoke:ui:noauth
+pnpm test:imitation
 node src/cli.mjs health
 node src/cli.mjs status
 node src/cli.mjs runtime status
 node src/cli.mjs chat --message "hello"
-node src/cli.mjs model switch --provider ollama-cloud --model ollama-cloud/minimax-m2.7:cloud
-node src/cli.mjs providers list
-node src/cli.mjs providers catalog
-node src/cli.mjs providers health
-node src/cli.mjs auth status
-node src/cli.mjs auth catalog
+node src/cli.mjs model switch --provider ollama-cloud --model ollama-cloud/qwen3.5:397b-cloud
 node src/cli.mjs missions list
-node src/cli.mjs missions timeline --id <missionId>
-node src/cli.mjs missions status --id <missionId> --with-timeline
+node src/cli.mjs missions status --id <missionId>
 node src/cli.mjs sessions list
 ```
 
-CLI remote API bridge commands use `OPENUNUM_BASE_URL` (default `http://127.0.0.1:18880`).
+## Runtime Notes
+
+- Default autonomy preset is `autonomy-first`.
+- Other supported presets are `compact-local` and `relentless`.
+- Mission payloads are now guarded: `maxSteps` is bounded to `1..120`, `hardStepCap` to `1..300`, and `maxRetries` to `0..20`.
+- Working-memory anchors are generated runtime artifacts, not canonical repo inputs.
+- `GET /api/config` is sanitized. Use `GET /api/providers/config` and `GET /api/auth/catalog` for provider/auth readiness.
+- Live autonomy/operator telemetry surfaces:
+  - `GET /api/autonomy/master/status`
+  - `GET /api/autonomy/remediations`
+  - `GET /api/chat/diagnostics`
 
 ## Deployment
 
-- User service file: `deploy/openunum.service`
-- Installer script: `scripts/install-systemd.sh`
-- Service restart policy is rate-limited (`StartLimitIntervalSec=120`, `StartLimitBurst=5`) to prevent restart storms on repeated bind failures.
-
-## Security / Control Notes
-
-- "Relentless" mode increases retries and autonomy but does not bypass OS/session security constraints.
-- OpenUnum is configured to prefer truthful completion claims with tool-evidence.
-- Strict provider mode can lock execution to the selected model provider.
-
-## Provider Credentials + Routing Reality Check
-
-- `GET /api/config` is sanitized; provider key fields are intentionally blank.
-- Use `GET /api/providers/config` for provider readiness booleans (`hasOpenrouterApiKey`, `hasNvidiaApiKey`, `hasOpenaiApiKey`).
-- Use `GET /api/auth/catalog` for redacted provider/service auth state and source previews.
-- If local secrets changed, run `POST /api/auth/prefill-local` to rescan/import provider credentials from local sources.
-- Optional encrypted secrets backend:
-  - `OPENUNUM_SECRETS_BACKEND=passphrase`
-  - `OPENUNUM_SECRETS_PASSPHRASE=<strong passphrase>`
+- service file: `deploy/openunum.service`
+- installer: `scripts/install-systemd.sh` (installs `openunum.service` and the scheduled `openunum-autonomy-cycle.timer`)
+- base URL for CLI remote bridge: `OPENUNUM_BASE_URL` (default `http://127.0.0.1:18880`)

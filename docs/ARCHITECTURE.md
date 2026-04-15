@@ -1,66 +1,53 @@
 # OpenUnum Architecture
 
-**Version:** 2.1.0  
-**Last Updated:** 2026-04-05
+**Version:** 2.4.0  
+**Last Updated:** 2026-04-15
 
 ---
 
 ## Overview
 
-OpenUnum is an autonomous AI assistant with production-grade context engineering, hybrid memory retrieval, and robust execution tracking.
+OpenUnum is an autonomous AI assistant with production-grade context engineering, unified hybrid memory retrieval, and a cryptographically verifiable audit trail.
 
 ---
 
 ## Core Components
 
 ### 1. Agent Core (`src/core/agent.mjs`)
-- Main orchestration loop
-- Tool execution with trace tracking
-- Integration with context compiler
+- Main cognitive loop (Context → Thought → Action → Verification)
+- Streamlined to focus on non-deterministic reasoning
+- Integrated with `FastPathRouter` for routine turn offloading
 
-### 2. Context Compiler (`src/core/context-compiler.mjs`)
+### 2. FastPathRouter (`src/core/fast-path-router.mjs`)
+- Orchestrates deterministic and short-circuit replies
+- Handles slash commands, support queries, and status checks without LLM calls
+- Reduces latency and token waste for routine conversational turns
+
+### 3. Context Compiler (`src/core/context-compiler.mjs`)
 Ordered pipeline for context assembly:
 1. **Static system instructions** — Cached, rarely changes
 2. **Execution state** — Semi-static (task progress, tool history)
 3. **Working memory anchor** — Dynamic (origin task, plan, contract)
-4. **Recalled memories** — Dynamic (from hybrid retrieval)
+4. **Recalled memories** — Dynamic (from unified hybrid retrieval)
 5. **Recent turns** — Last 4 pairs, raw
 
-### 3. Working Memory Anchor (`src/core/working-memory.mjs`)
-- Keeps original task + plan as "ghost message" on every turn
-- Prevents drift in weak models (9B)
-- Supports subplan tracking for multi-phase tasks
-
 ### 4. Hybrid Retriever (`src/memory/recall.mjs`)
-Retrieval pipeline:
-1. **BM25** — Keyword search (top-20 candidates)
-2. **Embeddings** — Ollama nomic-embed-text
-3. **Rerank** — Cosine similarity
-4. **Return** — Top-5 with BM25 + similarity scores
+Unified retrieval pipeline:
+1. **Source Unification** — Pulls from both SQLite `MemoryStore` and legacy flat files
+2. **BM25** — Keyword search (top-25 candidates)
+3. **Embeddings** — Ollama nomic-embed-text semantic similarity
+4. **Rerank** — Reciprocal rank fusion
+5. **Return** — Top-8 with BM25 + similarity scores
 
-Fallback: BM25-only if embeddings unavailable.
+### 5. Audit Log (`src/core/audit-log.mjs`)
+- Tamper-evident HMAC-SHA256 chain hashing
+- Logs every tool execution and critical mission state change
+- Provides a cryptographically verifiable history of agent actions
 
-### 5. Context Compaction (`src/core/context-compact.mjs`)
-Enriched artifact extraction:
-- `verifiedFacts` — File creates, test passes, git commits
-- `openLoops` — Unanswered questions, incomplete tasks
-- `pendingSubgoals` — Unfinished phases/steps
-- `failuresWithReasons` — Errors with type classification
-- `producedArtifacts` — Files, code, tests, docs
-
-### 6. Proof Scorer (`src/core/proof-scorer.mjs`)
-Multi-factor validation (threshold: 0.6):
-- Tool success ratio (0.25)
-- Output substance (0.20)
-- Goal alignment (0.20)
-- Error absence (0.15)
-- Verification depth (0.10) — NEW
-- Claim specificity (0.10) — NEW
-
-### 7. Execution Trace (`src/core/execution-trace.mjs`)
-- Tool usage logging
-- Intervention tracking
-- Audit trail for all actions
+### 6. Autonomy Master (`src/core/autonomy-master.mjs`)
+- Central coordinator for 24/7 autonomous operations
+- **Heartbeat:** Periodic health checks and background maintenance
+- **Sleep Cycles:** Triggers `MemoryConsolidator` (Hippocampal Replay) during idle periods
 
 ---
 
@@ -69,15 +56,19 @@ Multi-factor validation (threshold: 0.6):
 ```
 User Input
     ↓
-Context Compiler (assembles context)
+FastPathRouter (Short-circuit check) → [Deterministic Reply]
     ↓
-LLM (generates response + tool calls)
+Context Compiler (Assembles context via Unified Hybrid Retrieval)
     ↓
-Tool Runtime (executes tools)
+LLM (Generates Thought + Tool Calls)
     ↓
-Proof Scorer (validates completion)
+Tool Runtime (Executes tools + Logs to Audit Trail)
     ↓
-Response (with trace metadata)
+Proof Scorer (Validates completion)
+    ↓
+Audit Log (Records task_complete state)
+    ↓
+Response (With trace metadata)
 ```
 
 ---
@@ -87,7 +78,7 @@ Response (with trace metadata)
 ### Storage Locations
 - **Sessions:** `data/sessions/*.json`
 - **Memories:** `data/memory/*.md` (for hybrid retrieval)
-- **Working Memory:** `data/working-memory/*.json`
+- **Working Memory:** `OPENUNUM_HOME/working-memory/*.json` (repo-local `data/working-memory/*.json` is legacy fallback/debug state only)
 - **Static Cache:** `data/static-system-instructions.md`
 
 ### Embedding Model
@@ -173,4 +164,4 @@ Run: `npm test`
 - `docs/CONTEXT_ENGINEERING.md` — Context management details
 - `docs/MEMORY_SYSTEM.md` — Memory architecture
 - `docs/AGENT_ONBOARDING.md` — Contributor guide
-- `CHANGELOG.md` — Full changelog
+- `docs/CHANGELOG_CURRENT.md` — Current consolidated changelog

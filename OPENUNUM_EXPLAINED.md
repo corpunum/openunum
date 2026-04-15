@@ -54,7 +54,11 @@ OpenUnum operates under nine core principles documented in `BRAIN.MD`:
 
 **Agent Core (`src/core/agent.mjs`)**
 
-The main orchestration loop handles tool execution with trace tracking, integrates with the context compiler, and manages the conversation flow. The core implements a loop that: receives user input → assembles context via the context compiler → generates response + tool calls via LLM → executes tools via the runtime → validates completion via the proof scorer → returns response with trace metadata.
+The main cognitive loop handles tool execution with trace tracking, context assembly, and high-level reasoning. It is now streamlined to focus on non-deterministic tasks, delegating routine routing to the `FastPathRouter`.
+
+**FastPathRouter (`src/core/fast-path-router.mjs`)**
+
+Orchestrates deterministic and short-circuit replies (slash commands, support queries, status checks). This ensures the agent is responsive without wasting LLM tokens on routine conversational turns.
 
 **Context Compiler (`src/core/context-compiler.mjs`)**
 
@@ -70,12 +74,12 @@ Total budget: 12,000 tokens with automatic truncation and overflow handling. Thi
 
 **Hybrid Retriever (`src/memory/recall.mjs`)**
 
-Retrieval pipeline combining lexical and semantic search:
+Unified retrieval pipeline combining lexical and semantic search across both SQLite facts/artifacts and legacy flat files. It employs:
 
-1. **BM25** — Keyword search (top-20 candidates)
-2. **Embeddings** — Ollama nomic-embed-text (768 dimensions)
-3. **Rerank** — Reciprocal rank fusion (40% BM25 + 60% embeddings)
-4. **Return** — Top-5 with BM25 + similarity scores
+1. **Source Unification** — Pulls fresh memories from `MemoryStore` (SQLite) and archival data from `data/memory/`.
+2. **BM25** — Keyword search (top-25 candidates).
+3. **Embeddings** — Ollama-based semantic similarity scoring.
+4. **Rerank** — Reciprocal rank fusion for final selection.
 
 If embeddings fail (Ollama unavailable, model not loaded, timeout), the system gracefully degrades to BM25-only.
 

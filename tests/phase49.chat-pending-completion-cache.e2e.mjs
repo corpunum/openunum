@@ -1,16 +1,33 @@
 import assert from 'node:assert/strict';
+import http from 'node:http';
 import { startServer, stopServer, jget, jpost } from './_helpers.mjs';
 
 let proc;
+let hangingServer;
 
 try {
+  hangingServer = await new Promise((resolve) => {
+    const server = http.createServer((req, res) => {
+      req.on('close', () => {
+        try { res.end(); } catch {}
+      });
+      // Intentionally keep the response open. Chat runtime should hit its own hard timeout.
+    });
+    server.listen(0, '127.0.0.1', () => resolve(server));
+  });
+  const hangingPort = hangingServer.address().port;
   proc = await startServer();
 
   const cfg = await jpost('/api/config', {
     runtime: {
-      providerRequestTimeoutMs: 120000,
-      chatHardTimeoutMs: 90000,
+      providerRequestTimeoutMs: 60000,
+      chatHardTimeoutMs: 22000,
       chatCompletionCacheTtlMs: 180000
+    },
+    model: {
+      provider: 'openai',
+      model: 'openai/gpt-4o-mini',
+      openaiBaseUrl: `http://127.0.0.1:${hangingPort}/v1`
     }
   });
   assert.equal(cfg.status, 200);
@@ -19,7 +36,7 @@ try {
   const sessionId = `phase49-${Date.now()}`;
   const started = await jpost('/api/chat', {
     sessionId,
-    message: 'can you search the best github open source project of month march and april 2026 and give me a table without links'
+    message: 'say hello'
   });
   assert.equal(started.status === 200 || started.status === 202, true);
 
@@ -27,7 +44,7 @@ try {
   let sawCompletedPayload = false;
   let completedReply = '';
 
-  const deadline = Date.now() + 120000;
+  const deadline = Date.now() + 40000;
   while (Date.now() < deadline) {
     const pending = await jget(`/api/chat/pending?sessionId=${encodeURIComponent(sessionId)}`);
     assert.equal(pending.status, 200);
@@ -58,5 +75,8 @@ try {
   console.log('phase49.chat-pending-completion-cache.e2e: ok');
 } finally {
   await stopServer(proc);
+  await new Promise((resolve) => {
+    if (!hangingServer) return resolve();
+    hangingServer.close(() => resolve());
+  });
 }
-

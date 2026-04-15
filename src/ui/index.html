@@ -504,6 +504,11 @@
               <div class="meta" id="phase0ContractMeta">Runtime state contract not loaded</div>
               <div class="meta" id="phase0ParityMeta">Config parity not loaded</div>
             </div>
+            <div class="card">
+              <h4>Autonomy Cycle</h4>
+              <div class="value" id="autonomyCycleValue">-</div>
+              <div class="meta" id="autonomyCycleMeta">No cycle snapshot</div>
+            </div>
           </div>
           <div class="grid three">
             <div class="field">
@@ -540,6 +545,50 @@
             <button id="compactContextBtn">Compact Context</button>
             <button id="refreshLedgerBtn">Refresh Ledger</button>
             <button id="refreshPhase0Diag">Refresh Phase 0</button>
+            <button id="refreshAutonomyDashboardBtn">Refresh Autonomy Dashboard</button>
+            <button id="syncAutonomyRemediationBtn">Sync Remediation</button>
+          </div>
+
+          <div class="card-grid" style="margin-top:12px;">
+            <div class="card">
+              <h4>Self Awareness</h4>
+              <div class="value" id="autonomySelfAwarenessValue">-</div>
+              <div class="meta" id="autonomySelfAwarenessMeta">No self-awareness snapshot</div>
+            </div>
+            <div class="card">
+              <h4>Pending Queue Watchdog</h4>
+              <div class="value" id="autonomyQueueValue">-</div>
+              <div class="meta" id="autonomyQueueMeta">No queue diagnostics</div>
+            </div>
+            <div class="card">
+              <h4>Remediation Queue</h4>
+              <div class="value" id="autonomyRemediationValue">-</div>
+              <div class="meta" id="autonomyRemediationMeta">No remediation data</div>
+            </div>
+          </div>
+
+          <div class="grid two" style="margin-top:10px;">
+            <div class="field">
+              <label>Remediation ID</label>
+              <input id="autonomyRemediationId" placeholder="rem-..." />
+            </div>
+            <div class="field">
+              <label>Resolution / Failure Note</label>
+              <input id="autonomyRemediationNote" placeholder="note for resolve/fail/cancel" />
+            </div>
+          </div>
+          <div class="row" style="margin-top:8px;">
+            <button id="startAutonomyRemediationBtn">Start Remediation</button>
+            <button id="resolveAutonomyRemediationBtn">Resolve Remediation</button>
+            <button id="failAutonomyRemediationBtn">Fail Remediation</button>
+            <button id="cancelAutonomyRemediationBtn">Cancel Remediation</button>
+          </div>
+
+          <div class="ledger" id="autonomyDashboardLedger">
+            <h4>Autonomy Dashboard</h4>
+            <div class="ledger-section" id="autonomyDashboardSummary">Loading autonomy dashboard...</div>
+            <div class="ledger-section" id="autonomyRemediationList"></div>
+            <div class="ledger-section" id="autonomyQueueList"></div>
           </div>
 
           <hr style="border:none;border-top:1px solid var(--line);margin:14px 0;" />

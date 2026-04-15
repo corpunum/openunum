@@ -16,8 +16,9 @@ import { generateEmbedding, rerankBySimilarity, checkEmbeddingsAvailable } from 
  */
 
 export class HybridRetriever {
-  constructor({ workspaceRoot, bm25TopK = 20, finalTopK = 5 }) {
+  constructor({ workspaceRoot, memoryStore = null, bm25TopK = 20, finalTopK = 5 }) {
     this.workspaceRoot = workspaceRoot || process.cwd();
+    this.memoryStore = memoryStore;
     this.bm25TopK = bm25TopK;
     this.finalTopK = finalTopK;
     this.embeddingsAvailable = null;
@@ -81,44 +82,59 @@ export class HybridRetriever {
   }
 
   /**
-   * Load memory files from disk
+   * Load memories from both flat files and SQLite store.
    * @returns {Array<{id: string, text: string, metadata: object}>}
    */
   loadMemories() {
     const memories = [];
     
-    if (!fs.existsSync(this.memoryDir)) {
-      logInfo('memory_dir_not_found', { path: this.memoryDir });
-      return memories;
-    }
-
-    const files = fs.readdirSync(this.memoryDir).filter(f => f.endsWith('.md') || f.endsWith('.json'));
-    
-    for (const file of files) {
+    // 1. Load from SQLite MemoryStore (New Bridge)
+    if (this.memoryStore && typeof this.memoryStore.getAllSearchableRecords === 'function') {
       try {
-        const filePath = path.join(this.memoryDir, file);
-        const content = fs.readFileSync(filePath, 'utf-8');
-        
-        let text = content;
-        let metadata = { file };
-
-        if (file.endsWith('.json')) {
-          const parsed = JSON.parse(content);
-          text = parsed.text || parsed.content || content;
-          metadata = { ...metadata, ...parsed };
+        const records = this.memoryStore.getAllSearchableRecords(500);
+        for (const r of records) {
+          memories.push({
+            id: r.id,
+            text: r.text,
+            metadata: { type: r.type, source: 'sqlite', createdAt: r.createdAt }
+          });
         }
-
-        memories.push({
-          id: file.replace(/\.(md|json)$/, ''),
-          text,
-          metadata
-        });
+        logInfo('memories_loaded_from_sqlite', { count: records.length });
       } catch (error) {
-        logError('memory_load_failed', { file, error: String(error.message || error) });
+        logError('sqlite_memory_load_failed', { error: String(error.message || error) });
       }
     }
 
-    logInfo('memories_loaded', { count: memories.length, dir: this.memoryDir });
+    // 2. Load from flat files (Legacy/Archive)
+    if (fs.existsSync(this.memoryDir)) {
+      const files = fs.readdirSync(this.memoryDir).filter(f => f.endsWith('.md') || f.endsWith('.json'));
+      
+      for (const file of files) {
+        try {
+          const filePath = path.join(this.memoryDir, file);
+          const content = fs.readFileSync(filePath, 'utf-8');
+          
+          let text = content;
+          let metadata = { file, source: 'fs' };
+
+          if (file.endsWith('.json')) {
+            const parsed = JSON.parse(content);
+            text = parsed.text || parsed.content || content;
+            metadata = { ...metadata, ...parsed };
+          }
+
+          memories.push({
+            id: file.replace(/\.(md|json)$/, ''),
+            text,
+            metadata
+          });
+        } catch (error) {
+          logError('fs_memory_load_failed', { file, error: String(error.message || error) });
+        }
+      }
+      logInfo('memories_loaded_from_fs', { count: files.length, dir: this.memoryDir });
+    }
+
     return memories;
   }
 

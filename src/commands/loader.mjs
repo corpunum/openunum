@@ -1,5 +1,6 @@
 import { getRegistry } from './registry.mjs';
 import helpCommand from './builtin/help.mjs';
+import startCommand from './builtin/start.mjs';
 import statusCommand from './builtin/status.mjs';
 import newCommand from './builtin/new.mjs';
 import compactCommand from './builtin/compact.mjs';
@@ -20,6 +21,7 @@ export function loadBuiltinCommands() {
 
   const builtins = [
     helpCommand,
+    startCommand,
     statusCommand,
     newCommand,
     compactCommand,

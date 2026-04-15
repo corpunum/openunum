@@ -4,8 +4,10 @@ export function buildMissionTimelineView(out, { filter = 'all', search = '', esc
   const match = (text) => !needle || String(text || '').toLowerCase().includes(needle);
 
   const mission = out?.mission || {};
+  const stepLimit = mission.effectiveStepLimit || mission.hardStepCap || mission.maxSteps;
+  const limitLabel = mission.limitSource === 'hardStepCap' ? 'hard-cap' : 'max-steps';
   const summaryText =
-    `status=${mission.status} step=${mission.step}/${mission.hardStepCap || mission.maxSteps} retries=${Number(mission.retries || 0)} session=${mission.sessionId}`;
+    `status=${mission.status} step=${mission.step}/${stepLimit} limit=${limitLabel} retries=${Number(mission.retries || 0)} session=${mission.sessionId}`;
 
   const logItems = (out?.log || []).slice(-8).reverse()
     .filter((item) => match(`${item.at} ${item.reply || ''} ${item.selfPoke || ''}`))

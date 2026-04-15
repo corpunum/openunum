@@ -1,0 +1,12 @@
+{
+  "validated_at": "2026-04-14T20:58:34Z",
+  "local_models": [
+    {"name": "qwen2.5-coder:1.5b", "provider": "ollama", "status": "verified", "free": true}
+  ],
+  "cloud_free_models": [
+    {"name": "qwen/qwen-2.5-7b-instruct:free", "provider": "openrouter", "status": "verified", "free": true},
+    {"name": "meta-llama/llama-3-8b-instruct:free", "provider": "openrouter", "status": "verified", "free": true},
+    {"name": "google/gemma-2-9b-it:free", "provider": "openrouter", "status": "verified", "free": true}
+  ],
+  "total_validated": 4
+}

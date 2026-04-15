@@ -59,11 +59,13 @@ export function createMissionsUiController({
           q('missionStatus').textContent = out.error;
         } else {
           const m = out.mission;
-          q('missionStatus').textContent = `${m.status} step=${m.step}/${m.maxSteps}`;
+          const stepLimit = m.effectiveStepLimit || m.hardStepCap || m.maxSteps;
+          const limitLabel = m.limitSource === 'hardStepCap' ? 'hard-cap' : 'max-steps';
+          q('missionStatus').textContent = `${m.status} step=${m.step}/${stepLimit} (${limitLabel})`;
           const latest = m.log?.[m.log.length - 1];
           if (latest) q('pcOutput').value = latest.reply;
           if (m.status !== 'running' && m.status !== 'stopping') {
-            q('missionStatus').textContent = `${m.status} step=${m.step}/${m.maxSteps} (select another mission or start new)`;
+            q('missionStatus').textContent = `${m.status} step=${m.step}/${stepLimit} (${limitLabel}) (select another mission or start new)`;
           }
         }
       } catch {

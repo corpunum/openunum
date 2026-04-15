@@ -49,5 +49,17 @@ describe('CompletionChecklist - Greeting Bug Fix', () => {
       expect(progress.percent).toBe(50);
       expect(progress.hasTask).toBe(true);
     });
+
+    it('resets prior task state between turns', () => {
+      const checklist = new CompletionChecklist();
+      checklist.initFromSteps(['Step 1']);
+      checklist.markComplete('step-0', {});
+      checklist.reset();
+      const progress = checklist.getProgress();
+
+      expect(progress.total).toBe(0);
+      expect(progress.percent).toBe(0);
+      expect(progress.hasTask).toBe(false);
+    });
   });
 });

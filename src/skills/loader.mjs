@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { getHomeDir, ensureHome } from '../config.mjs';
+import { listBuiltinSkills } from './builtin.mjs';
 
 export function loadSkills() {
   ensureHome();
@@ -66,6 +67,19 @@ export function loadSkills() {
         content: fs.readFileSync(skillPath, 'utf8')
       });
     }
+  }
+  for (const row of listBuiltinSkills()) {
+    if (skills.has(row.name)) continue;
+    skills.set(row.name, {
+      name: row.name,
+      source: row.source,
+      approved: true,
+      verdict: 'safe',
+      usageCount: 0,
+      lastUsedAt: null,
+      installedAt: null,
+      content: fs.readFileSync(row.docPath, 'utf8')
+    });
   }
   return [...skills.values()];
 }

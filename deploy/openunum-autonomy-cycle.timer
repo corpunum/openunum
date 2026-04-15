@@ -1,0 +1,11 @@
+[Unit]
+Description=Run OpenUnum autonomy cycle on a schedule
+
+[Timer]
+OnBootSec=8m
+OnUnitActiveSec=20m
+Unit=openunum-autonomy-cycle.service
+Persistent=true
+
+[Install]
+WantedBy=timers.target

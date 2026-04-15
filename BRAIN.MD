@@ -173,11 +173,13 @@ Agents must be able to:
 | Agent scores own work | No independent validation | Use `src/core/verifier.mjs` for high-stakes ops |
 | No tamper evidence | Audit logs can be modified | Use HMAC-SHA256 chain hashing (`src/core/audit-log.mjs`) |
 | Memories never decay | Stale data pollutes retrieval | Apply 30-day half-life decay scoring |
-| No scheduled replay | Lessons not consolidated | Run hippocampal replay every 24 hours |
+| No scheduled replay | Lessons not consolidated | Run hippocampal replay every 24 hours via `SleepCycle` |
 | Confidence ≠ validity | Heuristic scoring mistaken for proof | Distinguish confidence (heuristic) from validity (cryptographic) |
 | No ODD boundaries | Weak models attempt complex tasks | Enforce tier-based tool allowlists |
 | No role-model mapping | Wrong model for task type | Use `src/core/role-model-registry.mjs` |
 | No retry policy | Transient failures become permanent | Implement exponential backoff (200ms-2s) |
+| **Disconnected Architecture** | Features exist but are bypassed | Wire advanced systems (Audit, Hybrid Memory, Sleep) directly into `agent.mjs` |
+| **Deterministic Bloat** | Agent loop cluttered with greetings | Use `FastPathRouter` to offload non-cognitive turns |
 
 ## Decision Making Framework
 

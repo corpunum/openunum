@@ -10,13 +10,17 @@ export const newCommand = {
 
     const sid = sessionId || 'cli';
 
-    // Clear all messages for this session
-    if (typeof memoryStore.clearSessionMessages === 'function') {
-      memoryStore.clearSessionMessages(sid);
+    if (typeof memoryStore.clearSessionMessages !== 'function') {
+      return 'clearSessionMessages not available';
     }
+    const out = memoryStore.clearSessionMessages(sid);
 
     return [
-      `Session ${sid} cleared.`,
+      `session_new ok=${out.ok}`,
+      `session_id=${sid}`,
+      `deleted_messages=${out.deletedMessages}`,
+      `deleted_tool_runs=${out.deletedToolRuns}`,
+      `deleted_compactions=${out.deletedCompactions}`,
       'Starting fresh — previous context removed.',
       'Your knowledge base and rules are preserved.'
     ].join('\n');

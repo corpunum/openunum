@@ -20,6 +20,11 @@ import { SelfHealOrchestrator } from './self-heal-orchestrator.mjs';
 import { AutoRecover } from './auto-recover.mjs';
 import { AutoImprovementEngine } from './auto-improve.mjs';
 import { SkillLearner } from './skill-learner.mjs';
+import { buildAutonomyNudges } from './autonomy-nudges.mjs';
+import { buildSelfAwarenessSnapshot } from './self-awareness.mjs';
+import { AutonomyRemediationQueue } from './autonomy-remediation-queue.mjs';
+import { SleepCycle } from './sleep-cycle.mjs';
+import { MemoryConsolidator } from './memory-consolidator.mjs';
 
 export function getAutonomyMaster({ config, agent, memoryStore, browser, pendingChats }) {
   return new AutonomyMaster({ config, agent, memoryStore, browser, pendingChats });
@@ -39,6 +44,16 @@ export class AutonomyMaster {
     this.autoRecover = new AutoRecover({ config, agent });
     this.autoImprove = new AutoImprovementEngine({ config, agent, memory: memoryStore });
     this.skillLearner = new SkillLearner({ memoryStore });
+    this.remediationQueue = new AutonomyRemediationQueue({ homeDir: this.homeDir });
+    
+    // R2/R9: Memory Consolidation and Sleep Cycles
+    this.consolidator = new MemoryConsolidator({ store: memoryStore });
+    this.sleepCycle = new SleepCycle({
+      consolidator: this.consolidator,
+      idleThresholdMs: Number(config?.runtime?.sleepIdleThresholdMs || 3600000), // 1 hour default
+      onSleep: (entry) => logInfo('autonomy_entering_sleep', entry),
+      onWake: (summary) => logInfo('autonomy_waking_from_sleep', summary)
+    });
     
     // State
     this.active = false;
@@ -67,8 +82,11 @@ export class AutonomyMaster {
       diskUsagePercent: 85,
       memoryAvailableMB: 500,
       testFailureRate: 0.3,
-      toolFailureRate: 0.4
+      toolFailureRate: 0.4,
+      pendingChatStuckMs: Math.max(5000, Number(config?.runtime?.pendingChatStuckMs || 45000))
     };
+    this.nudges = [];
+    this.selfAwareness = buildSelfAwarenessSnapshot({ memoryStore: this.memoryStore });
     
     // Load persisted state
     this.loadState();
@@ -170,16 +188,31 @@ export class AutonomyMaster {
         cycle: this.metrics.cycles,
         timestamp: new Date().toISOString(),
         health: null,
+        selfAwareness: null,
+        pendingQueue: null,
+        remediation: null,
         tests: null,
         improvements: [],
         skills: [],
-        issues: []
+        issues: [],
+        nudges: []
       };
       
       // Phase 1: Health Check
       logInfo('autonomy_cycle_health', { cycle: this.metrics.cycles });
       results.health = await this.selfHeal.runHealthCheck();
       
+      // R2/R9: Background maintenance during idle
+      if (!this.hasActiveSessions()) {
+        const sleepCheck = await this.sleepCycle.checkAndSleep();
+        if (sleepCheck.triggered) {
+          logInfo('autonomy_maintenance_cycle_triggered', { state: sleepCheck.state });
+          results.maintenanceCycle = sleepCheck.state;
+        }
+      } else {
+        this.sleepCycle.touchActivity();
+      }
+
       if (results.health.status !== 'healthy') {
         this.metrics.issuesDetected += results.health.issues.length;
         results.issues.push(...results.health.issues);
@@ -189,6 +222,25 @@ export class AutonomyMaster {
         const successful = (recovery.results || []).filter((item) => item.success !== false).length;
         this.metrics.issuesResolved += successful;
         results.recovery = recovery;
+      }
+
+      this.selfAwareness = buildSelfAwarenessSnapshot({ memoryStore: this.memoryStore });
+      results.selfAwareness = this.selfAwareness;
+      results.pendingQueue = this.getPendingQueueDiagnostics();
+      results.remediation = this.ensureRemediationFromSelfAwareness(this.selfAwareness);
+      results.pendingQueueRemediation = this.ensureRemediationFromPendingQueue(results.pendingQueue);
+
+      if (this.config.runtime?.selfPokeEnabled !== false) {
+        this.nudges = buildAutonomyNudges({
+          config: this.config,
+          memoryStore: this.memoryStore,
+          health: results.health,
+          selfAwareness: this.selfAwareness,
+          maxItems: 8
+        });
+        results.nudges = this.nudges;
+      } else {
+        this.nudges = [];
       }
       
       // Phase 2: Self-Test (every 5 cycles)
@@ -329,6 +381,7 @@ export class AutonomyMaster {
    */
   async analyzePredictiveFailures(health) {
     const predictions = [];
+    const pendingQueue = this.getPendingQueueDiagnostics();
     
     // Check disk space trend
     const diskIssue = health.issues?.find(i => i.check === 'disk');
@@ -358,6 +411,16 @@ export class AutonomyMaster {
         type: 'provider_unstable',
         severity: 'warning',
         action: 'switch_fallback'
+      });
+    }
+
+    if (pendingQueue.stuckCount > 0) {
+      predictions.push({
+        type: 'chat_queue_stalled',
+        severity: pendingQueue.oldestAgeMs >= this.thresholds.pendingChatStuckMs * 2 ? 'critical' : 'warning',
+        stuckCount: pendingQueue.stuckCount,
+        oldestAgeMs: pendingQueue.oldestAgeMs,
+        action: 'queue_watchdog'
       });
     }
     
@@ -395,6 +458,8 @@ export class AutonomyMaster {
         });
         return { success: Boolean(out.success), action: out.action || 'model_provider_timeout' };
       }
+      case 'queue_watchdog':
+        return { success: true, action: 'queue_watchdog_observed' };
       default:
         return { success: false, reason: 'no_handler' };
     }
@@ -409,6 +474,10 @@ export class AutonomyMaster {
       if (fs.existsSync(statePath)) {
         const state = JSON.parse(fs.readFileSync(statePath, 'utf8'));
         this.metrics = { ...this.metrics, ...state.metrics };
+        this.nudges = Array.isArray(state.nudges) ? state.nudges : [];
+        if (state.selfAwareness && typeof state.selfAwareness === 'object') {
+          this.selfAwareness = state.selfAwareness;
+        }
       }
     } catch (error) {
       logWarn('failed_to_load_state', { error: String(error.message || error) });
@@ -423,6 +492,8 @@ export class AutonomyMaster {
       const statePath = path.join(this.homeDir, 'autonomy-state.json');
       fs.writeFileSync(statePath, JSON.stringify({
         metrics: this.metrics,
+        nudges: this.nudges,
+        selfAwareness: this.selfAwareness,
         lastSaved: new Date().toISOString(),
         thresholds: this.thresholds
       }, null, 2));
@@ -435,6 +506,14 @@ export class AutonomyMaster {
    * Get current status
    */
   getStatus() {
+    const nudges = this.nudges.length || this.config.runtime?.selfPokeEnabled === false
+      ? this.nudges
+      : buildAutonomyNudges({
+        config: this.config,
+        memoryStore: this.memoryStore,
+        health: null,
+        maxItems: 8
+      });
     return {
       active: this.active,
       metrics: {
@@ -442,6 +521,10 @@ export class AutonomyMaster {
         uptimeMs: Date.now() - this.metrics.startTime
       },
       thresholds: this.thresholds,
+      selfAwareness: this.selfAwareness || buildSelfAwarenessSnapshot({ memoryStore: this.memoryStore }),
+      pendingQueue: this.getPendingQueueDiagnostics(),
+      remediation: this.remediationQueue.list({ limit: 30 }),
+      nudges,
       subsystems: {
         selfHeal: this.selfHeal.getStatus({
           pendingChatsCount: this.pendingChats?.size || 0,
@@ -500,6 +583,68 @@ export class AutonomyMaster {
       quickTests,
       timestamp: new Date().toISOString()
     };
+  }
+
+  ensureRemediationFromSelfAwareness(snapshot = null) {
+    return this.remediationQueue.ensureSelfAwarenessRemediation(snapshot);
+  }
+
+  listRemediations({ status = '', limit = 80 } = {}) {
+    return this.remediationQueue.list({ status, limit });
+  }
+
+  getRemediation(id = '') {
+    return this.remediationQueue.get(id);
+  }
+
+  createRemediation(input = {}) {
+    return this.remediationQueue.create(input);
+  }
+
+  startRemediation(id = '') {
+    return this.remediationQueue.transition(id, 'running');
+  }
+
+  resolveRemediation(id = '', resolution = '') {
+    return this.remediationQueue.transition(id, 'resolved', { resolution });
+  }
+
+  failRemediation(id = '', error = '') {
+    return this.remediationQueue.transition(id, 'failed', { error });
+  }
+
+  cancelRemediation(id = '', reason = '') {
+    return this.remediationQueue.transition(id, 'cancelled', { resolution: reason });
+  }
+
+  getPendingQueueDiagnostics() {
+    const rows = [];
+    const threshold = Math.max(5000, Number(this.thresholds.pendingChatStuckMs || 45000));
+    for (const [sessionId, entry] of this.pendingChats.entries()) {
+      const startedAt = String(entry?.startedAt || '');
+      const ts = Date.parse(startedAt);
+      const ageMs = Number.isFinite(ts) ? Math.max(0, Date.now() - ts) : 0;
+      rows.push({
+        sessionId,
+        turnId: entry?.turnId || null,
+        startedAt: startedAt || null,
+        ageMs,
+        stuck: ageMs >= threshold
+      });
+    }
+    rows.sort((a, b) => Number(b.ageMs || 0) - Number(a.ageMs || 0));
+    const stuck = rows.filter((row) => row.stuck);
+    return {
+      pendingCount: rows.length,
+      stuckCount: stuck.length,
+      oldestAgeMs: rows[0]?.ageMs || 0,
+      thresholdMs: threshold,
+      stuckSessions: stuck.slice(0, 10)
+    };
+  }
+
+  ensureRemediationFromPendingQueue(diagnostics = null) {
+    return this.remediationQueue.ensurePendingQueueRemediation(diagnostics);
   }
 }
 

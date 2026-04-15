@@ -11,8 +11,6 @@ import { describe, it, before, after } from 'node:test';
 import assert from 'node:assert';
 import crypto from 'node:crypto';
 import fs from 'node:fs';
-import path from 'node:path';
-import { fileURLToPath } from 'node:url';
 
 // Import the audit log module directly for testing
 import {
@@ -25,24 +23,26 @@ import {
   AUDIT_LOG_PATH
 } from '../../src/core/audit-log.mjs';
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-
 describe('Audit Logging System', () => {
-  // Backup original log path and use test-specific path
-  const testLogPath = path.join(__dirname, 'test-audit-log.jsonl');
+  let originalAuditContent = null;
   
   before(() => {
-    // Clear any existing test log
-    if (fs.existsSync(testLogPath)) {
-      fs.unlinkSync(testLogPath);
+    originalAuditContent = fs.existsSync(AUDIT_LOG_PATH)
+      ? fs.readFileSync(AUDIT_LOG_PATH, 'utf8')
+      : null;
+    if (fs.existsSync(AUDIT_LOG_PATH)) {
+      fs.unlinkSync(AUDIT_LOG_PATH);
     }
   });
   
   after(() => {
-    // Cleanup test log
-    if (fs.existsSync(testLogPath)) {
-      fs.unlinkSync(testLogPath);
+    if (originalAuditContent === null) {
+      if (fs.existsSync(AUDIT_LOG_PATH)) {
+        fs.unlinkSync(AUDIT_LOG_PATH);
+      }
+      return;
     }
+    fs.writeFileSync(AUDIT_LOG_PATH, originalAuditContent, 'utf8');
   });
 
   describe('Chain Integrity', () => {

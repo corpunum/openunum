@@ -6,9 +6,10 @@ Canonical docs for current implementation and operations.
 
 1. [../BRAIN.MD](../BRAIN.MD)
 2. [CURRENT_STATE_MATRIX.md](CURRENT_STATE_MATRIX.md)
-3. [OPENUNUM_STRICT_HANDOFF_2026-04-09.md](OPENUNUM_STRICT_HANDOFF_2026-04-09.md)
+3. [ROADMAP.md](ROADMAP.md)
 4. [AGENT_ONBOARDING.md](AGENT_ONBOARDING.md)
-5. [../NEXT_TASKS.md](../NEXT_TASKS.md)
+5. [CHANGELOG_CURRENT.md](CHANGELOG_CURRENT.md)
+6. [../NEXT_TASKS.md](../NEXT_TASKS.md)
 
 ## Canonical Runtime Docs
 
@@ -19,6 +20,7 @@ Canonical docs for current implementation and operations.
 - [SKILL_BUNDLES.md](SKILL_BUNDLES.md)
 - [TESTING.md](TESTING.md)
 - [OPERATIONS_RUNBOOK.md](OPERATIONS_RUNBOOK.md)
+- [AUTONOMY_OPS.md](AUTONOMY_OPS.md)
 - [SELF_READING_INDEX.md](SELF_READING_INDEX.md)
 
 ## Canonical Architecture Docs
@@ -33,7 +35,7 @@ Canonical docs for current implementation and operations.
 
 - [CHANGELOG_CURRENT.md](CHANGELOG_CURRENT.md)
 - [ROADMAP.md](ROADMAP.md)
-- [OPENUNUM_STRICT_HANDOFF_2026-04-09.md](OPENUNUM_STRICT_HANDOFF_2026-04-09.md)
+- [CURRENT_STATE_MATRIX.md](CURRENT_STATE_MATRIX.md)
 
 ## Archives
 

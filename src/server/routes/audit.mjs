@@ -1,5 +1,6 @@
 import {
   EVENT_TYPES as AUDIT_EVENT_TYPES,
+  getAuditDiagnostics,
   getAuditStats,
   getLog as getAuditLog,
   getMerkleRoot as getAuditRoot,
@@ -59,6 +60,11 @@ export async function handleAuditRoute({ req, res, url, ctx }) {
 
   if (req.method === 'GET' && url.pathname === '/api/audit/verify') {
     ctx.sendJson(res, 200, verifyAuditChain());
+    return true;
+  }
+
+  if (req.method === 'GET' && url.pathname === '/api/audit/diagnostics') {
+    ctx.sendJson(res, 200, getAuditDiagnostics());
     return true;
   }
 

@@ -79,6 +79,9 @@ const DEFAULT_CONFIG = {
   }
 };
 
+const TASK_SIGNAL_RE = /\b(what|how|why|where|when|which|who|can you|please|show|list|check|fix|create|build|run|install|open|search|find|write|read|explain|configure|debug|error|trace|stack|app|runtime|model|provider|continue|proceed|next|keep going|go on|grep|file|files|web|latest|news|today|current|weather|wea+ther|wether|forecast|temperature|rain|wind|humidity)\b/;
+const WEATHER_SIGNAL_RE = /\b(weather|wea+ther|wether|forecast|temperature|rain|wind|humidity)\b/;
+
 /**
  * Classification result shape
  * @typedef {Object} ClassificationResult
@@ -222,12 +225,15 @@ export class FastAwarenessRouter {
 
     const featureScores = this._scoreLowIntentFeatures(normalized);
 
-    if (featureScores.greeting >= this.config.minFeatureGreetingScore) {
+    const hasTaskSignal = TASK_SIGNAL_RE.test(normalized);
+    if (featureScores.greeting >= this.config.minFeatureGreetingScore && !hasTaskSignal) {
       scores.greeting = 0.98;
     } else {
-      for (const kw of greetingKeywords) {
-        if (normalized === kw || normalized.startsWith(`${kw} `)) {
-          scores.greeting = Math.max(scores.greeting, 0.92);
+      if (!hasTaskSignal) {
+        for (const kw of greetingKeywords) {
+          if (normalized === kw || normalized.startsWith(`${kw} `)) {
+            scores.greeting = Math.max(scores.greeting, 0.92);
+          }
         }
       }
     }
@@ -279,7 +285,7 @@ export class FastAwarenessRouter {
     const charCount = text.length;
     const punctuationCount = (text.match(/[?!.,:;]/g) || []).length;
     const salutationHit = /^(hi|hello|hey|yo|greetings|good morning|good afternoon|good evening)\b/.test(text);
-    const hasTaskSignal = /\b(what|how|why|where|when|which|who|can you|please|show|list|check|fix|create|build|run|install|open|search|find|write|read|explain|configure|debug|error|trace|stack|app|runtime|model|provider|continue|proceed|next|keep going|go on|grep|file|files|web|latest|news|today|current)\b/.test(text);
+    const hasTaskSignal = TASK_SIGNAL_RE.test(text);
     const hasCodeLike = /[\\/`$={}[\]<>]/.test(text) || /\d{2,}/.test(text);
 
     let lowIntent = 0;
@@ -380,6 +386,18 @@ export class FastAwarenessRouter {
         reason: `continuation_keywords: ${continuation.toFixed(2)}`,
         matchedKeywords: { continuation },
         recommendedTools: this.config.strategyTools['hot-only'] || []
+      };
+    }
+
+    if (WEATHER_SIGNAL_RE.test(normalized)) {
+      return {
+        category: 'external',
+        confidence: Math.max(external, 0.86),
+        shouldShortCircuit: false,
+        strategy: 'full-search',
+        reason: 'weather_signal_detected',
+        matchedKeywords: { external: Math.max(external, 0.86) },
+        recommendedTools: ['web_search', 'web_fetch']
       };
     }
 

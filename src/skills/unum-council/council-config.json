@@ -1,0 +1,12 @@
+{
+  "providers": ["ollama-cloud", "nvidia"],
+  "providerPreference": ["ollama-cloud", "nvidia"],
+  "maxCouncilSize": 5,
+  "selectionCriteria": "parameter_size_desc",
+  "votingThreshold": 0.6,
+  "consolidatorModel": "default",
+  "excludeModels": ["embedding", "bert"],
+  "timeoutMs": 30000,
+  "retryCount": 2,
+  "retryMultiplier": 2
+}

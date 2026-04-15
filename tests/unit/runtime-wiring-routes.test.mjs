@@ -89,7 +89,11 @@ describe('route runtime-state wiring', () => {
       {},
       200,
       expect.objectContaining({
-        mission,
+        mission: expect.objectContaining({
+          ...mission,
+          effectiveStepLimit: 6,
+          limitSource: 'hardStepCap'
+        }),
         runtimeState: expect.objectContaining({
           contractVersion: '2026-04-08.runtime-state.v1',
           validationOk: true
