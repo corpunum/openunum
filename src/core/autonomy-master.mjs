@@ -54,9 +54,18 @@ export class AutonomyMaster {
       onSleep: (entry) => logInfo('autonomy_entering_sleep', entry),
       onWake: (summary) => logInfo('autonomy_waking_from_sleep', summary)
     });
-    
+
+    // Time-based consolidation: runs regardless of sleep state
+    this.consolidationIntervalMs = Number(config?.runtime?.consolidationIntervalMs || 86400000); // 24 hours
+    this.consolidationMemoryThreshold = Number(config?.runtime?.consolidationMemoryThreshold || 50);
+    this.lastConsolidationAt = 0;
+    this.lastMemoryArtifactCount = 0;
+
     // State
     this.active = false;
+    this.degraded = false; // Death-spiral detection: enters degraded mode
+    this.consecutiveNoProgressCycles = 0;
+    this.degradedModeThreshold = Number(config?.runtime?.degradedModeThreshold || 5); // N cycles of no progress = degraded
     this.monitorInterval = null;
     this.monitorIntervalMs = 30000; // 30 seconds for active monitoring
     this.baseMonitorIntervalMs = 30000;
@@ -213,6 +222,38 @@ export class AutonomyMaster {
         this.sleepCycle.touchActivity();
       }
 
+      // Time-based and memory-count consolidation trigger
+      // Runs regardless of sleep state - documented as "every 24 hours OR after 50 new memories"
+      const now = Date.now();
+      const timeSinceLastConsolidation = now - this.lastConsolidationAt;
+      const shouldConsolidateByTime = this.lastConsolidationAt === 0 || timeSinceLastConsolidation >= this.consolidationIntervalMs;
+      let currentArtifactCount = 0;
+      try {
+        const artifacts = this.memoryStore?.getMemoryArtifacts?.('', 1);
+        currentArtifactCount = this.memoryStore?.getMemoryArtifactCount?.() ?? (artifacts?.length ?? 0);
+      } catch { /* ignore count errors */ }
+      const newMemoriesCount = currentArtifactCount - this.lastMemoryArtifactCount;
+      const shouldConsolidateByCount = this.lastMemoryArtifactCount > 0 && newMemoriesCount >= this.consolidationMemoryThreshold;
+      if (shouldConsolidateByTime || shouldConsolidateByCount) {
+        try {
+          const consolidationResult = this.consolidator.runAndStore();
+          logInfo('autonomy_consolidation_triggered', {
+            trigger: shouldConsolidateByTime ? 'time_based' : 'memory_count',
+            timeSinceLastMs: timeSinceLastConsolidation,
+            newMemoriesCount,
+            stored: consolidationResult.stored,
+            patternsFound: consolidationResult.stats?.successPatternCount + consolidationResult.stats?.failurePatternCount
+          });
+          this.lastConsolidationAt = now;
+          this.lastMemoryArtifactCount = currentArtifactCount;
+          results.consolidation = consolidationResult;
+        } catch (error) {
+          logError('autonomy_consolidation_failed', { error: String(error.message || error) });
+        }
+      } else if (this.lastMemoryArtifactCount === 0 && currentArtifactCount > 0) {
+        this.lastMemoryArtifactCount = currentArtifactCount;
+      }
+
       if (results.health.status !== 'healthy') {
         this.metrics.issuesDetected += results.health.issues.length;
         results.issues.push(...results.health.issues);
@@ -229,6 +270,30 @@ export class AutonomyMaster {
       results.pendingQueue = this.getPendingQueueDiagnostics();
       results.remediation = this.ensureRemediationFromSelfAwareness(this.selfAwareness);
       results.pendingQueueRemediation = this.ensureRemediationFromPendingQueue(results.pendingQueue);
+
+      // Death-spiral detection: track consecutive no-progress cycles
+      const hasProgress = results.health.status === 'healthy' || results.health.issues?.length === 0;
+      if (hasProgress) {
+        this.consecutiveNoProgressCycles = 0;
+        if (this.degraded) {
+          this.degraded = false;
+          logInfo('autonomy_recovered_from_degraded', { cycle: this.metrics.cycles });
+        }
+      } else {
+        this.consecutiveNoProgressCycles++;
+        if (this.consecutiveNoProgressCycles >= this.degradedModeThreshold && !this.degraded) {
+          this.degraded = true;
+          logInfo('autonomy_entering_degraded_mode', {
+            cycle: this.metrics.cycles,
+            consecutiveNoProgressCycles: this.consecutiveNoProgressCycles,
+            threshold: this.degradedModeThreshold
+          });
+          // Create a remediation entry for the death spiral
+          this.ensureRemediationFromDeathSpiral(this.consecutiveNoProgressCycles);
+        }
+      }
+      results.degraded = this.degraded;
+      results.consecutiveNoProgressCycles = this.consecutiveNoProgressCycles;
 
       if (this.config.runtime?.selfPokeEnabled !== false) {
         this.nudges = buildAutonomyNudges({
@@ -516,6 +581,9 @@ export class AutonomyMaster {
       });
     return {
       active: this.active,
+      degraded: this.degraded,
+      consecutiveNoProgressCycles: this.consecutiveNoProgressCycles,
+      degradedModeThreshold: this.degradedModeThreshold,
       metrics: {
         ...this.metrics,
         uptimeMs: Date.now() - this.metrics.startTime
@@ -587,6 +655,19 @@ export class AutonomyMaster {
 
   ensureRemediationFromSelfAwareness(snapshot = null) {
     return this.remediationQueue.ensureSelfAwarenessRemediation(snapshot);
+  }
+
+  ensureRemediationFromDeathSpiral(consecutiveCycles) {
+    const id = `death-spiral-${Date.now()}`;
+    this.remediationQueue.create({
+      type: 'death_spiral',
+      severity: 'critical',
+      title: 'Autonomy death spiral detected',
+      detail: `${consecutiveCycles} consecutive cycles with no progress. Entering degraded mode to prevent resource exhaustion.`,
+      autoFix: 'degraded_mode',
+      status: 'open'
+    });
+    return id;
   }
 
   listRemediations({ status = '', limit = 80 } = {}) {

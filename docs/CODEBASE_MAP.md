@@ -7,7 +7,7 @@ This map is implementation-accurate as of 2026-04-09.
 - `src/server.mjs`: HTTP API server and Web UI host
 - `src/server/routes/*.mjs`: extracted route handlers (health, ui, sessions, missions, model, auth, config, autonomy, chat/tools, browser, telegram, research, **providers**, **state**, **roles**, **approvals**, **audit**, **verifier**, **memory-freshness**)
 - `src/server/services/*.mjs`: extracted runtime helpers (chat, auth jobs, browser runtime, telegram runtime, research runtime, config service, auth service)
-- `src/core/agent.mjs`: provider chat loop, tool-call execution, trace generation
+- `src/core/agent.mjs`: provider chat loop, tool-call execution, trace generation, role-model escalation
 - `src/core/missions.mjs`: autonomous mission runner with proof-aware completion
 - `src/core/goal-task-planner.mjs`: deterministic goal-to-task compiler for planner-backed autonomy
 - `src/core/task-orchestrator.mjs`: generic task executor with steps, verification, monitoring, and persistence
@@ -18,21 +18,24 @@ This map is implementation-accurate as of 2026-04-09.
 - `src/core/model-behavior-registry.mjs`: behavior classes + runtime learning hints per provider/model
 - `src/core/context-pack-builder.mjs`: behavior-aware context/system pack assembly
 - `src/core/execution-contract.mjs`: deterministic continuation and proof-backed completion checks
+- `src/core/council/safety-council.mjs`: **UPDATED** — ODD enforcement wired to `resolveExecutionEnvelope()` tier allowlists; self-preservation and shell protection checks
+- `src/core/model-execution-envelope.mjs`: execution tier resolution (compact/balanced/full) with tool allowlists
+- `src/core/execution-policy-engine.mjs`: shell self-protection policy enforcement
 - `src/core/completion-checklist.mjs`: task step tracking, prevents premature "Done" declarations
 - `src/core/alternative-paths.mjs`: suggests alternative tools when failures occur
 - `src/core/task-decomposer.mjs`: breaks complex tasks into explicit steps at start
 - `src/core/context-pressure.mjs`: monitors context size, compacts when approaching limits
 - `src/core/confidence-scorer.mjs`: scores confidence in outputs, triggers verification if low
-- `src/core/audit-log.mjs`: **NEW** — Tamper-evident HMAC-SHA256 chain hashing for audit trail
-- `src/core/verifier.mjs`: **NEW** — Independent state validation component
+- `src/core/audit-log.mjs`: **UPDATED** — Tamper-evident HMAC-SHA256 chain hashing with 3-tier secret resolution (env > persisted file > insecure fallback)
+- `src/core/verifier.mjs`: **UPDATED** — Independent 5-check verification (tool appropriateness, output quality, goal alignment, safety compliance, context coherence)
 - `src/core/memory-consolidator.mjs`: **NEW** — Hippocampal replay with scheduled consolidation
 - `src/core/state-diff.mjs`: **NEW** — Structured diff computation before state changes
 - `src/core/merkle-tree.mjs`: **NEW** — Merkle root computation for state commitments
 - `src/core/sleep-cycle.mjs`: **NEW** — Idle-triggered aggressive compaction
-- `src/core/finality.mjs`: **NEW** — Explicit finality after N successful tool runs
-- `src/core/role-model-registry.mjs`: **NEW** — Task-type to model-tier mapping
+- `src/core/finality.mjs`: **UPDATED** — Explicit finality after N successful tool runs (now wired into `tools/runtime.mjs` for irreversible tools)
+- `src/core/role-model-registry.mjs`: **UPDATED** — Task-type to model-tier mapping (now wired into `agent.mjs` for auto-escalation)
 - `src/core/turn-recovery-summary.mjs`: bounded evidence-based summaries on tool failures
-- `src/tools/runtime.mjs`: unified tool schema + execution routing
+- `src/tools/runtime.mjs`: unified tool schema + execution routing + finality checks for irreversible tools
 - `src/tools/tool-contracts.mjs`: canonical tool schema/validation contract source
 - `src/tools/backends/registry.mjs`: model-backed logical tool backend resolution/execution
 - `src/tools/backends/contracts.mjs`: logical tool contracts + output normalization
@@ -43,10 +46,12 @@ This map is implementation-accurate as of 2026-04-09.
 - `src/oauth/google-workspace.mjs`: Google installed-app PKCE helpers and token refresh
 - `src/skills/manager.mjs`: reviewed skill lifecycle (install/review/approve/execute/uninstall)
 - `src/research/manager.mjs`: daily research pipeline + review queue
-- `src/core/autonomy-master.mjs`: continuous autonomy coordinator (self-heal, self-test, self-improve, skill learning)
+- `src/core/autonomy-master.mjs`: continuous autonomy coordinator (self-heal, self-test, self-improve, skill learning, death-spiral detection, memory consolidation triggers)
 - `src/core/context-budget.mjs`: model-aware context window estimation + token usage checks
 - `src/core/context-compact.mjs`: old-message compaction and artifact extraction
-- `src/memory/store.mjs`: SQLite persistence for sessions/messages/facts/tool runs/strategy outcomes plus mission/task durability **+ freshness decay + state roots**
+- `src/memory/store.mjs`: SQLite persistence for sessions/messages/facts/tool runs/strategy outcomes plus mission/task durability **+ state roots**
+- `src/memory/recall.mjs`: **UPDATED** — Hybrid retrieval with BM25 + embeddings + freshness decay (30% weight) via `applyFreshnessAndReturn()`
+- `src/memory/freshness-decay.mjs`: **UPDATED** — Now wired into `HybridRetriever` (was documented but previously unused)
 - `src/browser/cdp.mjs`: Chrome DevTools Protocol abstraction
 - `src/providers/*`: provider adapters **+ retry policy + health tracking**
 - `src/models/catalog.mjs`: provider model discovery/ranking + OpenClaw key import

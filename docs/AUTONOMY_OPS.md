@@ -27,6 +27,29 @@ Status payload includes:
 - `status.selfAwareness.metrics`
 - `status.selfAwareness.issues`
 
+## Death-Spiral Detection
+
+AutonomyMaster tracks consecutive no-progress cycles (`consecutiveNoProgressCycles`):
+- Each cycle where self-awareness score does not improve increments the counter
+- When `consecutiveNoProgressCycles >= degradedModeThreshold` (default: 3), enters degraded mode
+- Degraded mode: `status.degraded = true`, triggers `ensureRemediationFromDeathSpiral()` auto-remediation
+- Remediation entry: type `death_spiral_degraded`, source `autonomy_master`
+- Exits degraded mode when a cycle shows progress (self-awareness score improves)
+
+Status payload includes:
+- `status.degraded` (boolean)
+- `status.consecutiveNoProgressCycles` (number)
+- `status.degradedModeThreshold` (number)
+
+## Memory Consolidation Triggers
+
+Consolidation (hippocampal replay) is triggered by:
+1. **Time-based**: every `consolidationIntervalMs` (default: 86400000ms = 24 hours)
+2. **Count-based**: when new memory artifacts exceed `consolidationMemoryThreshold` (default: 50) since last consolidation
+3. **Sleep-based**: during `SleepCycle` idle periods (original trigger, still active)
+
+Both time and count triggers run in `AutonomyMaster.runCycle()`, ensuring consolidation occurs even if the agent never enters sleep mode.
+
 ## Pending Queue Watchdog
 
 Pending queue watchdog tracks stalled live chat turns:

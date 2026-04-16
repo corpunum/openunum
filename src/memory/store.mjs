@@ -758,7 +758,17 @@ export class MemoryStore {
         createdAt: r.created_at
       }));
 
-    return [...facts, ...strategies, ...artifacts]
+    const toolRuns = this.db
+      .prepare('SELECT id, tool_name, args_json, result_json, ok, created_at FROM tool_runs ORDER BY id DESC LIMIT ?')
+      .all(rowLimit)
+      .map(r => ({
+        id: `tool-${r.id}`,
+        text: `Tool: ${r.tool_name} | Success: ${r.ok ? 'YES' : 'NO'} | Args: ${r.args_json} | Result: ${r.result_json}`,
+        type: 'tool_run',
+        createdAt: r.created_at
+      }));
+
+    return [...facts, ...strategies, ...artifacts, ...toolRuns]
       .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
       .slice(0, rowLimit);
   }

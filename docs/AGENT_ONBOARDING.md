@@ -93,3 +93,18 @@ pnpm gate:repo-hygiene
 - Use runtime truth before trusting historical docs or local generated artifacts.
 - Keep docs and tests updated in the same patch as code.
 - Prefer removing duplicate surfaces over preserving them for sentiment.
+
+## Autonomy and Verification Systems (2026-04-16)
+
+The following systems are now active and wired into the agent runtime:
+
+- **Autonomy Master auto-starts** by default (`autonomyMasterAutoStart: true` in `src/config.mjs`). Sleep cycles, memory consolidation, self-heal, and self-improvement all run automatically.
+- **Death-spiral detection** in `AutonomyMaster`: tracks consecutive no-progress cycles and enters degraded mode, auto-creating remediations.
+- **Memory consolidation** triggers on time (24h) and count (50 memories), not just sleep cycles.
+- **ODD enforcement** via `SafetyCouncil.checkODD()` → `resolveExecutionEnvelope()` → tier-based tool allowlists.
+- **Independent Verifier** (`src/core/verifier.mjs`): 5-check system (tool appropriateness, output quality, goal alignment, safety compliance, context coherence). All results audit-logged.
+- **Role-model escalation** (`src/core/role-model-registry.mjs` → `agent.mjs`): auto-escalates to a higher-tier model when the current model doesn't meet the role's minimum tier.
+- **Freshness decay** wired into `HybridRetriever` at 30% weight (`src/memory/recall.mjs` → `applyFreshnessAndReturn()`).
+- **FinalityGadget** (`src/core/finality.mjs` → `tools/runtime.mjs`): consecutive-success rule for irreversible tools.
+- **Audit HMAC secret** uses 3-tier resolution: `AUDIT_HMAC_SECRET` env > `~/.openunum/audit-hmac-secret` file > insecure fallback with CRITICAL warning.
+- **Legacy `selfheal.mjs`** is archived. Canonical self-heal path: `src/core/self-heal.mjs` + `src/core/self-heal-orchestrator.mjs`.

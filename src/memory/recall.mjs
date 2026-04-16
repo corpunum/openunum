@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { logInfo, logError } from '../logger.mjs';
 import { generateEmbedding, rerankBySimilarity, checkEmbeddingsAvailable } from './embeddings.mjs';
+import { calculateFreshness, getHalfLifeForCategory } from './freshness-decay.mjs';
 
 /**
  * Hybrid Memory Retrieval Pipeline
@@ -139,9 +140,9 @@ export class HybridRetriever {
   }
 
   /**
-   * Hybrid retrieval: BM25 → Embeddings → Rerank
-   * @param {string} query 
-   * @param {object} options 
+   * Hybrid retrieval: BM25 → Embeddings → Rerank → Freshness Decay
+   * @param {string} query
+   * @param {object} options
    * @returns {Promise<Array<{id: string, text: string, metadata: object, bm25Score?: number, similarity?: number}>>}
    */
   async retrieve(query, options = {}) {
@@ -165,14 +166,8 @@ export class HybridRetriever {
 
     if (!canUseEmbeddings) {
       logInfo('using_bm25_only', { reason: !useHybrid ? 'hybrid_disabled' : 'embeddings_unavailable' });
-      // Return BM25 results only
-      return bm25Candidates.slice(0, this.finalTopK).map(c => ({
-        id: c.id,
-        text: c.text,
-        metadata: c.metadata,
-        bm25Score: c.bm25Score,
-        retrievalMethod: 'bm25_only'
-      }));
+      // Return BM25 results with freshness decay applied
+      return this.applyFreshnessAndReturn(bm25Candidates, 'bm25_only');
     }
 
     // Step 2: Generate query embedding
@@ -182,17 +177,11 @@ export class HybridRetriever {
       logInfo('query_embedding_generated', { dims: queryEmbedding.length });
     } catch (error) {
       logError('query_embedding_failed', { error: String(error.message || error) });
-      
+
       if (fallbackToBM25) {
-        return bm25Candidates.slice(0, this.finalTopK).map(c => ({
-          id: c.id,
-          text: c.text,
-          metadata: c.metadata,
-          bm25Score: c.bm25Score,
-          retrievalMethod: 'bm25_fallback'
-        }));
+        return this.applyFreshnessAndReturn(bm25Candidates, 'bm25_fallback');
       }
-      
+
       throw error;
     }
 
@@ -218,20 +207,56 @@ export class HybridRetriever {
     const reranked = rerankBySimilarity(queryEmbedding, candidatesWithEmbeddings);
     logInfo('reranking_complete', { candidates: reranked.length });
 
-    // Step 5: Return top-K with scores
-    const results = reranked.slice(0, this.finalTopK).map(c => ({
-      id: c.id,
-      text: c.text,
-      metadata: c.metadata,
-      bm25Score: c.bm25Score,
-      similarity: c.similarity || 0,
-      retrievalMethod: 'hybrid'
-    }));
+    // Step 5: Apply freshness decay and return top-K
+    return this.applyFreshnessAndReturn(reranked, 'hybrid');
+  }
 
-    logInfo('hybrid_retrieval_complete', { 
-      query: query.slice(0, 50),
+  /**
+   * Apply freshness decay to scored candidates and return top-K.
+   * Freshness is applied with 30% weight as documented in BRAIN.MD/OPENUNUM_EXPLAINED.md.
+   * @param {Array} candidates - Candidates with bm25Score and optionally similarity
+   * @param {string} retrievalMethod - Tag for the retrieval method used
+   * @returns {Array} Top-K results with freshness-adjusted scores
+   */
+  applyFreshnessAndReturn(candidates, retrievalMethod) {
+    const FRESHNESS_WEIGHT = 0.3;
+    const now = Date.now();
+
+    // Apply freshness decay to each candidate
+    const withFreshness = candidates.map(c => {
+      const category = c.metadata?.type || c.metadata?.category || 'default';
+      const createdAtStr = c.metadata?.createdAt || c.metadata?.created_at;
+      const createdAtMs = createdAtStr ? new Date(createdAtStr).getTime() : now;
+      const halfLifeMs = getHalfLifeForCategory(category);
+      const freshness = Number.isFinite(createdAtMs) ? calculateFreshness(createdAtMs, halfLifeMs) : 1.0;
+
+      // Combine scores: 70% base relevance + 30% freshness
+      const baseScore = c.similarity ?? (c.bm25Score / (Math.max(...candidates.map(x => x.bm25Score || 0)) || 1));
+      const combinedScore = baseScore * (1 - FRESHNESS_WEIGHT) + freshness * FRESHNESS_WEIGHT;
+
+      return {
+        id: c.id,
+        text: c.text,
+        metadata: c.metadata,
+        bm25Score: c.bm25Score,
+        similarity: c.similarity || 0,
+        freshness,
+        freshnessCategory: category,
+        combinedScore,
+        retrievalMethod
+      };
+    });
+
+    // Re-sort by combined score (freshness can change ranking)
+    withFreshness.sort((a, b) => b.combinedScore - a.combinedScore);
+
+    const results = withFreshness.slice(0, this.finalTopK);
+
+    logInfo('freshness_decay_applied', {
+      retrievalMethod,
       results: results.length,
-      avgSimilarity: results.reduce((s, r) => s + (r.similarity || 0), 0) / results.length
+      avgFreshness: results.reduce((s, r) => s + (r.freshness || 0), 0) / (results.length || 1),
+      avgCombinedScore: results.reduce((s, r) => s + (r.combinedScore || 0), 0) / (results.length || 1)
     });
 
     return results;

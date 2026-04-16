@@ -184,7 +184,9 @@ export function defaultConfig() {
           }
         }
       },
-      autonomyMasterAutoStart: false,
+      autonomyMasterAutoStart: true,
+      consolidationIntervalMs: 86400000, // 24 hours - time-based consolidation trigger
+      consolidationMemoryThreshold: 50, // new memories trigger for hippocampal replay
       researchDailyEnabled: false,
       researchScheduleHour: 3,
       modelBackedTools: {

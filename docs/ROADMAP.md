@@ -47,6 +47,18 @@ This roadmap is the live remediation plan aligned with `BRAIN.MD`.
 10. Operator autonomy surface
 - WebUI operator panel now shows self-awareness, pending queue watchdog, and remediation queue with lifecycle controls
 
+11. Phase 4 hardening — 10 critical gaps fixed
+- autonomy auto-start enabled by default (was disabled, making all autonomy inert)
+- ODD enforcement wired to actual execution envelopes via `resolveExecutionEnvelope()`
+- council proof scoring verified (fast-path correctly skips, tool-using queries get full scores)
+- audit HMAC secret hardened with 3-tier resolution (env > file > fallback)
+- freshness decay wired into HybridRetriever at 30% weight (was 0% despite documentation)
+- role-model escalation wired into agent.chat() with auto-escalation on tier mismatch
+- memory consolidation triggers: time-based (24h) + count-based (50) in AutonomyMaster
+- independent verifier rebuilt as 5-check system (was a 49-line stub)
+- FinalityGadget wired into ToolRuntime for irreversible tools (was dead code)
+- death-spiral detection in AutonomyMaster with degraded mode
+
 ## Next Priority Tranche
 
 1. Deeper frontend split

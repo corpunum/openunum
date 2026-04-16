@@ -1,5 +1,7 @@
 import crypto from 'node:crypto';
 import fs from 'node:fs';
+import path from 'node:path';
+import os from 'node:os';
 import { afterAll, beforeAll, afterEach, describe, expect, it } from 'vitest';
 import {
   AUDIT_LOG_PATH,
@@ -11,9 +13,24 @@ import {
 
 let originalAuditContent = null;
 
+// Resolve the actual HMAC secret being used (matches audit-log.mjs logic)
+function resolveActualHmacSecret() {
+  if (process.env.AUDIT_HMAC_SECRET) return process.env.AUDIT_HMAC_SECRET;
+  const homeDir = process.env.OPENUNUM_HOME || path.join(os.homedir(), '.openunum');
+  const secretPath = path.join(homeDir, 'audit-hmac-secret');
+  try {
+    if (fs.existsSync(secretPath)) {
+      const stored = fs.readFileSync(secretPath, 'utf8').trim();
+      if (stored.length >= 32) return stored;
+    }
+  } catch { /* ignore */ }
+  return 'openunum-audit-secret-change-in-production';
+}
+
 function legacyMerkleHash(entry) {
+  const secret = resolveActualHmacSecret();
   return crypto
-    .createHmac('sha256', process.env.AUDIT_HMAC_SECRET || 'openunum-audit-secret-change-in-production')
+    .createHmac('sha256', secret)
     .update(JSON.stringify({
       merkleRoot: entry.payload?.merkleRoot,
       count: entry.payload?.entryCount

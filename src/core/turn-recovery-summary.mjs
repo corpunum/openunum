@@ -965,8 +965,29 @@ function buildDocumentDiscussionAnswer({ userMessage = '', executedTools = [] })
   return lines.join('\n');
 }
 
+function hasRepeatedIdenticalToolCalls(executedTools = []) {
+  const seen = new Map();
+  for (const run of executedTools) {
+    const key = JSON.stringify({ name: run?.name, result: run?.result });
+    if (seen.has(key)) return true;
+    seen.set(key, true);
+  }
+  return false;
+}
+
 function buildGenericToolSummary({ executedTools = [], toolRuns = 0, requirements = null }) {
   const uniqueSurfaceCount = countUniqueToolSurfaces(executedTools);
+
+  // When the same tool is called repeatedly with identical results, use deduplication-aware answers
+  if (hasRepeatedIdenticalToolCalls(executedTools)) {
+    // Status queries should use buildStatusAnswer for status deduplication
+    if (requirements?.asksStatus || /\bstatus\b/i.test(requirements?.originalUserMessage || '')) {
+      return buildStatusAnswer({ executedTools, toolRuns, uniqueSurfaceCount });
+    }
+    // All other repeated tool calls use buildStepAnswer for step deduplication
+    return buildStepAnswer({ executedTools, toolRuns, uniqueSurfaceCount });
+  }
+
   if (requirements?.asksWeather) {
     const weather = buildWeatherAnswer({
       userMessage: requirements?.originalUserMessage || '',

@@ -8,6 +8,7 @@
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
+import os from 'node:os';
 import { fileURLToPath } from 'node:url';
 
 const MODULE_DIR = path.dirname(fileURLToPath(import.meta.url));
@@ -17,7 +18,48 @@ const DATA_DIR = process.env.OPENUNUM_DATA_DIR || path.join(REPO_ROOT, 'data');
 const AUDIT_LOG_PATH = path.join(DATA_DIR, 'audit-log.jsonl');
 const MERKLE_ROOT_INTERVAL = 10; // Compute merkle root every 10 entries
 
-const HMAC_SECRET = process.env.AUDIT_HMAC_SECRET || 'openunum-audit-secret-change-in-production';
+// HMAC Secret Management:
+// 1. AUDIT_HMAC_SECRET env var (highest priority)
+// 2. Auto-generated secret stored in ~/.openunum/audit-hmac-secret
+// 3. Fallback (only for tests/dev, logged as warning)
+const FALLBACK_HMAC_SECRET = 'openunum-audit-secret-change-in-production';
+
+function resolveHmacSecret() {
+  // Priority 1: environment variable
+  if (process.env.AUDIT_HMAC_SECRET) {
+    return process.env.AUDIT_HMAC_SECRET;
+  }
+
+  // Priority 2: persisted secret file
+  const homeDir = process.env.OPENUNUM_HOME || path.join(os.homedir(), '.openunum');
+  const secretPath = path.join(homeDir, 'audit-hmac-secret');
+  try {
+    if (fs.existsSync(secretPath)) {
+      const stored = fs.readFileSync(secretPath, 'utf8').trim();
+      if (stored.length >= 32) {
+        return stored;
+      }
+    }
+  } catch { /* ignore read errors, regenerate */ }
+
+  // Generate a new random secret and persist it
+  try {
+    fs.mkdirSync(homeDir, { recursive: true });
+    const newSecret = crypto.randomBytes(64).toString('hex');
+    fs.writeFileSync(secretPath, newSecret, { mode: 0o600 }); // owner-only permissions
+    console.warn(`[audit-log] Generated new HMAC secret at ${secretPath}. Keep this file secure.`);
+    return newSecret;
+  } catch (writeErr) {
+    console.error(`[audit-log] WARNING: Could not persist HMAC secret to ${secretPath}: ${writeErr.message}. Using insecure fallback.`);
+    return FALLBACK_HMAC_SECRET;
+  }
+}
+
+const HMAC_SECRET = resolveHmacSecret();
+const USING_FALLBACK_SECRET = HMAC_SECRET === FALLBACK_HMAC_SECRET;
+if (USING_FALLBACK_SECRET) {
+  console.error('[audit-log] CRITICAL: Using hardcoded HMAC secret. Audit chain is NOT tamper-evident in production. Set AUDIT_HMAC_SECRET env var or ensure ~/.openunum/ is writable.');
+}
 const EVENT_TYPES = ['tool_call', 'state_change', 'config_mutation', 'verification'];
 
 // Ensure data directory exists

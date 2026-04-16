@@ -146,15 +146,24 @@ The council identified 5 P0 gaps and 16 P1 gaps, then voted on the top 10 priori
 
 Append-only logging with HMAC-SHA256 chain hashing. Each log entry includes a hash of the previous entry, creating a cryptographic chain that detects any modification. Correlation IDs link agent decisions, tool executions, mission steps, and subagent spawns.
 
+**Hardening (2026-04-16):** The HMAC secret now uses 3-tier resolution:
+1. `AUDIT_HMAC_SECRET` environment variable (highest priority)
+2. Persisted random file at `~/.openunum/audit-hmac-secret` (0600 permissions, auto-generated on first boot)
+3. Hardcoded fallback with CRITICAL console warning (lowest priority, insecure)
+
+This prevents anyone who reads the source code from forging audit entries.
+
 ### 2. Independent Verifier (R3)
 
 Separation of concerns: the agent that generates output cannot validate its own work. A separate verification process (using a different model tier) checks:
 
-- Tool call appropriateness (exists, parameters valid, safety compliant)
-- Output quality (addresses request, complete, coherent)
-- Goal alignment (no drift from stated objectives)
-- Safety compliance (no credential leaks, no unauthorized external actions)
-- Context coherence (no contradictions with previous turns)
+- **Tool call appropriateness** — whitelist validation, null/error result detection
+- **Output quality** — empty response detection, generic acknowledgment detection, internal format leakage, suspiciously short replies for complex queries
+- **Goal alignment** — refusal/drift detection, all-providers-failed detection, partial completion signals
+- **Safety compliance** — credential leak detection (AWS keys, OpenAI keys, API keys) in both replies and tool results
+- **Context coherence** — contradictory pass/fail claims, claimed tool use vs. actual tool runs
+
+All verification results are audit-logged for traceability.
 
 ### 3. ODD Enforcement (R4) — Operational Design Domain
 
@@ -167,6 +176,8 @@ Inspired by autonomous vehicle safety frameworks. Three-tier execution model:
 | **Full** | 70B+ | Aggressive | All tools (with approvals) |
 
 Each tier has confidence thresholds, context budgets, and max iteration limits. The system auto-escalates when confidence drops below thresholds or when denied tools are requested.
+
+**Hardening (2026-04-16):** `SafetyCouncil.checkODD()` now resolves the actual execution envelope via `resolveExecutionEnvelope()` and validates tool allowlists against the tier. Shell self-protection is delegated to `ExecutionPolicyEngine`.
 
 ### 4. Freshness Decay (R5)
 
@@ -185,6 +196,8 @@ Per-category half-lives:
 
 Freshness affects retrieval scoring with 30% weight. Old strategies and outdated facts naturally lose influence without being deleted.
 
+**Hardening (2026-04-16):** Freshness decay was documented as "30% weight" but had 0% weight in practice because `HybridRetriever` never called it. Now `applyFreshnessAndReturn()` in `recall.mjs` combines base relevance (70%) + freshness (30%) into a `combinedScore` that re-sorts results so stale memories naturally lose ranking.
+
 ### 5. Hippocampal Replay (R2, R9)
 
 Brain-inspired memory consolidation during idle periods:
@@ -196,6 +209,8 @@ Brain-inspired memory consolidation during idle periods:
 
 This mimics how the human hippocampus replays experiences during sleep to transfer them to long-term memory.
 
+**Hardening (2026-04-16):** Consolidation was only triggered during `SleepCycle`, which requires `AutonomyMaster` (previously disabled by default). Now `AutonomyMaster.runCycle()` includes both time-based (24h interval) and count-based (50 new memories) triggers, ensuring consolidation occurs even without sleep cycles.
+
 ### 6. Role-Model Registry (R6)
 
 Maps task roles to appropriate model tiers:
@@ -206,6 +221,8 @@ code_gen: { minTier: 'full', recommended: ['gpt-5.4', 'qwen3.5:397b-cloud'] }
 file_ops: { minTier: 'compact', recommended: ['qwen3.5:9b-64k'] }
 browser_automation: { minTier: 'balanced', recommended: ['qwen3.5:397b-cloud'] }
 ```
+
+**Hardening (2026-04-16):** The `RoleModelResolver` was defined but never wired into `agent.mjs`. Now `agent.chat()` classifies the role mode, checks if the current model meets the minimum tier via `roleModelResolver.isAllowed()`, and auto-escalates by prepending a recommended model to the provider attempt list. Escalation decisions are logged and included in trace telemetry.
 
 ### 7. Retry Policy with Exponential Backoff (R7)
 
@@ -226,6 +243,16 @@ Merkle root computation over state tables on each transition. Provides cryptogra
 ### 10. Finality Gadget (R12)
 
 3-consecutive-success rule for irreversible actions. High-stakes operations (commits, deployments, external messages) require three successful independent validations before finalization.
+
+**Hardening (2026-04-16):** `FinalityGadget` was dead code — never imported by any module. Now wired into `ToolRuntime` for irreversible tools (`file_write`, `file_patch`, `shell_run`, `git_push`). Each successful execution records a finality success; each failure resets. Tool results include `_finality` metadata with `finalized`, `consecutiveSuccesses`, and `requiredSuccesses`.
+
+### 11. Death-Spiral Detection (NEW)
+
+AutonomyMaster tracks `consecutiveNoProgressCycles` during each autonomy loop cycle. When the count exceeds `degradedModeThreshold` (default: 3), the system enters degraded mode and auto-creates remediations via `ensureRemediationFromDeathSpiral()`. The cycle resets when a progress cycle is detected.
+
+### 12. Autonomy Auto-Start (NEW)
+
+Previously, `autonomyMasterAutoStart` was `false` by default, making all downstream autonomy systems (sleep, consolidation, self-heal, self-improvement) inert. Now set to `true` by default in `src/config.mjs`, ensuring the autonomous loop starts automatically on boot.
 
 ---
 
@@ -314,7 +341,7 @@ OpenUnum is intended to be released as open source software. The project follows
 
 ---
 
-## Current Status (2026-04-08)
+## Current Status (2026-04-16)
 
 | Phase | Focus | Status |
 |-------|-------|--------|
@@ -337,14 +364,9 @@ OpenUnum is intended to be released as open source software. The project follows
 | Phase 36 | Self Monitoring | ✅ Complete |
 | Phase 37 | Predictive Failure Task Orchestrator | ✅ Complete |
 
-**Validation Snapshot (2026-04-08):**
-- `pnpm test:unit` → 13 files, 112/112 tests passing
-- `pnpm test:smoke` → pass (isolated smoke suite + audit/verifier/memory API checks)
-- `pnpm test:imitation` → pass (session imitation regression)
+**Phase 4 Hardening (2026-04-16):** 10 critical gaps fixed — autonomy auto-start, ODD enforcement wiring, council proof scoring, audit HMAC 3-tier resolution, freshness decay wired into retrieval, role-model escalation wired into agent, memory consolidation triggers, full 5-check verifier, finality gadget wired into tool runtime, death-spiral detection.
 
-**Council Maturity:** 🟡 Amber (72% — Moderate Risk, 5 P0 gaps addressed, 16 P1 gaps in progress)
-
-**Repository:** `github.com/corpunum/openunum` (private, pending open source release)
+**Council Maturity:** 🟡 Amber → progressing toward Green with Phase 4 hardening complete
 
 ---
 

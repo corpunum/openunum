@@ -1,7 +1,7 @@
 # OpenUnum Architecture
 
-**Version:** 2.4.0  
-**Last Updated:** 2026-04-15
+**Version:** 2.5.0  
+**Last Updated:** 2026-04-16
 
 ---
 
@@ -37,17 +37,22 @@ Unified retrieval pipeline:
 2. **BM25** — Keyword search (top-25 candidates)
 3. **Embeddings** — Ollama nomic-embed-text semantic similarity
 4. **Rerank** — Reciprocal rank fusion
-5. **Return** — Top-8 with BM25 + similarity scores
+5. **Freshness Decay** — 30% weight on combined score via `applyFreshnessAndReturn()`
+6. **Return** — Top-8 with BM25 + similarity + freshness scores
 
 ### 5. Audit Log (`src/core/audit-log.mjs`)
 - Tamper-evident HMAC-SHA256 chain hashing
 - Logs every tool execution and critical mission state change
 - Provides a cryptographically verifiable history of agent actions
+- 3-tier HMAC secret resolution: env var > persisted random file (0600) > insecure fallback with CRITICAL warning
 
 ### 6. Autonomy Master (`src/core/autonomy-master.mjs`)
 - Central coordinator for 24/7 autonomous operations
 - **Heartbeat:** Periodic health checks and background maintenance
 - **Sleep Cycles:** Triggers `MemoryConsolidator` (Hippocampal Replay) during idle periods
+- **Consolidation Triggers:** Time-based (24h) and count-based (50 memories) in addition to sleep
+- **Death-Spiral Detection:** Tracks `consecutiveNoProgressCycles`, enters degraded mode, auto-creates remediations
+- **Auto-Start:** Enabled by default (`autonomyMasterAutoStart: true`)
 
 ---
 
@@ -60,15 +65,19 @@ FastPathRouter (Short-circuit check) → [Deterministic Reply]
     ↓
 Context Compiler (Assembles context via Unified Hybrid Retrieval)
     ↓
+Role-Model Escalation (Check if current model meets role tier, auto-escalate if not)
+    ↓
 LLM (Generates Thought + Tool Calls)
     ↓
-Tool Runtime (Executes tools + Logs to Audit Trail)
+Tool Runtime (Executes tools + Finality checks for irreversible ops + Logs to Audit Trail)
     ↓
-Proof Scorer (Validates completion)
+Proof Scorer (Validates completion) + Independent Verifier (5-check validation)
     ↓
-Audit Log (Records task_complete state)
+Safety Council (ODD enforcement via execution envelope tier allowlists)
     ↓
-Response (With trace metadata)
+Audit Log (Records task_complete state with HMAC chain)
+    ↓
+Response (With trace metadata + verification + finality info)
 ```
 
 ---
@@ -102,6 +111,7 @@ Response (With trace metadata)
 ### Tool Runtime
 - Located: `src/tools/runtime.mjs`
 - Features: Argument generation, fallback handling, result compaction
+- Finality: `FinalityGadget` checks for irreversible tools (`file_write`, `file_patch`, `shell_run`, `git_push`)
 - Backend substrate: `src/tools/backends/*` (registry/contracts/profiles/governor/adapters)
 
 ---
@@ -153,6 +163,8 @@ Run: `npm test`
 
 | Version | Date | Changes |
 |---------|------|---------|
+| 2.5.0 | 2026-04-16 | Phase 4 hardening: autonomy auto-start, ODD enforcement, full verifier, freshness in retrieval, role-model escalation, finality gadget, death-spiral detection, audit HMAC 3-tier, consolidation triggers |
+| 2.4.0 | 2026-04-15 | Council validation, session sweep, UI decomposition |
 | 2.1.0 | 2026-04-05 | Hybrid retrieval, context compiler, enriched compaction, proof scorer v2 |
 | 2.0.0 | 2026-03-31 | Initial modular architecture |
 | 0.1.0 | 2026-03-30 | Legacy monolithic version |

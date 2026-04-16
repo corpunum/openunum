@@ -6,6 +6,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { getHomeDir } from '../config.mjs';
+import { logEvent as auditLogEvent } from './audit-log.mjs';
 
 export class AutonomyEngine {
   constructor({ agent, memoryStore, config }) {
@@ -32,14 +33,31 @@ export class AutonomyEngine {
   }
 
   /**
-   * Log autonomy event for learning
+   * Log autonomy event for learning and audit
    */
   logEvent(event) {
+    const timestamp = new Date().toISOString();
+    
+    // 1. Learning Log (Legacy/Local)
     const logLine = JSON.stringify({
-      timestamp: new Date().toISOString(),
+      timestamp,
       ...event
     }) + '\n';
-    fs.appendFileSync(this.autonomyLogPath, logLine);
+    try {
+      fs.appendFileSync(this.autonomyLogPath, logLine);
+    } catch (e) {
+      console.error('[autonomy_log_failed]', e);
+    }
+
+    // 2. Tamper-Evident Audit Log (Verifiable)
+    try {
+      auditLogEvent('state_change', {
+        source: 'autonomy_engine',
+        ...event
+      }, event.sessionId || this.autoMissionId);
+    } catch (e) {
+      console.error('[autonomy_audit_log_failed]', e);
+    }
   }
 
   /**

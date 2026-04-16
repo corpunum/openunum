@@ -4,7 +4,7 @@ Purpose: curated file map for autonomous code/docs self-reading and update workf
 
 ## Core Runtime
 
-- ✅ `src/core/agent.mjs` (1758 lines)
+- ✅ `src/core/agent.mjs` (1905 lines)
 - ✅ `src/core/context-compiler.mjs` (333 lines)
 - ✅ `src/core/working-memory.mjs` (739 lines)
 - ✅ `src/core/role-mode-router.mjs` (53 lines)
@@ -20,7 +20,7 @@ Purpose: curated file map for autonomous code/docs self-reading and update workf
 
 - ✅ `src/secrets/store.mjs` (848 lines)
 - ✅ `docs/CONFIG_SCHEMA.md` (116 lines)
-- ✅ `docs/API_REFERENCE.md` (1099 lines)
+- ✅ `docs/API_REFERENCE.md` (1157 lines)
 
 ## Testing and Gates
 
@@ -31,9 +31,9 @@ Purpose: curated file map for autonomous code/docs self-reading and update workf
 
 ## Operations and Roadmap
 
-- ✅ `README.md` (111 lines)
-- ✅ `BRAIN.MD` (192 lines)
-- ✅ `docs/AGENT_ONBOARDING.md` (93 lines)
-- ✅ `docs/ROADMAP.md` (61 lines)
-- ✅ `CHANGELOG.md` (904 lines)
+- ✅ `README.md` (116 lines)
+- ✅ `BRAIN.MD` (194 lines)
+- ✅ `docs/AGENT_ONBOARDING.md` (96 lines)
+- ✅ `docs/ROADMAP.md` (79 lines)
+- ✅ `CHANGELOG.md` (919 lines)
 

@@ -82,11 +82,14 @@ import { PredictiveFailureDetector } from './predictive-failure.mjs';
 import { TaskOrchestrator } from './task-orchestrator.mjs';
 import { FastAwarenessRouter, createFastAwarenessRouter } from './fast-awareness-router.mjs';
 import { classifyRoleMode, modeDirective } from './role-mode-router.mjs';
+import { RoleModelResolver, roleModelRegistry } from './role-model-registry.mjs';
 import { WorkerOrchestrator } from './worker-orchestrator.mjs';
 import { DaemonManager } from './daemon-manager.mjs';
 import { runDeterministicRepoInspection } from './deterministic-repo-inspector.mjs';
 import { createHybridRetriever } from '../memory/recall.mjs';
 import { FastPathRouter } from './fast-path-router.mjs';
+import { SafetyCouncil } from './council/safety-council.mjs';
+import { ProofScorerCouncil } from './council/proof-scorer.mjs';
 import { logEvent } from './audit-log.mjs';
 import { logInfo, logError } from '../logger.mjs';
 
@@ -122,7 +125,7 @@ function inferFinalizationState({ finalText = '', trace = null, progress = null 
   };
 }
 
-export { inferFinalizationState };
+export { inferFinalizationState, enforceVisibleReplyContract };
 
 function enforceVisibleReplyContract({
   finalText = '',
@@ -152,9 +155,10 @@ function enforceVisibleReplyContract({
 }
 
 export class OpenUnumAgent {
-  constructor({ config, memoryStore }) {
+  constructor({ config, memoryStore, sleepCycle = null }) {
     this.config = config;
     this.memoryStore = memoryStore;
+    this.sleepCycle = sleepCycle;
     this.toolRuntime = new ToolRuntime(config, memoryStore);
     this.taskTracker = getTaskTracker(memoryStore);
     this.taskDecomposer = { decomposeTask };
@@ -221,7 +225,14 @@ export class OpenUnumAgent {
       memoryStore: this.memoryStore,
       config: this.config
     });
-    
+
+    // R4: Council Middleware - Pre-flight and Post-flight validation
+    this.safetyCouncil = new SafetyCouncil({ config, memoryStore: this.memoryStore });
+    this.proofScorerCouncil = new ProofScorerCouncil({ config });
+
+    // R6: Role-Model Registry - maps task roles to appropriate model tiers
+    this.roleModelResolver = new RoleModelResolver(roleModelRegistry);
+
     if (this.memoryStore?.listControllerBehaviors) {
       const persisted = this.memoryStore.listControllerBehaviors(200);
       hydrateBehaviorRegistry(persisted);
@@ -701,17 +712,30 @@ export class OpenUnumAgent {
       behaviorSource: behavior.source
     };
     
-    // Shadow mode: recall relevant memory artifacts
+    // R2: Hybrid Memory Retrieval (BM25 + embeddings + reranking)
     try {
-      const recalled = recallRelevantArtifacts({
-        memoryStore: this.memoryStore,
-        sessionId,
-        currentGoal: originalUserMessage,
-        limit: 5
+      const recalled = await this.retriever.retrieve(originalUserMessage, {
+        useHybrid: true,
+        fallbackToBM25: true
       });
-      trace.memoryRecall = { count: recalled.length, artifacts: recalled };
+      trace.memoryRecall = {
+        count: recalled.length,
+        artifacts: recalled,
+        method: 'hybrid_retriever'
+      };
     } catch (e) {
-      trace.memoryRecall = { error: e.message };
+      // Fallback to simple artifact recall if hybrid retriever fails
+      try {
+        const recalled = recallRelevantArtifacts({
+          memoryStore: this.memoryStore,
+          sessionId,
+          currentGoal: originalUserMessage,
+          limit: 5
+        });
+        trace.memoryRecall = { count: recalled.length, artifacts: recalled, method: 'artifact_fallback' };
+      } catch (e2) {
+        trace.memoryRecall = { error: e.message, fallbackError: e2.message, method: 'recall_failed' };
+      }
     }
     const baseMaxIters = executionProfile.maxIters || this.config.runtime?.maxToolIterations || 4;
     const envelopeMaxIters = executionEnvelope.maxToolIterations || this.config.runtime?.maxToolIterations || 4;
@@ -1277,6 +1301,47 @@ export class OpenUnumAgent {
         reasons: learned.reasons
       });
     }
+
+    // R4: POST-FLIGHT COUNCIL - Proof quality validation
+    if (this.config.runtime?.councilEnabled !== false && finalText) {
+      try {
+        const proofResult = await this.proofScorerCouncil.postFlight({
+          response: finalText,
+          toolRuns: executedTools,
+          message: originalUserMessage,
+          sessionId
+        });
+
+        trace.councilProofScore = proofResult.proofScore;
+
+        if (proofResult.requiresRevision && !sideQuestMode) {
+          logInfo('council_postflight_revision_required', {
+            sessionId,
+            reason: proofResult.reason,
+            proofScore: proofResult.proofScore?.overallScore
+          });
+
+          // Add revision prompt and continue iteration
+          messages.push({
+            role: 'system',
+            content: `Proof quality insufficient: ${proofResult.reason}. Please provide stronger evidence for your claims before claiming completion.`
+          });
+
+          // Recursive call with revision flag (one retry only)
+          return await this.chat({
+            message,
+            sessionId,
+            modelOverride,
+            toolsAllow,
+            sideQuestMode: true
+          });
+        }
+      } catch (e) {
+        logError('council_postflight_failed', { error: String(e.message || e) });
+        trace.councilError = e.message;
+      }
+    }
+
     return { finalText, trace };
   }
 
@@ -1287,10 +1352,21 @@ export class OpenUnumAgent {
     toolsAllow = null,
     sideQuestMode = false
   }) {
+    // R9: Sleep Cycle Awareness - check if waking from sleep
+    if (this.sleepCycle) {
+      const sleepState = this.sleepCycle.getState();
+      if (sleepState.state === 'sleeping') {
+        await this.sleepCycle.wake('message');
+        logInfo('agent_woken_from_sleep', { sessionId, sleepDurationMs: sleepState.idleMs });
+      } else {
+        this.sleepCycle.touchActivity();
+      }
+    }
+
     const recentMessages = this.memoryStore.getMessagesForContext
       ? this.memoryStore.getMessagesForContext(sessionId, 16)
       : [];
-    
+
     // R2/R10: FastPathRouter handles deterministic and short-circuit replies
     const fastPathReply = await this.fastPathRouter.route({
       message,
@@ -1303,6 +1379,31 @@ export class OpenUnumAgent {
     const deterministicRepoReply = await this.tryDeterministicRepoInspection({ message, sessionId });
     if (deterministicRepoReply) {
       return deterministicRepoReply;
+    }
+
+    // R4: PRE-FLIGHT COUNCIL - Safety and ODD validation
+    if (this.config.runtime?.councilEnabled !== false) {
+      const councilResult = await this.safetyCouncil.preFlight({
+        message,
+        sessionId,
+        context: {
+          executionTier: this.getCurrentExecutionTier?.() || 'standard'
+        }
+      });
+
+      if (!councilResult.passed) {
+        logInfo('council_preflight_blocked', {
+          sessionId,
+          reason: councilResult.blockedReason,
+          checks: councilResult.checks
+        });
+
+        return {
+          sessionId,
+          reply: `Request blocked by Safety Council: ${councilResult.blockedReason}`,
+          trace: { councilBlocked: true, checks: councilResult.checks }
+        };
+      }
     }
 
     const skills = loadSkills();
@@ -1548,6 +1649,46 @@ export class OpenUnumAgent {
     const routeTelemetry = {};
     const roleMode = classifyRoleMode({ message });
     const roleModeInstruction = modeDirective(roleMode);
+
+    // R6: Role-Model Registry - check if current model tier meets role requirements
+    const roleConfig = this.roleModelResolver.resolve(roleMode.mode);
+    const currentModelRef = `${effectiveAttempts[0]?.provider || this.config.model.provider}/${effectiveAttempts[0]?.model || this.config.model.model}`;
+    const roleCheck = this.roleModelResolver.isAllowed(roleMode.mode, currentModelRef);
+    routeTelemetry.roleModel = {
+      role: roleMode.mode,
+      minTier: roleConfig.minTier,
+      currentModel: currentModelRef,
+      allowed: roleCheck.allowed,
+      reason: roleCheck.reason
+    };
+    if (!roleCheck.allowed && !this.config.model.routing?.forcePrimaryProvider) {
+      // Auto-escalate: find a recommended model that meets the tier requirement
+      const recommended = roleConfig.recommended || [];
+      for (const recModel of recommended) {
+        const [recProvider, ...recModelParts] = recModel.split('/');
+        const recModelName = recModelParts.join('/');
+        if (recProvider && recModelName) {
+          const recRef = `${recProvider}/${recModelName}`;
+          const recCheck = this.roleModelResolver.isAllowed(roleMode.mode, recRef);
+          if (recCheck.allowed) {
+            logInfo('role_model_escalation', {
+              role: roleMode.mode,
+              from: currentModelRef,
+              to: recRef,
+              minTier: roleConfig.minTier
+            });
+            routeTelemetry.roleModel.escalated = true;
+            routeTelemetry.roleModel.escalatedTo = recRef;
+            // Prepend the recommended model as first attempt
+            effectiveAttempts = [
+              { provider: recProvider, model: recModelName },
+              ...effectiveAttempts
+            ];
+            break;
+          }
+        }
+      }
+    }
 
     // FastAwarenessRouter: classify message and potentially short-circuit
     const awarenessStartedAt = Date.now();

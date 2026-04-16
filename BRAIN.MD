@@ -117,17 +117,21 @@ After every change, update:
 - **Self-reading index refresh** (`pnpm docs:index`) after major architecture/doc movement
 - **Session-imitation regression replay** (`pnpm test:imitation`) to guard continuation/memory behavior
 - **Secrets-at-rest hardening**: prefer encrypted passphrase backend for production deployments
-- **Canonical self-heal path**: keep runtime + autonomy surfaces on `src/core/self-heal-orchestrator.mjs` and avoid reintroducing overlapping recovery flows
+- **Canonical self-heal path**: keep runtime + autonomy surfaces on `src/core/self-heal-orchestrator.mjs` and `src/core/self-heal.mjs` (SelfHealSystem); `selfheal.mjs` (SelfHealMonitor) is still imported by self-test and orchestrator
+- **Death-spiral detection**: `AutonomyMaster` tracks `consecutiveNoProgressCycles` and enters degraded mode when threshold exceeded; `ensureRemediationFromDeathSpiral()` auto-creates remediations
 - **WebUI/backend wire validation**: after provider/model/skill/routing add-delete-edit actions, verify API wiring + runtime reflections before claiming success
 - **Provider split discipline**: treat `ollama-local` and `ollama-cloud` as separate lanes (local lane restricted to gemma4 + embeddings; cloud lane for cloud models)
 
 **Phase 1-3 Implemented Systems (Document These):**
-- **Verifier** (`src/core/verifier.mjs`) — Independent state validation
-- **Audit Logger** (`src/core/audit-log.mjs`) — Tamper-evident HMAC chain
-- **Memory Freshness** (`src/memory/store.mjs`) — Decay scoring, staleness detection
-- **Hippocampal Replay** (`src/core/memory-consolidator.mjs`) — Scheduled consolidation
-- **ODD Enforcement** (`src/config.mjs`) — Execution tier boundaries
+- **Verifier** (`src/core/verifier.mjs`) — Independent 5-check validation (tool appropriateness, output quality, goal alignment, safety compliance, context coherence)
+- **Audit Logger** (`src/core/audit-log.mjs`) — Tamper-evident HMAC chain with 3-tier secret resolution
+- **Memory Freshness** (`src/memory/freshness-decay.mjs` → `recall.mjs`) — Decay scoring at 30% weight in HybridRetriever, staleness detection
+- **Hippocampal Replay** (`src/core/memory-consolidator.mjs`) — Consolidation triggered by time (24h) and count (50 memories), not only SleepCycle
+- **ODD Enforcement** (`src/core/council/safety-council.mjs` + `model-execution-envelope.mjs`) — Tier-based tool allowlists via `resolveExecutionEnvelope()` + `SafetyCouncil.checkODD()`
 - **Replay System** (`src/core/hippocampal-replay.mjs`) — Pattern extraction from successes/failures
+- **Role-Model Escalation** (`src/core/role-model-registry.mjs` → `agent.mjs`) — Automatic model tier escalation based on classified role
+- **FinalityGadget** (`src/core/finality.mjs` → `tools/runtime.mjs`) — N-consecutive-success rule for irreversible tool actions
+- **Death-Spiral Detection** (`src/core/autonomy-master.mjs`) — Tracks consecutive no-progress cycles, enters degraded mode
 
 **Phase 0 Foundations (Document These):**
 - **Runtime State Contract** (`src/core/runtime-state-contract.mjs`) — Canonical runtime packet + deterministic fingerprint
@@ -164,22 +168,26 @@ Agents must be able to:
 5. **Continuous Improvement**: Learn and adapt over time
 6. **Verification**: Independent validation before deployment (Phase 4 priority)
 
-## Anti-Patterns Learned from Phase 1-3
+## Anti-Patterns Learned from Phase 1-3 and Phase 4 Hardening
 
 **Avoid These Mistakes:**
 
 | Anti-Pattern | Symptom | Fix |
 |--------------|---------|-----|
-| Agent scores own work | No independent validation | Use `src/core/verifier.mjs` for high-stakes ops |
-| No tamper evidence | Audit logs can be modified | Use HMAC-SHA256 chain hashing (`src/core/audit-log.mjs`) |
-| Memories never decay | Stale data pollutes retrieval | Apply 30-day half-life decay scoring |
-| No scheduled replay | Lessons not consolidated | Run hippocampal replay every 24 hours via `SleepCycle` |
+| Agent scores own work | No independent validation | Use `src/core/verifier.mjs` for high-stakes ops (5-check: tool appropriateness, output quality, goal alignment, safety, context coherence) |
+| No tamper evidence | Audit logs can be modified | Use HMAC-SHA256 chain hashing (`src/core/audit-log.mjs`) with 3-tier secret resolution (env > persisted file > insecure fallback) |
+| Memories never decay | Stale data pollutes retrieval | Apply 30-day half-life decay scoring via `freshness-decay.mjs` wired into `HybridRetriever` at 30% weight |
+| No scheduled replay | Lessons not consolidated | Run hippocampal replay via time-based (24h) and count-based (50 memories) triggers in `AutonomyMaster`, not only `SleepCycle` |
 | Confidence ≠ validity | Heuristic scoring mistaken for proof | Distinguish confidence (heuristic) from validity (cryptographic) |
-| No ODD boundaries | Weak models attempt complex tasks | Enforce tier-based tool allowlists |
-| No role-model mapping | Wrong model for task type | Use `src/core/role-model-registry.mjs` |
+| No ODD boundaries | Weak models attempt complex tasks | Enforce tier-based tool allowlists via `resolveExecutionEnvelope()` in `SafetyCouncil.checkODD()` |
+| No role-model mapping | Wrong model for task type | Use `RoleModelResolver` wired into `agent.chat()` for automatic model escalation |
 | No retry policy | Transient failures become permanent | Implement exponential backoff (200ms-2s) |
-| **Disconnected Architecture** | Features exist but are bypassed | Wire advanced systems (Audit, Hybrid Memory, Sleep) directly into `agent.mjs` |
+| **Disconnected Architecture** | Features exist but are bypassed | Wire advanced systems (Audit, Hybrid Memory, Sleep, Role-Model, Finality) directly into agent runtime |
 | **Deterministic Bloat** | Agent loop cluttered with greetings | Use `FastPathRouter` to offload non-cognitive turns |
+| **Disabled Autonomy by Default** | Sleep, consolidation, self-heal never trigger | `autonomyMasterAutoStart: true` in config — autonomy must be on by default |
+| **Hardcoded Secrets** | Audit HMAC uses source-visible fallback | 3-tier HMAC resolution: env var > persisted random file (0600) > insecure fallback with CRITICAL warning |
+| **Dead Code Finality** | FinalityGadget exists but is never imported | Wire `FinalityGadget` into `ToolRuntime` for irreversible tools (`file_write`, `file_patch`, `shell_run`, `git_push`) |
+| **No Death-Spiral Detection** | Agent loops indefinitely through failures | `AutonomyMaster` tracks `consecutiveNoProgressCycles` and enters degraded mode after threshold |
 
 ## Decision Making Framework
 

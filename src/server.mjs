@@ -109,7 +109,8 @@ const launchInTerminal = authService.launchInTerminal;
 const launchOauthCommand = authService.launchOauthCommand;
 const buildAuthCatalogPayload = authService.buildAuthCatalogPayload;
 
-const agent = new OpenUnumAgent({ config, memoryStore: memory });
+// Note: agent is created with default sleepCycle, then updated after autonomyMaster is initialized
+const agent = new OpenUnumAgent({ config, memoryStore: memory, sleepCycle: 60 });
 loadBuiltinCommands();
 const missions = new MissionRunner({ agent, memoryStore: memory, config });
 let browser = new CDPBrowser(config.browser?.cdpUrl);
@@ -133,6 +134,8 @@ const getOrStartChat = chatRuntime.getOrStartChat;
 const prunePendingChats = chatRuntime.prunePendingChats;
 
 const autonomyMaster = getAutonomyMaster({ config, agent, memoryStore: memory, browser, pendingChats });
+// Update agent's sleepCycle now that autonomyMaster is initialized
+agent.sleepCycle = autonomyMaster.sleepCycle;
 const selfHeal = new SelfHealOrchestrator({ config, agent, browser, memory });
 const API_ERROR_CONTRACT_VERSION = '2026-04-02.api-errors.v1';
 const TOOL_CATALOG_CONTRACT_VERSION = '2026-04-02.tool-catalog.v1';
@@ -622,5 +625,13 @@ server.listen(config.server.port, config.server.host, () => {
     runTelegramLoop().catch((err) => {
       logError('telegram_startup_failed', { error: String(err.message || err) });
     });
+  }
+  // R9: Sleep Cycle Heartbeat - check for idle sleep every minute
+  if (config.runtime?.sleepCycleEnabled !== false) {
+    setInterval(() => {
+      autonomyMaster.sleepCycle?.checkAndSleep().catch((err) => {
+        logError('sleep_cycle_check_failed', { error: String(err.message || err) });
+      });
+    }, 60000);
   }
 });

@@ -11,6 +11,7 @@ import { SkillFactory } from '../skills/factory.mjs';
 import { GoogleWorkspaceClient } from './google-workspace.mjs';
 import { ResearchManager } from '../research/manager.mjs';
 import { ExecutionPolicyEngine } from '../core/execution-policy-engine.mjs';
+import { FinalityGadget } from '../core/finality.mjs';
 import { getHomeDir } from '../config.mjs';
 import { validateToolCall } from '../core/preflight-validator.mjs';
 import { summarizeToolResult } from '../core/tool-result-summarizer.mjs';
@@ -79,6 +80,9 @@ export class ToolRuntime {
     });
     this.policyEngine = new ExecutionPolicyEngine(config.runtime || {});
     this.modelBackedRegistry = createModelBackedToolRegistry(config);
+    this.finalityGadget = new FinalityGadget({
+      requiredSuccesses: Number(config.runtime?.finalitySuccesses || 2) // Default: 2 consecutive successes for irreversible ops
+    });
     this.backupRoot = path.join(os.homedir(), '.openunum', 'backups');
     this.hooksRoot = path.join(getHomeDir(), 'hooks');
     this.backupIndex = [];
@@ -170,14 +174,16 @@ export class ToolRuntime {
 
   logRun(context, toolName, args, result) {
     const sessionId = context?.sessionId;
-    
-    // R1: Tamper-Evident Audit Logging
+
+    // R1: POST-FLIGHT - Log tool execution result (tamper-evident)
     try {
       logEvent('tool_call', {
+        phase: 'post_flight',
         tool: toolName,
         args: args || {},
         ok: result?.ok !== false,
-        error: result?.error || null
+        error: result?.error || null,
+        auditId: result?.auditId || null
       }, sessionId);
     } catch (e) {
       // Don't crash tool execution if audit logging fails, but log it
@@ -295,10 +301,24 @@ export class ToolRuntime {
   }
 
   async run(name, args, context = {}) {
+    const auditId = crypto.randomUUID();
     let currentArgs = isPlainObject(args) ? { ...args } : {};
     const hookEvents = [];
     const hookFacts = [];
     const hookArtifacts = [];
+
+    // R1: PRE-FLIGHT - Log intent to execute tool (tamper-evident)
+    try {
+      logEvent('tool_call', {
+        phase: 'pre_flight',
+        tool: name,
+        args: args || {},
+        sessionId: context?.sessionId,
+        auditId
+      }, context?.sessionId);
+    } catch (e) {
+      console.error('[audit_log_pre_flight_failed]', e);
+    }
 
     const policy = this.evaluatePolicy(name, currentArgs, context);
     if (!policy.allow) {
@@ -307,7 +327,8 @@ export class ToolRuntime {
         error: 'policy_denied',
         policyReason: policy.reason,
         stderr: policy.details || `Tool ${name} denied by execution policy.`,
-        hookEvents
+        hookEvents,
+        auditId
       };
       this.logRun(context, name, currentArgs, out);
       return out;
@@ -317,7 +338,8 @@ export class ToolRuntime {
         ok: false,
         error: 'model_profile_tool_restricted',
         stderr: `Tool ${name} is restricted by the active model execution profile.`,
-        hookEvents
+        hookEvents,
+        auditId
       };
       this.logRun(context, name, currentArgs, out);
       return out;
@@ -330,7 +352,8 @@ export class ToolRuntime {
         ok: false,
         error: 'preflight_validation_failed',
         stderr: validation.hint || `Tool ${name} failed preflight validation.`,
-        hookEvents
+        hookEvents,
+        auditId
       };
       this.logRun(context, name, currentArgs, out);
       return out;
@@ -361,7 +384,8 @@ export class ToolRuntime {
           stderr: out.stderr || out.reason || `Hook ${item.hook} blocked ${name}.`,
           hookEvents,
           hookFacts,
-          hookArtifacts
+          hookArtifacts,
+          auditId
         };
         this.logRun(context, name, currentArgs, blocked);
         return blocked;
@@ -372,7 +396,8 @@ export class ToolRuntime {
           ok: out.result.ok !== false,
           hookEvents,
           hookFacts,
-          hookArtifacts
+          hookArtifacts,
+          auditId
         };
         this.recordToolResult(name, Boolean(synthetic?.ok));
         this.logRun(context, name, currentArgs, synthetic);
@@ -389,7 +414,8 @@ export class ToolRuntime {
         stderr: postMutationPolicy.details || `Tool ${name} denied by execution policy after hook mutation.`,
         hookEvents,
         hookFacts,
-        hookArtifacts
+        hookArtifacts,
+        auditId
       };
       this.logRun(context, name, currentArgs, out);
       return out;
@@ -401,7 +427,8 @@ export class ToolRuntime {
         stderr: `Tool ${name} is restricted by the active model execution profile.`,
         hookEvents,
         hookFacts,
-        hookArtifacts
+        hookArtifacts,
+        auditId
       };
       this.logRun(context, name, currentArgs, out);
       return out;
@@ -409,7 +436,7 @@ export class ToolRuntime {
 
     const circuit = this.canExecuteTool(name);
     if (!circuit.ok) {
-      const out = { ok: false, error: circuit.error, ...circuit.details, hookEvents, hookFacts, hookArtifacts };
+      const out = { ok: false, error: circuit.error, ...circuit.details, hookEvents, hookFacts, hookArtifacts, auditId };
       this.logRun(context, name, currentArgs, out);
       return out;
     }
@@ -445,10 +472,47 @@ export class ToolRuntime {
       ...result,
       hookEvents,
       hookFacts,
-      hookArtifacts
+      hookArtifacts,
+      auditId
     };
 
     this.recordToolResult(name, Boolean(result?.ok));
+
+    // R11/R12: Finality Gadget - gate irreversible tool operations
+    // Irreversible tools require consecutive success validations before finalization
+    const IRREVERSIBLE_TOOLS = new Set([
+      'file_write', 'file_patch', 'shell_run', 'git_push'
+    ]);
+    const isIrreversible = IRREVERSIBLE_TOOLS.has(name) ||
+      (name === 'shell_run' && hasUnsafeShellMetacharacters(String(args?.cmd || '')));
+
+    if (isIrreversible && result?.ok) {
+      const finalityId = `tool:${name}:${context?.sessionId || 'unknown'}:${auditId}`;
+      const finalityResult = await this.finalityGadget.recordExecution(finalityId, true);
+
+      if (!finalityResult.finalized) {
+        // Not yet finalized - add a warning but allow the operation
+        result._finality = {
+          finalized: false,
+          consecutiveSuccesses: this.finalityGadget.countConsecutiveSuccesses(
+            this.finalityGadget.executionHistory.get(finalityId) || []
+          ),
+          requiredSuccesses: this.finalityGadget.requiredSuccesses,
+          note: `Irreversible operation ${name} requires ${this.finalityGadget.requiredSuccesses} consecutive successes before finalization`
+        };
+      } else {
+        result._finality = {
+          finalized: true,
+          checkpoint: finalityResult.checkpoint
+        };
+      }
+    } else if (isIrreversible && !result?.ok) {
+      // Failed irreversible operation - reset finality counter
+      const finalityId = `tool:${name}:${context?.sessionId || 'unknown'}:${auditId}`;
+      await this.finalityGadget.recordExecution(finalityId, false);
+      result._finality = { finalized: false, note: `Irreversible operation ${name} failed - finality counter reset` };
+    }
+
     this.logRun(context, name, currentArgs, result);
 
     // Summarize large tool results to save context budget

@@ -70,7 +70,8 @@ describe('AutonomyMaster predictive recovery mapping', () => {
 describe('AutonomyMaster predictive signal parsing', () => {
   it('detects disk pressure from orchestrator disk check key', async () => {
     const ctx = {
-      thresholds: { diskUsagePercent: 85 }
+      thresholds: { diskUsagePercent: 85 },
+      getPendingQueueDiagnostics: () => ({ stuckCount: 0, oldestAgeMs: 0, thresholdMs: 45000 })
     };
 
     const predictions = await AutonomyMaster.prototype.analyzePredictiveFailures.call(ctx, {

@@ -1,4 +1,4 @@
-# Current State Matrix (2026-04-13)
+# Current State Matrix (2026-04-16)
 
 This is the quick trust checkpoint for code, runtime, tests, docs, and remaining debt.
 
@@ -18,9 +18,19 @@ This is the quick trust checkpoint for code, runtime, tests, docs, and remaining
 | API docs | `docs/API_REFERENCE.md` | Canonical, parity-gated |
 | Onboarding docs | `README.md`, `docs/INDEX.md`, `docs/AGENT_ONBOARDING.md` | Canonical |
 | Validation gate | `pnpm verify` | Canonical umbrella gate |
+| Autonomy master auto-start | `src/config.mjs` → `autonomyMasterAutoStart: true` | Active (enabled by default) |
+| Memory consolidation triggers | `src/core/autonomy-master.mjs` → time + count | Active (24h interval / 50 memories) |
+| Death-spiral detection | `src/core/autonomy-master.mjs` → degraded mode | Active |
+| ODD enforcement | `src/core/council/safety-council.mjs` → `checkODD()` | Active (wired to `resolveExecutionEnvelope()`) |
+| Independent verifier | `src/core/verifier.mjs` → 5-check system | Active |
+| Role-model escalation | `src/core/role-model-registry.mjs` → `agent.mjs` | Active (auto-escalation on role mismatch) |
+| Freshness in retrieval | `src/memory/recall.mjs` → `applyFreshnessAndReturn()` | Active (30% weight) |
+| FinalityGadget | `src/core/finality.mjs` → `tools/runtime.mjs` | Active (irreversible tools) |
+| Audit HMAC secret | `src/core/audit-log.mjs` → 3-tier resolution | Active (env > file > fallback with warning) |
 
 ## Current Open Debt
 
 - deeper frontend decomposition is still desirable in some larger settings/runtime modules
 - operator dashboard can be further split into dedicated modules for autonomy cards/remediation actions
-- some legacy modules remain for compatibility and should continue moving toward archive-only status when safe
+- `src/core/selfheal.mjs` (SelfHealMonitor) still imported by `self-test.mjs` and `self-heal-orchestrator.mjs` — not yet safe to archive; canonical SelfHealSystem is in `self-heal.mjs`
+- local model integration for verifier and role-model escalation deferred (using cloud models for now)

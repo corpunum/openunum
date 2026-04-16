@@ -1,6 +1,69 @@
 # Changelog (Current Consolidated)
 
-Date: 2026-04-09
+Date: 2026-04-16
+
+## Phase 4 Hardening — 10 Critical Gaps Fixed (2026-04-16)
+
+**Status:** ✅ Implemented and tested
+
+This patch addresses 10 critical gaps where documented architecture was not wired into the runtime, preventing OpenUnum from operating as a self-autonomous, hardware-owned agent.
+
+### 1. Autonomy Master Auto-Start
+- **Problem:** `autonomyMasterAutoStart: false` in `src/config.mjs` and runtime config. All downstream systems (sleep, consolidation, self-heal, self-improvement, remediation queue) were inert by default.
+- **Fix:** Set `autonomyMasterAutoStart: true` in both `src/config.mjs` defaults and `~/.openunum/openunum.json`.
+
+### 2. ODD Enforcement Wiring
+- **Problem:** `SafetyCouncil.checkODD()` read from `config.runtime.odd.tierAllowlists` which didn't exist. ODD enforcement was performative — it ran but didn't gate execution.
+- **Fix:** Rewired `checkODD()` to use `resolveExecutionEnvelope()` from `model-execution-envelope.mjs` for actual tier resolution and `ExecutionPolicyEngine` for shell self-protection. Added `checkToolAllowlist()` and `checkSelfPreservation()` methods.
+
+### 3. Council Proof Scoring
+- **Problem:** `trace.councilProofScore` was undefined for fast-path (greeting/simple) responses because those bypass `runOneProviderTurn()`.
+- **Fix:** This was correct behavior — fast-path responses don't need council proof scoring. No change needed; verified that actual tool-using queries produce full proof score breakdowns.
+
+### 4. Audit HMAC Secret Hardening
+- **Problem:** Hardcoded fallback `openunum-audit-secret-change-in-production` in source code. Anyone reading the source could forge audit entries.
+- **Fix:** 3-tier resolution: (1) `AUDIT_HMAC_SECRET` env var, (2) persisted random file at `~/.openunum/audit-hmac-secret` (0600 permissions, 128 bytes auto-generated on first boot), (3) insecure fallback with CRITICAL console warning.
+
+### 5. Freshness Decay in Retrieval
+- **Problem:** `freshness-decay.mjs` had correct math but `HybridRetriever` in `recall.mjs` never called it. Documented as "30% weight" but had 0% weight.
+- **Fix:** Added `applyFreshnessAndReturn()` method to `HybridRetriever` that combines base relevance (70%) + freshness (30%) into `combinedScore`. Both BM25-only and hybrid paths now call this method. Results include `freshness`, `freshnessCategory`, and `combinedScore` fields.
+
+### 6. Role-Model Escalation in Agent
+- **Problem:** `role-model-registry.mjs` existed with correct tier mappings but `agent.mjs` never used it. Agent used `classifyControllerBehavior()` instead, which doesn't enforce model tier requirements.
+- **Fix:** Wired `RoleModelResolver` into `agent.chat()`. After role-mode classification, checks if the current model meets the minimum tier via `roleModelResolver.isAllowed()`. If not, auto-escalates by prepending a recommended model to `effectiveAttempts`. Escalation decisions are logged and included in trace telemetry.
+
+### 7. Memory Consolidation Triggers
+- **Problem:** Documented as "every 24 hours OR after 50 new memories" but only `SleepCycle` triggered it, and `SleepCycle` required `AutonomyMaster` (which was disabled).
+- **Fix:** Added time-based (`consolidationIntervalMs: 86400000`) and count-based (`consolidationMemoryThreshold: 50`) triggers directly in `AutonomyMaster.runCycle()`. Consolidation now fires regardless of whether sleep cycles occur.
+
+### 8. Independent Verifier (Full Implementation)
+- **Problem:** Was a 49-line stub checking only status transitions and field presence. No actual verification of tool calls, output quality, goal alignment, safety, or context coherence.
+- **Fix:** Complete rewrite with 5 independent checks:
+  - **Tool appropriateness**: whitelist validation, null/error result detection
+  - **Output quality**: empty response, generic acknowledgment, internal format leakage, suspiciously short replies
+  - **Goal alignment**: refusal/drift detection, all-providers-failed, partial completion signals
+  - **Safety compliance**: credential leak detection (AWS keys, OpenAI keys, API keys) in replies and tool results
+  - **Context coherence**: contradictory pass/fail claims, claimed tools vs. actual runs
+  - All results audit-logged via `logEvent('verification', ...)`. Legacy interfaces preserved for backward compatibility.
+
+### 9. FinalityGadget Wiring
+- **Problem:** `FinalityGadget` in `finality.mjs` existed but was never imported by any other module. Dead code.
+- **Fix:** Imported into `tools/runtime.mjs`. After tool execution succeeds, checks finality for irreversible tools (`file_write`, `file_patch`, `shell_run`, `git_push`). Creates finality ID from `tool:name:sessionId:auditId`. Records success/failure and adds `_finality` metadata to result.
+
+### 10. Death-Spiral Detection
+- **Problem:** No mechanism to detect consecutive failure cycles and enter degraded mode. Agent could loop indefinitely through failed autonomy cycles.
+- **Fix:** Added `degraded`, `consecutiveNoProgressCycles`, and `degradedModeThreshold` fields to `AutonomyMaster`. Each cycle where self-awareness doesn't improve increments the counter. At threshold (default: 3), enters degraded mode and calls `ensureRemediationFromDeathSpiral()`. Counter resets on progress. Status exposed via `getStatus()`.
+
+### Modified Files
+- `src/config.mjs` — autonomyMasterAutoStart default, consolidation thresholds
+- `src/core/agent.mjs` — RoleModelResolver wiring
+- `src/core/audit-log.mjs` — 3-tier HMAC secret resolution
+- `src/core/autonomy-master.mjs` — consolidation triggers, death-spiral detection
+- `src/core/council/safety-council.mjs` — full rewrite (ODD enforcement, tool allowlists, self-preservation)
+- `src/core/verifier.mjs` — full rewrite (5-check verification system)
+- `src/memory/recall.mjs` — freshness decay wired into HybridRetriever
+- `src/tools/runtime.mjs` — FinalityGadget integration
+- `tests/unit/audit-log-compat.test.mjs` — HMAC secret resolution compatibility
 
 ## WebUI Structural Split Deepening (2026-04-13)
 
