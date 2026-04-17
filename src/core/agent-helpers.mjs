@@ -1131,22 +1131,39 @@ export function deterministicLightChatReply() {
 export function scoreDeterministicFastTurn(text) {
   const raw = String(text || '').toLowerCase().trim();
   if (!raw) return 0;
+  
+  // High-confidence patterns for self-assessment and identity
+  if (isSelfAssessmentQuestion(raw) || isConversationalAliveQuestion(raw)) {
+    return 0.95;
+  }
+
   const normalized = raw.replace(/[^\w\s]/g, ' ').replace(/\s+/g, ' ').trim();
   if (!normalized) return 0;
   const words = normalized.split(/\s+/).filter(Boolean);
-  if (words.length > 8 || normalized.length > 72) return 0;
+  if (words.length > 12 || normalized.length > 120) return 0;
   const hasTaskSignal = TASK_SIGNAL_RE.test(normalized);
   const hasCodeLike = /[\\/`$={}[\]<>]/.test(raw) || /\d{2,}/.test(raw);
   let score = 0;
   if (words.length <= 3) score += 0.45;
   else if (words.length <= 5) score += 0.3;
-  else if (words.length <= 8) score += 0.1;
+  else if (words.length <= 8) score += 0.15;
+  else if (words.length <= 12) score += 0.05;
+  
   if (normalized.length <= 24) score += 0.25;
   else if (normalized.length <= 40) score += 0.12;
+  else if (normalized.length <= 80) score += 0.05;
+  
   if (!hasTaskSignal) score += 0.2;
   if (!hasCodeLike) score += 0.15;
+  
+  // Specific boost for "scale from 1-10" if it's not a complex task
+  if (raw.includes('scale from 1') && raw.includes('10') && !hasTaskSignal) {
+    score += 0.4;
+  }
+
   if (hasTaskSignal) score -= 0.9;
-  if (hasCodeLike) score -= 0.7;
+  if (hasCodeLike && !raw.includes('1-10')) score -= 0.7;
+  
   return Math.max(0, Math.min(1, score));
 }
 
@@ -1158,7 +1175,11 @@ export function isConversationalAliveQuestion(text) {
     /^are you dead or alive\??$/,
     /^so you are dead\??$/,
     /.*\balive\b.*\?$/,
-    /.*\bdead\b.*\?$/
+    /.*\bdead\b.*\?$/,
+    /^how are you\??$/,
+    /^how do you feel\??$/,
+    /^are you okay\??$/,
+    /^are you ok\??$/
   ];
 
   const technicalPatterns = [
@@ -1172,4 +1193,24 @@ export function isConversationalAliveQuestion(text) {
   }
 
   return alivePatterns.some(pattern => pattern.test(t));
+}
+
+export function isSelfAssessmentQuestion(text) {
+  const t = normalizeLooseText(text);
+  if (!t) return false;
+  
+  const assessmentPatterns = [
+    /\bhow\s+smart\s+are\s+you\b/,
+    /\bhow\s+intelligent\s+are\s+you\b/,
+    /\bon\s+a\s+scale\s+from\s+1\b.*\b10\b/,
+    /\bwhat\s+can\s+you\s+do\b/,
+    /\bwhat\s+are\s+your\s+capabilities\b/,
+    /\btell\s+me\s+about\s+yourself\b/,
+    /\bwho\s+are\s+you\b/,
+    /\bwhat\s+is\s+your\s+purpose\b/,
+    /\bwhat\s+is\s+your\s+goal\b/,
+    /\bhow\s+do\s+you\s+work\b/
+  ];
+  
+  return assessmentPatterns.some(pattern => pattern.test(t));
 }

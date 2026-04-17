@@ -68,6 +68,11 @@ const DEFAULT_CONFIG = {
       'find files', 'search files', 'look for file', 'grep',
       'locate', 'where is', 'find all', 'search all', 'glob',
       'search for', 'file search', 'in the codebase'
+    ],
+    selfAssessmentKeywords: [
+      'how smart', 'how intelligent', 'your capabilities', 'what can you do',
+      'who are you', 'about yourself', 'your purpose', 'your goal',
+      'scale from 1 to 10', 'scale from 1-10'
     ]
   },
   strategyTools: {
@@ -214,13 +219,15 @@ export class FastAwarenessRouter {
     const continuationKeywords = Array.isArray(rules?.continuationKeywords) ? rules.continuationKeywords : [];
     const externalKeywords = Array.isArray(rules?.externalKeywords) ? rules.externalKeywords : [];
     const deepInspectKeywords = Array.isArray(rules?.deepInspectKeywords) ? rules.deepInspectKeywords : [];
+    const selfAssessmentKeywords = Array.isArray(rules?.selfAssessmentKeywords) ? rules.selfAssessmentKeywords : [];
     const scores = {
       greeting: 0,
       lightChat: 0,
       taskMeta: 0,
       continuation: 0,
       external: 0,
-      deepInspect: 0
+      deepInspect: 0,
+      selfAssessment: 0
     };
 
     const featureScores = this._scoreLowIntentFeatures(normalized);
@@ -263,6 +270,17 @@ export class FastAwarenessRouter {
       if (normalized.includes(kw)) {
         scores.deepInspect = Math.max(scores.deepInspect, 0.75 + 0.05 * kw.split(' ').length);
       }
+    }
+
+    for (const kw of selfAssessmentKeywords) {
+      if (normalized.includes(kw)) {
+        scores.selfAssessment = Math.max(scores.selfAssessment, 0.75 + 0.05 * kw.split(' ').length);
+      }
+    }
+
+    // High confidence self-assessment is light-chat for short-circuiting
+    if (scores.selfAssessment >= 0.8) {
+      scores.lightChat = Math.max(scores.lightChat, scores.selfAssessment);
     }
 
     // Strong boost for exact phrase matches
@@ -319,7 +337,7 @@ export class FastAwarenessRouter {
    * @private
    */
   _determineStrategy({ normalized, isAboutCurrentTask, hasWorkingMemory, keywordScores }) {
-    const { greeting, lightChat, taskMeta, continuation, external, deepInspect } = keywordScores;
+    const { greeting, lightChat, taskMeta, continuation, external, deepInspect, selfAssessment } = keywordScores;
 
     if (this._isSimpleGreeting(normalized)) {
       return {

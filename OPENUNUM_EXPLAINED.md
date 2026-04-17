@@ -58,7 +58,7 @@ The main cognitive loop handles tool execution with trace tracking, context asse
 
 **FastPathRouter (`src/core/fast-path-router.mjs`)**
 
-Orchestrates deterministic and short-circuit replies (slash commands, support queries, status checks). This ensures the agent is responsive without wasting LLM tokens on routine conversational turns.
+Orchestrates deterministic and short-circuit replies (slash commands, support queries, status checks, identity/self-assessment). This ensures the agent is responsive and conversationally competent for routine queries (e.g., "how smart are you?", "are you alive?") without wasting LLM tokens or triggering unnecessary tool execution.
 
 **Context Compiler (`src/core/context-compiler.mjs`)**
 

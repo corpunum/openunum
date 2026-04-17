@@ -20,7 +20,7 @@ OpenUnum is an autonomous AI assistant with production-grade context engineering
 
 ### 2. FastPathRouter (`src/core/fast-path-router.mjs`)
 - Orchestrates deterministic and short-circuit replies
-- Handles slash commands, support queries, and status checks without LLM calls
+- Handles slash commands, support queries, status checks, and social/identity queries (e.g., "how smart are you?") without LLM calls
 - Reduces latency and token waste for routine conversational turns
 
 ### 3. Context Compiler (`src/core/context-compiler.mjs`)

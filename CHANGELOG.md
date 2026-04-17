@@ -4,6 +4,19 @@ All notable changes to OpenUnum are documented in this file.
 
 ---
 
+## [2.4.1] - 2026-04-17
+
+### Added
+- **Social Fast-Path Expansion**: `FastPathRouter` now handles self-assessment and identity questions (e.g., "how smart are you?", "what can you do?") with detailed deterministic replies.
+- **Self-Assessment Detection**: New `isSelfAssessmentQuestion` helper in `agent-helpers.mjs` with expanded pattern matching for social and capability queries.
+- **Enhanced Fast Awareness**: `FastAwarenessRouter` now classifies self-assessment queries as `light-chat`, enabling reliable short-circuiting and reducing LLM overhead.
+
+### Changed
+- **Improved Conversational Heuristics**: Upgraded `isConversationalAliveQuestion` and `scoreDeterministicFastTurn` to support broader social prompts and "scale from 1-10" identity checks.
+- **Friendly Fast Replies**: Refined "alive/dead" deterministic replies to be more conversational and less robotic.
+
+---
+
 ## [2.4.0] - 2026-04-15
 
 ### Added

@@ -10,6 +10,7 @@ import {
   buildDeterministicStandaloneFastReply,
   isModelInfoQuestion,
   isConversationalAliveQuestion,
+  isSelfAssessmentQuestion,
   providerModelLabel,
   inferParamsB,
   scoreDeterministicFastTurn,
@@ -150,9 +151,17 @@ export class FastPathRouter {
 
     // 9. Alive/Dead Question
     if (isConversationalAliveQuestion(message)) {
-      const aliveReply = "Yes, I'm here and operational! I'm ready to help with any tasks you'd like me to work on. What would you like me to do?";
-      const result = this.wrap(sessionId, aliveReply, 'conversational_alive_handled');
+      const aliveReply = "I'm here and ready to help! I'm fully operational and waiting for your next task. What would you like us to work on together?";
+      const result = this.wrap(sessionId, aliveReply, 'conversational_alive_handled', 'conversational_alive');
       logInfo('fast_path_routed', { sessionId, category: 'conversational_alive' });
+      return result;
+    }
+
+    // 10. Self Assessment
+    if (isSelfAssessmentQuestion(message)) {
+      const assessmentReply = "I am a highly capable autonomous AI agent powered by OpenUnum. I can help you with a wide range of tasks, including file operations, web research, shell execution, and more. My 'intelligence' is a combination of the underlying LLM's reasoning and my framework's autonomous capabilities. How can I assist you today?";
+      const result = this.wrap(sessionId, assessmentReply, 'self_assessment_handled', 'self_assessment');
+      logInfo('fast_path_routed', { sessionId, category: 'self_assessment' });
       return result;
     }
 

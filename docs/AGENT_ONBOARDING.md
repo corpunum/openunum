@@ -57,6 +57,18 @@ Interpretation:
 - current operational routing profile: `forcePrimaryProvider=true`, `fallbackEnabled=false` until extra providers are intentionally enabled
 - additional providers: `nvidia`, `openrouter`, `xiaomimimo`, `openai`
 
+## Deterministic and Fast-Path Routing
+
+The agent uses a two-tier routing system to offload non-cognitive turns:
+
+- **FastPathRouter (`src/core/fast-path-router.mjs`)**: Orchestrates deterministic and short-circuit replies for slash commands, support queries, status checks, and social/identity queries (e.g., "how smart are you?", "are you alive?").
+- **FastAwarenessRouter (`src/core/fast-awareness-router.mjs`)**: Classifies messages to determine retrieval strategy and identifies "light-chat" or "greeting" turns that can be short-circuited before triggering expensive LLM calls.
+
+Intent:
+- Keep the main cognitive loop clean.
+- Minimize token waste and latency for routine interactions.
+- Maintain conversational competence without tool-overuse.
+
 ## Model-Backed Logical Tools
 
 Feature flag:
@@ -101,7 +113,7 @@ pnpm gate:repo-hygiene
 - Keep docs and tests updated in the same patch as code.
 - Prefer removing duplicate surfaces over preserving them for sentiment.
 
-## Autonomy and Verification Systems (2026-04-16)
+## Autonomy and Verification Systems (2026-04-17)
 
 The following systems are now active and wired into the agent runtime:
 
