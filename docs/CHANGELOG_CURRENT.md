@@ -1,6 +1,42 @@
 # Changelog (Current Consolidated)
 
-Date: 2026-04-16
+Date: 2026-04-17
+
+## Model-Aware Controller Bug Fixes (2026-04-17)
+
+**Status:** Implemented and tested
+
+Six bugs fixed that caused the `ollama-cloud/qwen3.5:397b-cloud` model to return "No response generated." on every non-trivial query, making the agent loop functionally inert despite the model working correctly via direct Ollama calls.
+
+### 1. Behavior Description Leak in System Prompt
+- **Problem:** `context-pack-builder.mjs` included `Behavior description: ${behavior.description}` in the controller system message. Qwen 3.5 interpreted class descriptions like "Produces plans without acting" literally, returning empty `content` with all reasoning in the `thinking` field.
+- **Fix:** Removed the description line from the context pack. Only `classId`, `confidence`, `source`, and `needs` are exposed in the system prompt.
+- **File:** `src/core/context-pack-builder.mjs`
+
+### 2. `ollama-cloud` Falls Through Default Behavior
+- **Problem:** `defaultBehaviorFor()` in `model-behavior-registry.mjs` only matched `p === 'ollama'`, so `ollama-cloud` fell through to the `planner_heavy_no_exec` default instead of `timeout_prone_deep_thinker`.
+- **Fix:** Both `ollama` and `ollama-cloud` now share the same conditional branches.
+- **File:** `src/core/model-behavior-registry.mjs`
+
+### 3. Council Revision Overwrites Good Replies
+- **Problem:** The council proof-scorer triggered revision turns whose recursive `runOneProviderTurn` returned "No response generated." (from empty Qwen thinking-only content), overwriting the good first-response `finalText`.
+- **Fix:** Only accept revision `finalText` if it is not the "No response generated." fallback placeholder.
+- **File:** `src/core/agent.mjs` (lines 1362, 1440)
+
+### 4. Turn Budget Too Tight for Cloud Models
+- **Problem:** `strict-shell-cloud` execution profile had `turnBudgetMs: 60000`, `maxIters: 3`. A 397B model needs ~6s per inference call; 60s was insufficient for multi-iteration agent turns with tool execution.
+- **Fix:** Increased to `turnBudgetMs: 180000`, `maxIters: 4`.
+- **File:** `src/core/agent-helpers.mjs`
+
+### 5. Planner Misclassification on Tool-Free Responses
+- **Problem:** `learnControllerBehavior` classified any turn with `toolRuns === 0 && iterations > 1` as `planner_heavy_no_exec`, even when the model returned substantive assistant content. Knowledge/creative queries legitimately don't need tools.
+- **Fix:** Only classify as planner if no iteration has assistant content >20 chars.
+- **File:** `src/core/model-behavior-registry.mjs`
+
+### 6. Hard Timeout Killing Agent Turns
+- **Problem:** `chatHardTimeoutMs` defaulted to 90s in `chat_runtime.mjs`, killing cloud-model agent loops mid-processing before they could complete multi-iteration turns.
+- **Fix:** Set `chatHardTimeoutMs: 300000` in runtime config. Also increased `providerRequestTimeoutMs` from 45s to 120s and `agentTurnTimeoutMs` from 90s to 300s.
+- **File:** `~/.openunum/openunum.json`
 
 ## Runtime Truth Alignment + Cloud-Primary Follow-Up (2026-04-16)
 

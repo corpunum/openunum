@@ -124,3 +124,11 @@ Key autonomy reliability regressions:
 
 Canonical umbrella gate:
 - `pnpm verify`
+
+## Known Autonomy Failure Modes (2026-04-17)
+
+### Council Revision Death Loop
+The council proof-scorer can trigger recursive `runOneProviderTurn` calls for revision. If the revision model call returns empty content (common with Qwen 3.5 thinking-mode responses), the revision result "No response generated." would overwrite good first-response text. Fix: revision `finalText` is only accepted if it is not the "No response generated." fallback.
+
+### Behavior Registry Misclassification
+`learnControllerBehavior` can classify tool-free substantive responses as `planner_heavy_no_exec` (e.g., knowledge queries, creative prompts where the model correctly responds without tool calls). This cascades: the `planner_heavy_no_exec` class then causes the system prompt to include planner-directed guidance, degrading future turns. Fix: only classify as planner if no iteration has assistant content >20 chars. Operator remediation: reset the DB entry if the class drifts.

@@ -15,6 +15,12 @@ Implemented and active:
 - route-registry and API-reference parity gates in `pnpm verify`
 
 Recent hardening in this tranche:
+- council revision overwrite protection: revision turns that return empty no longer replace good first-response text
+- behavior description removed from controller system prompt to prevent literal interpretation by thinking-mode models
+- `ollama-cloud` now correctly resolves to `timeout_prone_deep_thinker` instead of falling through to `planner_heavy_no_exec`
+- turn budget for `strict-shell-cloud` profile increased to 180s/4 iterations (was 60s/3)
+- planner misclassification fix: tool-free substantive responses no longer classified as `planner_heavy_no_exec`
+- chat hard timeout increased to 300s (was 90s default) to support multi-iteration cloud-model agent turns
 - per-turn completion checklist reset to prevent cross-turn false completion state
 - `Task complete` footer now requires both 100% checklist progress and a non-partial final answer
 - mission UI/API now expose `effectiveStepLimit` and whether it came from `maxSteps` or `hardStepCap`

@@ -131,3 +131,19 @@ The following systems are now active and wired into the agent runtime:
 - **Self-awareness** returns `insufficient_evidence` instead of a false healthy score when there are no assistant turns to evaluate.
 - **Health surface is bounded**: `/api/health` no longer re-enters self-heal via HTTP, and strict health status lives on `/api/health/check`.
 - **Legacy `selfheal.mjs`** is archived under `maintenance/archive/legacy-core/`. Canonical self-heal path: `src/core/self-heal.mjs` + `src/core/self-heal-orchestrator.mjs`.
+
+## Model-Aware Controller Bug Fixes (2026-04-17)
+
+Six bugs fixed that caused the `ollama-cloud/qwen3.5:397b-cloud` model to return "No response generated." on every non-trivial query:
+
+1. **Behavior description leak**: `context-pack-builder.mjs` included `Behavior description: ${behavior.description}` in the system prompt. Qwen 3.5 interpreted descriptions like "Produces plans without acting" literally and returned empty `content` with all reasoning in the `thinking` field. The description line was removed; only `classId`, `confidence`, `source`, and `needs` are exposed.
+
+2. **`ollama-cloud` default behavior miss**: `defaultBehaviorFor()` in `model-behavior-registry.mjs` only matched `p === 'ollama'`, so `ollama-cloud` fell through to `planner_heavy_no_exec`. Both providers now share the same conditional branches.
+
+3. **Council revision overwrite**: The council proof-scorer triggered revision turns that returned empty content (Qwen thinking-only responses), replacing good first-response `finalText` with "No response generated." Revision results are now only accepted if they contain actual content.
+
+4. **Turn budget too tight**: `strict-shell-cloud` profile had `turnBudgetMs: 60000`, `maxIters: 3`. A 397B model needs ~6s per inference. Increased to `turnBudgetMs: 180000`, `maxIters: 4`.
+
+5. **Planner misclassification**: `learnControllerBehavior` classified any turn with `toolRuns=0` and multiple iterations as `planner_heavy_no_exec`, even when the model returned substantive content. Now checks that no iteration has assistant content >20 chars before classifying.
+
+6. **Hard timeout**: `chatHardTimeoutMs` defaulted to 90s, killing cloud-model agent turns mid-processing. Set to 300s in runtime config.

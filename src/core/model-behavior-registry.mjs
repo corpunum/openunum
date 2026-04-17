@@ -43,8 +43,8 @@ function defaultBehaviorFor(provider, model) {
 
   if (p === 'openai') return 'tool_native_strict';
   if (p === 'nvidia' || p === 'openrouter') return 'timeout_prone_deep_thinker';
-  if (p === 'ollama' && /cloud|kimi|minimax|qwen3\.5:397b|glm-5/.test(m)) return 'timeout_prone_deep_thinker';
-  if (p === 'ollama' && /8b|9b|14b|qwen|llama|uncensored/.test(m)) return 'local_runtime_fragile';
+  if ((p === 'ollama' || p === 'ollama-cloud') && /cloud|kimi|minimax|qwen3\.5:397b|glm-5/.test(m)) return 'timeout_prone_deep_thinker';
+  if ((p === 'ollama' || p === 'ollama-cloud') && /8b|9b|14b|qwen|llama|uncensored/.test(m)) return 'local_runtime_fragile';
   return 'planner_heavy_no_exec';
 }
 
@@ -96,8 +96,11 @@ export function learnControllerBehavior({ provider, model, trace }) {
     nextClass = 'timeout_prone_deep_thinker';
     reasons.push('observed:turn_timeout');
   } else if (toolRuns === 0 && Array.isArray(trace?.iterations) && trace.iterations.length > 1) {
-    nextClass = 'planner_heavy_no_exec';
-    reasons.push('observed:planning_without_execution');
+    const hasAssistantContent = trace.iterations.some(i => String(i.assistantText || '').trim().length > 20);
+    if (!hasAssistantContent) {
+      nextClass = 'planner_heavy_no_exec';
+      reasons.push('observed:planning_without_execution');
+    }
   } else if (hadProviderFailure) {
     nextClass = 'tool_native_strict';
     reasons.push('observed:provider_failure_chain');

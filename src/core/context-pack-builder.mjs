@@ -27,7 +27,6 @@ export function buildControllerSystemMessage({
 
   const behaviorBlock = [
     `Behavior class: ${behavior.classId} (confidence=${behavior.confidence.toFixed(2)}, source=${behavior.source}).`,
-    `Behavior description: ${behavior.description}`,
     `Behavior needs: generalDirections=${Boolean(behavior.needs?.generalDirections)} systemOverview=${Boolean(behavior.needs?.systemOverview)} repoContext=${Boolean(behavior.needs?.repoContext)} openunumContext=${Boolean(behavior.needs?.openunumContext)}`
   ].join('\n');
 

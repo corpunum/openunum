@@ -1,6 +1,6 @@
 # OpenUnum Architecture
 
-**Version:** 2.5.1  
+**Version:** 2.5.2  
 **Last Updated:** 2026-04-17
 
 ---

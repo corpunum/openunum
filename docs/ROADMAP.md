@@ -59,6 +59,14 @@ This roadmap is the live remediation plan aligned with `BRAIN.MD`.
 - FinalityGadget wired into ToolRuntime for irreversible tools (was dead code)
 - death-spiral detection in AutonomyMaster with degraded mode
 
+12. Model-aware controller bug fixes — 6 critical bugs fixed
+- behavior description removed from system prompt (prevented literal interpretation by thinking-mode models)
+- `ollama-cloud` added to `defaultBehaviorFor()` conditional branches (was falling through to `planner_heavy_no_exec`)
+- council revision overwrite protection (empty revision no longer replaces good first-response)
+- `strict-shell-cloud` turn budget increased to 180s/4 iters (was 60s/3, too tight for 397B model)
+- planner misclassification fix (tool-free substantive responses no longer classified as `planner_heavy_no_exec`)
+- `chatHardTimeoutMs` set to 300s (was 90s default, killing cloud-model agent turns mid-processing)
+
 ## Next Priority Tranche
 
 1. Deeper frontend split

@@ -870,7 +870,7 @@ export class OpenUnumAgent {
         throw err;
       }
       const normalizedContent = normalizeAssistantContent(out.content);
-      
+
       // DRIFT DETECTION (after model responds)
       if (workingMemory && normalizedContent) {
         const driftAnalysis = workingMemory.detectDrift(normalizedContent);
@@ -1359,7 +1359,7 @@ export class OpenUnumAgent {
             toolsAllow,
             sideQuestMode: true
           });
-          finalText = revisionRun.finalText;
+          if (revisionRun.finalText && revisionRun.finalText !== 'No response generated.') finalText = revisionRun.finalText;
           trace.independentVerificationPostRevision = await this.independentVerifier.verify({
             userMessage: originalUserMessage,
             assistantReply: finalText,
@@ -1437,7 +1437,9 @@ export class OpenUnumAgent {
             proofScore: Number(proofResult.proofScore?.score ?? proofResult.proofScore?.overallScore ?? 0)
           };
           trace.councilProofRevisionTrace = revisionRun.trace;
-          finalText = revisionRun.finalText;
+          if (revisionRun.finalText && revisionRun.finalText !== 'No response generated.') {
+            finalText = revisionRun.finalText;
+          }
         }
       } catch (e) {
         logError('council_postflight_failed', { error: String(e.message || e) });

@@ -4,6 +4,18 @@ All notable changes to OpenUnum are documented in this file.
 
 ---
 
+## [2.4.3] - 2026-04-17
+
+### Fixed
+- **Council revision overwrite protection**: Council proof-scorer triggered revision turns that returned empty content from Qwen 3.5 (thinking-only responses), overwriting good first-response text with "No response generated." Revision results are now only accepted if they contain actual content, not the fallback placeholder.
+- **Behavior description leak in system prompt**: `context-pack-builder.mjs` included `Behavior description: ${behavior.description}` in the controller system message. Qwen 3.5 interpreted class descriptions like "Produces plans without acting" literally, causing it to return empty `content` with all reasoning in the `thinking` field. Behavior description line removed from prompt.
+- **`ollama-cloud` missing from `defaultBehaviorFor`**: `model-behavior-registry.mjs` only checked `p === 'ollama'` when assigning default behavior classes, so `ollama-cloud` fell through to the `planner_heavy_no_exec` default instead of `timeout_prone_deep_thinker`. Both `ollama` and `ollama-cloud` now share the same conditional branches.
+- **Turn budget too tight for cloud models**: `strict-shell-cloud` execution profile had `turnBudgetMs: 60000` and `maxIters: 3`. A 397B model needs ~6s per inference call; 60s was insufficient for multi-iteration agent turns with tool execution. Increased to `turnBudgetMs: 180000`, `maxIters: 4`.
+- **Planner misclassification on tool-free responses**: `learnControllerBehavior` classified any turn with `toolRuns === 0 && iterations > 1` as `planner_heavy_no_exec`, even when the model legitimately responded with substantive content (knowledge queries, creative prompts). Now requires that no iteration has assistant content >20 chars before classifying as planner.
+- **Hard timeout killing agent turns**: `chatHardTimeoutMs` defaulted to 90s in `chat_runtime.mjs`, but cloud model agent loops need 3-5 minutes for multi-iteration turns with council verification. Added `chatHardTimeoutMs: 300000` to runtime config. Also increased `providerRequestTimeoutMs` from 45s to 120s and `agentTurnTimeoutMs` from 90s to 300s.
+
+---
+
 ## [2.4.2] - 2026-04-17
 
 ### Changed

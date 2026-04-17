@@ -948,8 +948,8 @@ const EXECUTION_PROFILES = [
   {
     match: ({ provider, model }) => (provider === 'ollama-cloud' || provider === 'ollama') && /kimi|minimax|cloud/.test(model),
     name: 'strict-shell-cloud',
-    turnBudgetMs: 60000,
-    maxIters: 3,
+    turnBudgetMs: 180000,
+    maxIters: 4,
     guidance: [
       'Use a rigid shell-first workflow with one concrete substep at a time.',
       'Keep tool arguments and conclusions short. Do not rely on long free-form reasoning after large tool output.',

@@ -32,9 +32,14 @@ This is the quick trust checkpoint for code, runtime, tests, docs, and remaining
 | Config parity/provider truth | `src/core/config-parity-check.mjs` | Active (errors on disabled active primary / forced invalid routing) |
 | Health/self-heal surface | `src/core/self-heal.mjs` + `src/server/routes/health.mjs` | Active (bounded checks, non-recursive `/api/health`, strict `/api/health/check`) |
 
+| Model-aware controller bug fixes | `src/core/model-behavior-registry.mjs`, `src/core/context-pack-builder.mjs`, `src/core/agent.mjs`, `src/core/agent-helpers.mjs` | Fixed (6 bugs: behavior description leak, ollama-cloud default miss, council revision overwrite, turn budget, planner misclassification, hard timeout) |
+| Cloud-model turn budget | `src/core/agent-helpers.mjs` → `strict-shell-cloud` profile | Fixed (180s/4 iters, was 60s/3) |
+| Chat hard timeout | `src/server/services/chat_runtime.mjs` → `chatHardTimeoutMs` | Fixed (300s, was 90s default) |
+
 ## Current Open Debt
 
 - deeper frontend decomposition is still desirable in some larger settings/runtime modules
+- behavior registry learning can still override correct DB entries from edge-case traces (requires periodic DB reset until learning is more conservative)
 - operator dashboard can be further split into dedicated modules for autonomy cards/remediation actions
 - local-first controller cutover is still deferred; the current stable operational baseline is cloud-primary on `ollama-cloud/qwen3.5:397b-cloud`
 - local model integration for verifier and role-model escalation deferred (using cloud models for now)

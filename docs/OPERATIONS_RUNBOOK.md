@@ -1,6 +1,6 @@
 # Operations Runbook
 
-**Last Updated:** 2026-04-09
+**Last Updated:** 2026-04-17
 
 Use this once per shell:
 
@@ -406,3 +406,22 @@ curl -sS http://127.0.0.1:18880/api/verifier/status
 # Temporarily bypass for emergency (not recommended):
 # Edit config to disable verifier for low-stakes ops
 ```
+
+### Symptom: "No response generated." on every query with cloud model
+- Check behavior registry: `sqlite3 ~/.openunum/openunum.db "SELECT * FROM controller_behaviors;"`
+- If `ollama-cloud` / `qwen3.5:397b-cloud` shows `planner_heavy_no_exec`, reset it:
+  ```sql
+  UPDATE controller_behaviors SET class_id = 'timeout_prone_deep_thinker', sample_count = 50,
+    reasons_json = '["observed:tool_execution_success","observed:tool_execution_success","observed:tool_execution_success","observed:tool_execution_success","observed:tool_execution_success","observed:tool_execution_success","observed:tool_execution_success","observed:tool_execution_success","observed:tool_execution_success","observed:tool_execution_success"]',
+    updated_at = datetime('now')
+  WHERE provider = 'ollama-cloud' AND model LIKE '%qwen3.5%';
+  ```
+- Verify `chatHardTimeoutMs` is at least 300000 in `~/.openunum/openunum.json`
+- Restart: `systemctl --user restart openunum.service`
+
+### Symptom: Agent turns timing out with 90s hard timeout
+- Check `chatHardTimeoutMs` in runtime config:
+  ```bash
+  cat ~/.openunum/openunum.json | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('runtime',{}).get('chatHardTimeoutMs','NOT SET'))"
+  ```
+- If missing or 90000, set to 300000 for cloud-primary deployments

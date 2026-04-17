@@ -189,6 +189,11 @@ Agents must be able to:
 | **Hardcoded Secrets** | Audit HMAC uses source-visible fallback | 3-tier HMAC resolution: env var > persisted random file (0600) > insecure fallback with CRITICAL warning |
 | **Dead Code Finality** | FinalityGadget exists but is never imported | Wire `FinalityGadget` into `ToolRuntime` for irreversible tools (`file_write`, `file_patch`, `shell_run`, `git_push`) |
 | **No Death-Spiral Detection** | Agent loops indefinitely through failures | `AutonomyMaster` tracks `consecutiveNoProgressCycles` and enters degraded mode after threshold |
+| **Council Revision Overwrites Good Replies** | Proof-scorer revision returns empty → overwrites good `finalText` | Only accept revision `finalText` if it is not the "No response generated." fallback (`agent.mjs` lines 1362, 1440) |
+| **Behavior Description Leak in System Prompt** | Model reads "Produces plans without acting" and obeys literally | Remove `behavior.description` from context-pack builder; only expose `classId`, `confidence`, `source`, and `needs` |
+| **`ollama-cloud` Falls Through Default Behavior** | Provider key `ollama-cloud` not matched in `defaultBehaviorFor` | Check both `ollama` and `ollama-cloud` in conditional branches |
+| **Planner Misclassification on Tool-Free Turns** | Knowledge/creative queries with `toolRuns=0` always become `planner_heavy_no_exec` | Only classify as planner if no iteration has assistant content >20 chars |
+| **Hard Timeout Kills Multi-Iteration Turns** | 90s `chatHardTimeoutMs` kills cloud-model agent loops mid-processing | Set `chatHardTimeoutMs: 300000` for cloud-primary deployments |
 
 ## Decision Making Framework
 
