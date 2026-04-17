@@ -619,6 +619,11 @@ Credential visibility rules:
 }
 ```
 
+Notes:
+- `providers[*].models` is a summary slice for browser-safe rendering.
+- `providers[*].model_count` is the full discovered count for that provider.
+- Use `GET /api/models?provider=<id>` for the complete provider-specific model list.
+
 Local model rollout notes:
 - downloads are intentionally allowlisted to small local models (`gemma4:cpu` + embeddings by default)
 - rollout queue runs one download at a time to avoid host instability during pulls

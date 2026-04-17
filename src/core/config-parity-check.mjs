@@ -73,9 +73,41 @@ export function buildConfigParityReport(config = {}, env = process.env) {
   const model = config?.model || {};
   const runtime = config?.runtime || {};
   const activeProvider = toStr(model.provider || 'ollama-cloud').toLowerCase().replace(/^ollama$/, 'ollama-cloud');
+  const disabledProviders = Array.isArray(model?.routing?.disabledProviders)
+    ? model.routing.disabledProviders.map((p) => toStr(p).toLowerCase()).filter(Boolean)
+    : [];
+  const forcePrimaryProvider = model?.routing?.forcePrimaryProvider === true;
+  const fallbackEnabled = model?.routing?.fallbackEnabled !== false;
   const fallbackProviders = Array.isArray(model?.routing?.fallbackProviders)
     ? model.routing.fallbackProviders.map((p) => toStr(p).toLowerCase()).filter(Boolean)
     : [];
+  const effectiveFallbackProviders = fallbackEnabled
+    ? fallbackProviders.filter((provider) => provider && !disabledProviders.includes(provider))
+    : [];
+
+  if (disabledProviders.includes(activeProvider)) {
+    pushIssue(issues, 'error', 'active_provider_disabled', `Active provider ${activeProvider} is disabled in model.routing.disabledProviders`, {
+      provider: activeProvider
+    });
+  }
+
+  if (forcePrimaryProvider && disabledProviders.includes(activeProvider)) {
+    pushIssue(issues, 'error', 'force_primary_disabled', `forcePrimaryProvider cannot be used when the active provider ${activeProvider} is disabled`, {
+      provider: activeProvider
+    });
+  }
+
+  if (!fallbackEnabled && fallbackProviders.length > 0) {
+    pushIssue(issues, 'warning', 'fallback_chain_disabled', 'Fallback providers are configured but fallbackEnabled is false', {
+      fallbackProviders
+    });
+  }
+
+  if (!fallbackEnabled && disabledProviders.includes(activeProvider)) {
+    pushIssue(issues, 'error', 'no_routable_primary_provider', 'Primary provider is disabled while fallback routing is disabled', {
+      provider: activeProvider
+    });
+  }
 
   const providerMatrix = {};
   for (const provider of PROVIDERS) {
@@ -88,24 +120,25 @@ export function buildConfigParityReport(config = {}, env = process.env) {
       baseUrlConfigured: basePresent,
       apiKeyConfigured: keyPresent,
       baseUrlSource: inferSource(configBase, envBase),
-      requiredForProvider: provider === activeProvider || fallbackProviders.includes(provider)
+      requiredForProvider: provider === activeProvider || effectiveFallbackProviders.includes(provider),
+      disabled: disabledProviders.includes(provider)
     };
 
-    if ((provider === activeProvider || fallbackProviders.includes(provider)) && !basePresent) {
+    if ((provider === activeProvider || effectiveFallbackProviders.includes(provider)) && !basePresent) {
       pushIssue(issues, 'error', 'provider_base_url_missing', `Provider ${provider} is active/fallback but has no base URL configured`, { provider });
     }
 
-    if ((provider === activeProvider || fallbackProviders.includes(provider)) && !provider.startsWith('ollama-') && !keyPresent) {
+    if ((provider === activeProvider || effectiveFallbackProviders.includes(provider)) && !provider.startsWith('ollama-') && !keyPresent) {
       pushIssue(issues, 'warning', 'provider_api_key_missing', `Provider ${provider} is active/fallback but API key is missing`, { provider });
     }
   }
 
-  if (!Array.isArray(fallbackProviders) || fallbackProviders.length === 0) {
+  if (fallbackEnabled && (!Array.isArray(fallbackProviders) || fallbackProviders.length === 0)) {
     pushIssue(issues, 'warning', 'fallback_chain_empty', 'No fallback providers configured');
   }
 
   const providerModels = model.providerModels || {};
-  for (const provider of [activeProvider, ...fallbackProviders]) {
+  for (const provider of [activeProvider, ...effectiveFallbackProviders]) {
     if (!toStr(providerModels[provider])) {
       pushIssue(issues, 'error', 'provider_model_missing', `providerModels.${provider} is required for active/fallback providers`, { provider });
     }
@@ -127,7 +160,10 @@ export function buildConfigParityReport(config = {}, env = process.env) {
     severity: hasErrors ? 'error' : (hasWarnings ? 'warning' : 'ok'),
     summary: {
       activeProvider,
+      fallbackEnabled,
       fallbackProviders,
+      effectiveFallbackProviders,
+      disabledProviders,
       errorCount: issues.filter((i) => i.level === 'error').length,
       warningCount: issues.filter((i) => i.level === 'warning').length
     },

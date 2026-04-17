@@ -1,3 +1,5 @@
+import { summarizeModelCatalog } from '../../models/catalog.mjs';
+
 function isPlainObject(value) {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
 }
@@ -11,7 +13,7 @@ export async function handleModelRoute({ req, res, url, ctx }) {
   if (req.method === 'GET' && url.pathname === '/api/model-catalog') {
     ctx.normalizeModelSettings();
     const catalog = await ctx.buildModelCatalog(ctx.config.model, ctx.memoryStore);
-    return done(200, catalog);
+    return done(200, summarizeModelCatalog(catalog));
   }
 
   if (req.method === 'GET' && url.pathname === '/api/models') {

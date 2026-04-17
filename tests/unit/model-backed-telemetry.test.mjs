@@ -13,7 +13,7 @@ describe('model-backed telemetry ordering', () => {
     });
     const profiles = [
       { id: 'local', provider: 'ollama-local', model: 'ollama-local/gemma4:cpu' },
-      { id: 'cloud', provider: 'ollama-cloud', model: 'ollama-cloud/minimax-m2.7:cloud' }
+      { id: 'cloud', provider: 'ollama-cloud', model: 'ollama-cloud/qwen3.5:397b-cloud' }
     ];
     const ordered = telemetry.orderProfiles('summarize', profiles);
     expect(ordered.map((p) => p.id)).toEqual(['local', 'cloud']);
@@ -32,7 +32,7 @@ describe('model-backed telemetry ordering', () => {
       }
     });
     const local = { id: 'local', provider: 'ollama-local', model: 'ollama-local/gemma4:cpu' };
-    const cloud = { id: 'cloud', provider: 'ollama-cloud', model: 'ollama-cloud/minimax-m2.7:cloud' };
+    const cloud = { id: 'cloud', provider: 'ollama-cloud', model: 'ollama-cloud/qwen3.5:397b-cloud' };
 
     // Local profile underperforms
     for (let i = 0; i < 6; i += 1) {

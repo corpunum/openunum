@@ -9,12 +9,9 @@ import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
-import { fileURLToPath } from 'node:url';
-
-const MODULE_DIR = path.dirname(fileURLToPath(import.meta.url));
-const REPO_ROOT = path.resolve(MODULE_DIR, '..', '..');
-// Canonical audit storage path is repo-root data/, never process.cwd().
-const DATA_DIR = process.env.OPENUNUM_DATA_DIR || path.join(REPO_ROOT, 'data');
+// Canonical audit storage path lives under OPENUNUM_HOME unless explicitly overridden.
+const HOME_DIR = process.env.OPENUNUM_HOME || path.join(os.homedir(), '.openunum');
+const DATA_DIR = process.env.OPENUNUM_DATA_DIR || path.join(HOME_DIR, 'audit');
 const AUDIT_LOG_PATH = path.join(DATA_DIR, 'audit-log.jsonl');
 const MERKLE_ROOT_INTERVAL = 10; // Compute merkle root every 10 entries
 
@@ -399,6 +396,8 @@ export function getAuditDiagnostics() {
 
   return {
     ok: verification.valid,
+    dataDir: DATA_DIR,
+    auditLogPath: AUDIT_LOG_PATH,
     verification,
     stats,
     issues,

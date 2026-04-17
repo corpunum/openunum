@@ -334,7 +334,7 @@ systemctl --user stop openunum.service 2>/dev/null || true
 
 # 2. Reset git
 echo "Resetting git to last known good state..."
-cd /home/corp-unum/openunum
+cd "${OPENUNUM_WORKSPACE:-/path/to/openunum}"
 git fetch origin
 git reset --hard origin/main
 

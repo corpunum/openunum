@@ -52,6 +52,14 @@ describe('config-parity-check', () => {
     expect(report.issues.some((i) => i.code === 'provider_api_key_missing')).toBe(true);
   });
 
+  it('fails when the active provider is disabled', () => {
+    const cfg = baseConfig();
+    cfg.model.routing.disabledProviders = ['ollama-cloud'];
+    const report = buildConfigParityReport(cfg, {});
+    expect(report.ok).toBe(false);
+    expect(report.issues.some((i) => i.code === 'active_provider_disabled')).toBe(true);
+  });
+
   it('flags 4B profile warnings when compact budget too large', () => {
     const issues = evaluateFourBProfileReadiness({
       runtime: {

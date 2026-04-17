@@ -88,7 +88,7 @@ const cases = [
     sessionId: 'telegram:phase51-alive',
     message: 'Are you alive ?',
     expect(out) {
-      assert.match(out.trace?.note || '', /Conversational alive\/dead question handled directly/);
+      assert.equal(out.trace?.note, 'conversational_alive_handled');
       assert.match(out.reply, /operational/i);
     }
   },

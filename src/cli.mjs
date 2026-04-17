@@ -340,7 +340,7 @@ async function main() {
 
   if (cmd === 'ollama' && args[1] === 'use') {
     const { agent } = getAgentContext();
-    const model = getArg('--model', 'minimax-m2.7:cloud');
+    const model = getArg('--model', 'qwen3.5:397b-cloud');
     const out = agent.switchModel('ollama-cloud', `ollama-cloud/${model}`);
     saveConfig(config);
     console.log(JSON.stringify(out));

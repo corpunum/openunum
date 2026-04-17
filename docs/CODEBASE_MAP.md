@@ -26,16 +26,16 @@ This map is implementation-accurate as of 2026-04-09.
 - `src/core/task-decomposer.mjs`: breaks complex tasks into explicit steps at start
 - `src/core/context-pressure.mjs`: monitors context size, compacts when approaching limits
 - `src/core/confidence-scorer.mjs`: scores confidence in outputs, triggers verification if low
-- `src/core/audit-log.mjs`: **UPDATED** — Tamper-evident HMAC-SHA256 chain hashing with 3-tier secret resolution (env > persisted file > insecure fallback)
+- `src/core/audit-log.mjs`: **UPDATED** — Tamper-evident HMAC-SHA256 chain hashing with canonical storage at `OPENUNUM_HOME/audit/audit-log.jsonl`
 - `src/core/verifier.mjs`: **UPDATED** — Independent 5-check verification (tool appropriateness, output quality, goal alignment, safety compliance, context coherence)
 - `src/core/memory-consolidator.mjs`: **NEW** — Hippocampal replay with scheduled consolidation
 - `src/core/state-diff.mjs`: **NEW** — Structured diff computation before state changes
 - `src/core/merkle-tree.mjs`: **NEW** — Merkle root computation for state commitments
 - `src/core/sleep-cycle.mjs`: **NEW** — Idle-triggered aggressive compaction
-- `src/core/finality.mjs`: **UPDATED** — Explicit finality after N successful tool runs (now wired into `tools/runtime.mjs` for irreversible tools)
-- `src/core/role-model-registry.mjs`: **UPDATED** — Task-type to model-tier mapping (now wired into `agent.mjs` for auto-escalation)
+- `src/core/finality.mjs`: **UPDATED** — Stable, persisted finality confirmations after N verified tool runs
+- `src/core/role-model-registry.mjs`: **UPDATED** — Task-type to model-tier mapping with real tier enforcement in `agent.mjs`
 - `src/core/turn-recovery-summary.mjs`: bounded evidence-based summaries on tool failures
-- `src/tools/runtime.mjs`: unified tool schema + execution routing + finality checks for irreversible tools
+- `src/tools/runtime.mjs`: unified tool schema + execution routing + tool-result verification + finality tracking
 - `src/tools/tool-contracts.mjs`: canonical tool schema/validation contract source
 - `src/tools/backends/registry.mjs`: model-backed logical tool backend resolution/execution
 - `src/tools/backends/contracts.mjs`: logical tool contracts + output normalization

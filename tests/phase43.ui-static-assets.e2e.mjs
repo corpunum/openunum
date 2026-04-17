@@ -24,7 +24,11 @@ try {
   assert.equal(js.status, 200, 'app.js should be served');
   assert.equal(String(js.headers.get('content-type') || '').includes('application/javascript'), true, 'app.js content-type should be javascript');
   const jsBody = await js.text();
-  assert.equal(jsBody.includes('function showView('), true, 'app.js should contain expected UI logic');
+  assert.equal(
+    jsBody.includes('wireUiLifecycle({') && jsBody.includes('runUiBootstrap'),
+    true,
+    'app.js should contain expected UI bootstrap wiring'
+  );
 
   const missing = await fetch(`http://127.0.0.1:${TEST_PORT}/ui/missing.js`);
   assert.equal(missing.status, 404, 'unknown ui asset should return 404');

@@ -707,7 +707,7 @@ function buildCodebaseReviewAnswer({ userMessage = '', executedTools = [] }) {
   const archiveOnboarding = docPaths.find((item) => /\/docs\/archive\/.*agent-onboarding\.md$/i.test(item));
   const canonicalOnboarding =
     docPaths.find((item) => /\/docs\/AGENT_ONBOARDING\.md$/i.test(item)) ||
-    (/\bAGENT_ONBOARDING\.md\b/.test(shellStdout) ? '/home/corp-unum/openunum/docs/AGENT_ONBOARDING.md' : '');
+    (/\bAGENT_ONBOARDING\.md\b/.test(shellStdout) ? 'docs/AGENT_ONBOARDING.md' : '');
   const changelogPaths = docPaths.filter((item) => /CHANGELOG/i.test(item)).slice(0, 3);
 
   const lines = [];

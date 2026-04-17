@@ -222,6 +222,11 @@ export class HybridRetriever {
     const FRESHNESS_WEIGHT = 0.3;
     const now = Date.now();
 
+    // Normalize scores to [0,1] range BEFORE combining with freshness
+    // This ensures consistent scoring between hybrid and BM25-only modes
+    const maxBm25 = Math.max(...candidates.map(x => x.bm25Score || 0)) || 1;
+    const maxSimilarity = Math.max(...candidates.map(x => x.similarity || 0)) || 1;
+
     // Apply freshness decay to each candidate
     const withFreshness = candidates.map(c => {
       const category = c.metadata?.type || c.metadata?.category || 'default';
@@ -230,8 +235,17 @@ export class HybridRetriever {
       const halfLifeMs = getHalfLifeForCategory(category);
       const freshness = Number.isFinite(createdAtMs) ? calculateFreshness(createdAtMs, halfLifeMs) : 1.0;
 
+      // Normalize base score to [0,1] depending on retrieval mode
+      let baseScore;
+      if (c.similarity !== undefined && c.similarity !== null) {
+        // Hybrid mode: use normalized similarity score
+        baseScore = c.similarity / maxSimilarity;
+      } else {
+        // BM25-only mode: use normalized bm25 score
+        baseScore = (c.bm25Score || 0) / maxBm25;
+      }
+
       // Combine scores: 70% base relevance + 30% freshness
-      const baseScore = c.similarity ?? (c.bm25Score / (Math.max(...candidates.map(x => x.bm25Score || 0)) || 1));
       const combinedScore = baseScore * (1 - FRESHNESS_WEIGHT) + freshness * FRESHNESS_WEIGHT;
 
       return {

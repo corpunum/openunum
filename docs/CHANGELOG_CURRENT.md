@@ -2,6 +2,20 @@
 
 Date: 2026-04-16
 
+## Runtime Truth Alignment + Cloud-Primary Follow-Up (2026-04-16)
+
+**Status:** ✅ Implemented, regression-covered, and docs-aligned
+
+- switched the default cloud-primary baseline to `ollama-cloud/qwen3.5:397b-cloud`
+- config parity now errors on impossible routing states such as disabled active primary, forced-primary on disabled provider, and disabled fallback chain with no routable primary
+- provider attempt construction now respects `disabledProviders` even when fallbacks are disabled or force-primary is enabled
+- compact execution envelopes are now read-only by default; mutating tools were removed from the compact allowlist
+- role-model checks now use inferred model tier and expose a real `isAllowed()` path in the resolver
+- independent verifier is now wired into tool execution and post-flight reply validation, not only the verifier API route
+- finality now uses stable operation keys, persisted state, and `3` verified successes by default
+- audit storage moved to `OPENUNUM_HOME/audit/audit-log.jsonl`
+- autonomy cycles are now single-flight and self-awareness returns `insufficient_evidence` instead of false healthy scores when no assistant evidence exists
+
 ## Phase 4 Hardening — 10 Critical Gaps Fixed (2026-04-16)
 
 **Status:** ✅ Implemented and tested
@@ -48,7 +62,7 @@ This patch addresses 10 critical gaps where documented architecture was not wire
 
 ### 9. FinalityGadget Wiring
 - **Problem:** `FinalityGadget` in `finality.mjs` existed but was never imported by any other module. Dead code.
-- **Fix:** Imported into `tools/runtime.mjs`. After tool execution succeeds, checks finality for irreversible tools (`file_write`, `file_patch`, `shell_run`, `git_push`). Creates finality ID from `tool:name:sessionId:auditId`. Records success/failure and adds `_finality` metadata to result.
+- **Fix:** Imported into `tools/runtime.mjs`. Current behavior uses stable operation keys, persisted state, verifier-backed confirmations, and `_finality` metadata on tracked tool results.
 
 ### 10. Death-Spiral Detection
 - **Problem:** No mechanism to detect consecutive failure cycles and enter degraded mode. Agent could loop indefinitely through failed autonomy cycles.
@@ -223,7 +237,8 @@ This patch addresses 10 critical gaps where documented architecture was not wire
 - Council ranking:
   - `src/skills/unum-council/index.mjs` now includes provider health in member ranking to reduce timeout-prone picks
 - Audit path normalization:
-  - `src/core/audit-log.mjs` now resolves `data/audit-log.jsonl` from repo root (or `OPENUNUM_DATA_DIR`) instead of `process.cwd()`
+  - historical note: this phase normalized audit path resolution away from `process.cwd()`
+  - current canonical audit path is `OPENUNUM_HOME/audit/audit-log.jsonl` (or `OPENUNUM_DATA_DIR` when explicitly overridden)
   - `scripts/install-systemd.sh` now installs the main service and the scheduled autonomy timer together
 - Test hardening:
   - added `tests/unit/audit-log-compat.test.mjs`

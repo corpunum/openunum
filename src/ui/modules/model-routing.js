@@ -9,7 +9,11 @@ export function normalizeFallbackSequence(sequence = [], primaryProvider = '', p
 }
 
 export function buildFallbackModelOptions(models = [], selectedModel = '', escapeHtml) {
-  return (Array.isArray(models) ? models : []).map((model) => {
+  const rows = Array.isArray(models) ? [...models] : [];
+  if (selectedModel && !rows.some((model) => (model.model_id || model.id || '') === selectedModel)) {
+    rows.unshift({ model_id: selectedModel, rank: '?' });
+  }
+  return rows.map((model) => {
     const modelId = model.model_id || model.id || '';
     return `<option value="${escapeHtml(modelId)}" ${modelId === selectedModel ? 'selected' : ''}>#${Number(model.rank || 0)} ${escapeHtml(modelId)}</option>`;
   }).join('');
@@ -42,7 +46,11 @@ export function computeOnlineFallbackSequence(sequence = [], modelCatalog = { pr
   return (Array.isArray(sequence) ? sequence : []).filter((entry) => {
     const provider = providers.find((cp) => cp.provider === entry.provider);
     if (!provider) return true;
+    if (!Array.isArray(provider.models) || provider.models.length === 0) {
+      return provider.status !== 'disabled';
+    }
     const model = (provider.models || []).find((cm) => cm.model_id === entry.model);
+    if (!model && provider.truncated) return true;
     return Boolean(model && model.status !== 'offline' && model.status !== 'quarantined');
   });
 }

@@ -1,3 +1,62 @@
+export const MODEL_TIER_ORDER = ['compact', 'balanced', 'full'];
+
+export const ODD_MUTATING_TOOLS = new Set([
+  'file_write',
+  'file_patch',
+  'file_restore_last',
+  'shell_run',
+  'desktop_open',
+  'desktop_xdotool',
+  'skill_install',
+  'skill_approve',
+  'skill_execute',
+  'skill_uninstall',
+  'email_send',
+  'gworkspace_call',
+  'research_approve'
+]);
+
+const DEFAULT_COMPACT_TOOLS = [
+  'file_read',
+  'file_search',
+  'file_grep',
+  'file_info',
+  'session_list',
+  'http_request',
+  'browser_status',
+  'browser_extract',
+  'browser_snapshot',
+  'summarize',
+  'classify',
+  'extract',
+  'parse_function_args',
+  'embed_text',
+  'skill_list',
+  'email_status',
+  'research_list_recent'
+];
+
+const DEFAULT_ODD_POLICIES = {
+  compact: {
+    maxConfidenceRequired: 0.7,
+    allowedTools: DEFAULT_COMPACT_TOOLS,
+    blockedTools: ['file_write', 'shell_run', 'file_patch', 'desktop_open', 'desktop_xdotool'],
+    requireHumanApproval: true
+  },
+  balanced: {
+    maxConfidenceRequired: 0.5,
+    allowedTools: 'all',
+    blockedTools: ['desktop_open', 'desktop_xdotool'],
+    requireHumanApproval: false
+  },
+  full: {
+    maxConfidenceRequired: 0.3,
+    allowedTools: 'all',
+    blockedTools: [],
+    requireHumanApproval: false
+  }
+};
+
 function inferParamsB(modelId) {
   const text = String(modelId || '').toLowerCase();
   const match = text.match(/(\d+(?:\.\d+)?)b/);
@@ -14,7 +73,7 @@ function hasWordToken(modelId, token) {
   return new RegExp(`(^|[^a-z0-9])${String(token).toLowerCase()}($|[^a-z0-9])`).test(text);
 }
 
-function inferTier(provider, modelId) {
+export function inferTier(provider, modelId) {
   const providerId = String(provider || '').toLowerCase();
   const id = String(modelId || '').toLowerCase();
   const paramsB = inferParamsB(id);
@@ -44,18 +103,22 @@ function inferTier(provider, modelId) {
   return 'balanced';
 }
 
-const REQUIRED_KERNEL_TOOLS = ['session_list', 'session_delete', 'session_clear', 'file_write', 'file_patch'];
+const REQUIRED_KERNEL_TOOLS = ['session_list'];
 const VERY_SMALL_MODEL_TOOLS = [
   'file_read',
-  'file_write',
-  'file_patch',
-  'file_restore_last',
+  'file_search',
+  'file_grep',
+  'file_info',
   'session_list',
-  'shell_run',
   'http_request',
   'browser_status',
   'browser_extract',
-  'browser_snapshot'
+  'browser_snapshot',
+  'summarize',
+  'classify',
+  'extract',
+  'parse_function_args',
+  'embed_text'
 ];
 
 function normalizeProfileMap(runtime = {}) {
@@ -63,26 +126,7 @@ function normalizeProfileMap(runtime = {}) {
     compact: {
       maxHistoryMessages: 220,
       maxToolIterations: 3,
-      allowedTools: [
-        'file_read',
-        'file_write',
-        'file_patch',
-        'file_restore_last',
-        'session_list',
-        'session_delete',
-        'session_clear',
-        'shell_run',
-        'http_request',
-        'browser_status',
-        'browser_extract',
-        'browser_snapshot',
-        'summarize',
-        'classify',
-        'extract',
-        'skill_list',
-        'email_status',
-        'research_list_recent'
-      ]
+      allowedTools: DEFAULT_COMPACT_TOOLS
     },
     balanced: {
       maxHistoryMessages: 520,
@@ -116,9 +160,79 @@ function normalizeProfileMap(runtime = {}) {
   return out;
 }
 
+function normalizeOddPolicyMap(runtime = {}) {
+  const configuredProfiles = runtime?.modelExecutionProfiles || {};
+  const out = {};
+  for (const tier of MODEL_TIER_ORDER) {
+    const merged = {
+      ...(DEFAULT_ODD_POLICIES[tier] || {}),
+      ...(configuredProfiles?.[tier]?.odd || {})
+    };
+    const allowedTools = merged.allowedTools === 'all'
+      ? 'all'
+      : Array.isArray(merged.allowedTools)
+        ? [...new Set(merged.allowedTools.map((tool) => String(tool || '').trim()).filter(Boolean))]
+        : 'all';
+    out[tier] = {
+      maxConfidenceRequired: Number.isFinite(merged.maxConfidenceRequired)
+        ? Number(merged.maxConfidenceRequired)
+        : DEFAULT_ODD_POLICIES[tier].maxConfidenceRequired,
+      allowedTools,
+      blockedTools: Array.isArray(merged.blockedTools)
+        ? [...new Set(merged.blockedTools.map((tool) => String(tool || '').trim()).filter(Boolean))]
+        : [...DEFAULT_ODD_POLICIES[tier].blockedTools],
+      requireHumanApproval: merged.requireHumanApproval === true
+    };
+  }
+  return out;
+}
+
+export function getOddPolicyForTier(tier, runtime = {}) {
+  const normalizedTier = MODEL_TIER_ORDER.includes(String(tier || '').trim()) ? String(tier).trim() : 'full';
+  const policies = normalizeOddPolicyMap(runtime);
+  return policies[normalizedTier] || policies.full;
+}
+
+export function resolveOddPolicy({ provider, model, runtime = {} }) {
+  const tier = inferTier(provider, model);
+  return {
+    tier,
+    policy: getOddPolicyForTier(tier, runtime)
+  };
+}
+
+export function evaluateOddToolAccess({ toolName, confidence, tier, policy = {} }) {
+  const normalizedTier = MODEL_TIER_ORDER.includes(String(tier || '').trim()) ? String(tier).trim() : 'full';
+  const effectivePolicy = {
+    ...(DEFAULT_ODD_POLICIES[normalizedTier] || DEFAULT_ODD_POLICIES.full),
+    ...(policy || {})
+  };
+  const normalizedTool = String(toolName || '').trim();
+
+  if (effectivePolicy.blockedTools.includes(normalizedTool)) {
+    return { allowed: false, reason: 'blocked_by_odd', requiresApproval: Boolean(effectivePolicy.requireHumanApproval) };
+  }
+
+  const numericConfidence = Number(confidence);
+  if (
+    ODD_MUTATING_TOOLS.has(normalizedTool) &&
+    Number.isFinite(numericConfidence) &&
+    numericConfidence < Number(effectivePolicy.maxConfidenceRequired || 0)
+  ) {
+    return {
+      allowed: false,
+      reason: 'low_confidence',
+      requiresApproval: true
+    };
+  }
+
+  return { allowed: true };
+}
+
 export function resolveExecutionEnvelope({ provider, model, runtime = {} }) {
   const tier = inferTier(provider, model);
   const profiles = normalizeProfileMap(runtime);
+  const oddPolicies = normalizeOddPolicyMap(runtime);
   const profile = profiles[tier] || profiles.balanced;
   const inferredParams = inferParamsB(model);
   const verySmallModel = Number.isFinite(inferredParams) && inferredParams <= 8;
@@ -145,6 +259,7 @@ export function resolveExecutionEnvelope({ provider, model, runtime = {} }) {
     maxHistoryMessages: constrainedProfile.maxHistoryMessages,
     maxToolIterations: constrainedProfile.maxToolIterations,
     inferredParamsB: inferredParams,
-    verySmallModel
+    verySmallModel,
+    oddPolicy: oddPolicies[tier] || oddPolicies.full
   };
 }

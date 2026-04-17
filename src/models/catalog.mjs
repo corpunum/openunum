@@ -3,6 +3,7 @@ import { getEffectiveOpenAICodexOAuthStatus, scanLocalAuthSources } from '../sec
 
 export const MODEL_CATALOG_CONTRACT_VERSION = '2026-04-01.model-catalog.v1';
 export const PROVIDER_ORDER = ['ollama-local', 'ollama-cloud', 'nvidia', 'openrouter', 'xiaomimimo', 'openai'];
+export const MODEL_CATALOG_SUMMARY_LIMIT = 16;
 
 
 const PROVIDER_LABELS = {
@@ -385,6 +386,27 @@ export async function buildModelCatalog(modelConfig, memory = null) {
       return buildSelectedPointer(modelConfig, normalizedFallbackProvider, fallbackModel);
     })(),
     providers
+  };
+}
+
+export function summarizeModelCatalog(catalog, { modelLimit = MODEL_CATALOG_SUMMARY_LIMIT } = {}) {
+  const limit = Math.max(1, Number(modelLimit || MODEL_CATALOG_SUMMARY_LIMIT));
+  return {
+    ...catalog,
+    providers: (catalog?.providers || []).map((provider) => {
+      const models = Array.isArray(provider?.models) ? provider.models : [];
+      return {
+        provider: provider.provider,
+        display_name: provider.display_name,
+        status: provider.status,
+        degraded_reason: provider.degraded_reason,
+        model_count: models.length,
+        top_model: models[0]?.model_id || null,
+        top_model_rank: models[0]?.rank || null,
+        truncated: models.length > limit,
+        models: models.slice(0, limit)
+      };
+    })
   };
 }
 

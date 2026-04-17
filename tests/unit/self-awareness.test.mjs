@@ -49,5 +49,12 @@ describe('self-awareness snapshot', () => {
     expect(out.metrics.recoveryStyleCount).toBeGreaterThan(0);
     expect(out.metrics.genericAckCount).toBeGreaterThan(0);
   });
-});
 
+  it('marks insufficient evidence when no assistant turns exist', () => {
+    const store = makeMemoryStore([], {});
+    const out = buildSelfAwarenessSnapshot({ memoryStore: store, sessionScanLimit: 4, perSessionMessageLimit: 20 });
+    expect(out.status).toBe('insufficient_evidence');
+    expect(out.score).toBe(0);
+    expect(out.assistantTurnsScanned).toBe(0);
+  });
+});

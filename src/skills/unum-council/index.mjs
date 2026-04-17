@@ -2,8 +2,6 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { loadConfig } from '../../config.mjs';
-import { buildModelCatalog } from '../../models/catalog.mjs';
-import { buildProviderForModel } from '../../providers/index.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const CONFIG_PATH = path.join(__dirname, 'council-config.json');
@@ -20,6 +18,23 @@ const CURATED_CANDIDATES = {
     { model_id: 'nvidia/llama-3.3-nemotron-super-49b-v1', display_name: 'Llama 3.3 Nemotron Super 49B', capability_score: 91 }
   ]
 };
+
+let buildModelCatalogLoader = null;
+let buildProviderForModelLoader = null;
+
+async function getBuildModelCatalog() {
+  if (!buildModelCatalogLoader) {
+    buildModelCatalogLoader = import('../../models/catalog.mjs').then((mod) => mod.buildModelCatalog);
+  }
+  return buildModelCatalogLoader;
+}
+
+async function getBuildProviderForModel() {
+  if (!buildProviderForModelLoader) {
+    buildProviderForModelLoader = import('../../providers/index.mjs').then((mod) => mod.buildProviderForModel);
+  }
+  return buildProviderForModelLoader;
+}
 
 function readCouncilConfig() {
   return JSON.parse(fs.readFileSync(CONFIG_PATH, 'utf8'));
@@ -138,6 +153,7 @@ async function discoverCandidates(config, { discoverLive = true } = {}) {
   const configured = configuredCouncilCandidates(config);
   if (!discoverLive) return configured;
   try {
+    const buildModelCatalog = await getBuildModelCatalog();
     const catalog = await buildModelCatalog(config.model);
     const providerStatusByProvider = new Map(
       (catalog.providers || [])
@@ -215,6 +231,7 @@ function buildCouncilPool(candidates, { desiredCount, excludeModels, providerPre
 }
 
 async function queryMember(config, member, request, timeoutMs) {
+  const buildProviderForModel = await getBuildProviderForModel();
   const provider = buildProviderForModel(config, {
     provider: member.provider,
     model: member.modelRef,

@@ -110,7 +110,7 @@ export async function handleRuntimeRoute({ req, res, url, ctx }) {
     );
     let managedSkills = [];
     try {
-      const skillOut = await ctx.agent.runTool('skill_list', {});
+      const skillOut = await ctx.agent.runTool('skill_list', {}, { summarizeResult: false, surface: 'api' });
       managedSkills = parseSkillListPayload(skillOut);
     } catch {
       managedSkills = [];

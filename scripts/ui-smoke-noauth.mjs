@@ -7,7 +7,7 @@ import net from 'node:net';
 import { spawn } from 'node:child_process';
 import { once } from 'node:events';
 
-const BASE_URL = process.env.OPENUNUM_BASE_URL || process.env.OPENUNUM_API_URL || 'http://127.0.0.1:18880';
+const EXTERNAL_BASE_URL = process.env.OPENUNUM_BASE_URL || process.env.OPENUNUM_API_URL || '';
 const ROOT = path.resolve(path.dirname(new URL(import.meta.url).pathname), '..');
 
 async function getFreePort() {
@@ -36,7 +36,7 @@ async function waitForReady(baseUrl, timeoutMs = 20000) {
 }
 
 async function request(method, path, body = undefined) {
-  const baseUrl = process.env.OPENUNUM_BASE_URL || process.env.OPENUNUM_API_URL || BASE_URL;
+  const baseUrl = process.env.OPENUNUM_BASE_URL || process.env.OPENUNUM_API_URL;
   const url = `${baseUrl}${path}`;
   const init = { method, headers: {} };
   if (body !== undefined) {
@@ -65,10 +65,14 @@ function ensureEndpointExists(name, out) {
 async function main() {
   let server = null;
   let tempHome = null;
-  let activeBaseUrl = process.env.OPENUNUM_BASE_URL || process.env.OPENUNUM_API_URL || BASE_URL;
+  let activeBaseUrl = EXTERNAL_BASE_URL;
 
-  const ready = await waitForReady(activeBaseUrl, 2500);
-  if (!ready) {
+  if (activeBaseUrl) {
+    const ready = await waitForReady(activeBaseUrl, 2500);
+    assert.equal(ready, true, `failed to reach configured UI smoke base URL: ${activeBaseUrl}`);
+    process.env.OPENUNUM_BASE_URL = activeBaseUrl;
+    process.env.OPENUNUM_API_URL = activeBaseUrl;
+  } else {
     const port = await getFreePort();
     tempHome = fs.mkdtempSync(path.join(os.tmpdir(), 'openunum-ui-smoke-'));
     activeBaseUrl = `http://127.0.0.1:${port}`;

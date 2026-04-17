@@ -125,9 +125,9 @@ export class AutoRecover {
 
     const port = 9333;
 
-    // Kill existing instances
+    // Kill only OpenUnum-managed CDP helper browsers, not arbitrary user/test browsers.
     try {
-      spawn('pkill', ['-f', 'chrome.*remote-debugging'], { stdio: 'ignore' });
+      spawn('pkill', ['-f', 'openunum-chrome-(recovery|debug)'], { stdio: 'ignore' });
       await this.sleep(500);
     } catch {}
 

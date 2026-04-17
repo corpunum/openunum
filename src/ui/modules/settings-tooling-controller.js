@@ -275,7 +275,7 @@ export function createSettingsToolingController({
         </div>
         <div class="field">
           <label>Fallback Model</label>
-          <input id="toolingFallbackModel" class="mono" value="${escapeHtml(secondary.model || 'ollama-cloud/minimax-m2.7:cloud')}" />
+          <input id="toolingFallbackModel" class="mono" value="${escapeHtml(secondary.model || 'ollama-cloud/qwen3.5:397b-cloud')}" />
         </div>
         <div class="field">
           <label>Fallback Timeout (ms)</label>

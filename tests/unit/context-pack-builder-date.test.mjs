@@ -8,7 +8,7 @@ describe('buildControllerSystemMessage date grounding', () => {
       executionProfile: { name: 'default', guidance: [], guardrails: [], verificationHints: [] },
       behavior: { classId: 'default', confidence: 1, source: 'test', description: 'x', needs: {} },
       provider: 'ollama-cloud',
-      model: 'minimax-m2.7:cloud'
+      model: 'qwen3.5:397b-cloud'
     });
     expect(out).toContain('Current runtime datetime (UTC):');
     expect(out).toContain('Current date:');

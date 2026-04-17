@@ -7,6 +7,13 @@ import path from 'node:path';
 const DEFAULT_DYNAMIC_PORT = 18000 + (process.pid % 2000);
 const TEST_PORT = Number(process.env.OPENUNUM_TEST_PORT || DEFAULT_DYNAMIC_PORT);
 const TEST_HOME = path.join(os.tmpdir(), `openunum-test-home-${TEST_PORT}`);
+export const PLAYWRIGHT_STABLE_ARGS = [
+  '--disable-gpu',
+  '--disable-dev-shm-usage',
+  '--disable-software-rasterizer',
+  '--disable-features=Vulkan,UseSkiaRenderer',
+  '--use-gl=swiftshader'
+];
 
 function clearTestPort() {
   try {

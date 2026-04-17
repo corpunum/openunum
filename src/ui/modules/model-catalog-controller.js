@@ -20,7 +20,6 @@ export function createModelCatalogController({
     if (topStatus) {
       topStatus.textContent = `cfg=${formatProviderModel(m.provider, m.model)} active=${formatProviderModel(m.activeProvider, m.activeModel)}`;
     }
-    await loadModelsForProvider(m.provider, m.model);
   }
 
   async function refreshModelCatalog() {
@@ -45,8 +44,8 @@ export function createModelCatalogController({
           <strong>${escapeHtml(provider.display_name || provider.provider)}</strong>
           <span class="pill">${escapeHtml(provider.status)}</span>
         </div>
-        <div class="hint" style="margin-top:6px;">#1 ${escapeHtml(provider.models?.[0]?.model_id || '-')}</div>
-        <div class="hint">models=${Number(provider.models?.length || 0)}</div>
+        <div class="hint" style="margin-top:6px;">#1 ${escapeHtml(provider.top_model || provider.models?.[0]?.model_id || '-')}</div>
+        <div class="hint">models=${Number(provider.model_count ?? provider.models?.length ?? 0)}</div>
         ${provider.degraded_reason ? `<div class="hint" style="color:#facc15;">${escapeHtml(provider.degraded_reason)}</div>` : ''}
       </div>
     `).join('');
@@ -54,8 +53,8 @@ export function createModelCatalogController({
 
   async function loadModelsForProvider(provider, currentModel = '') {
     try {
-      const catalog = getModelCatalog() || await refreshModelCatalog();
-      const out = catalog.providers.find((entry) => entry.provider === provider) || await jget(`/api/models?provider=${encodeURIComponent(provider)}`);
+      if (!getModelCatalog()) await refreshModelCatalog();
+      const out = await jget(`/api/models?provider=${encodeURIComponent(provider)}`);
       const list = q('modelList');
       list.innerHTML = '';
       const models = out.models || [];

@@ -70,6 +70,7 @@ export class AutonomyMaster {
     this.monitorIntervalMs = 30000; // 30 seconds for active monitoring
     this.baseMonitorIntervalMs = 30000;
     this.activeSessionMonitorIntervalMs = 300000; // 5 minutes during active sessions
+    this.currentCyclePromise = null;
     
     // Metrics
     this.metrics = {
@@ -190,11 +191,18 @@ export class AutonomyMaster {
    * Run one complete autonomy cycle
    */
   async runCycle() {
-    try {
-      this.metrics.cycles++;
+    if (this.currentCyclePromise) {
+      logWarn('autonomy_cycle_already_running', {});
+      return this.currentCyclePromise;
+    }
+
+    let cyclePromise;
+    cyclePromise = (async () => {
+      try {
+      const cycleId = ++this.metrics.cycles;
       const cycleStart = Date.now();
       const results = {
-        cycle: this.metrics.cycles,
+        cycle: cycleId,
         timestamp: new Date().toISOString(),
         health: null,
         selfAwareness: null,
@@ -208,7 +216,7 @@ export class AutonomyMaster {
       };
       
       // Phase 1: Health Check
-      logInfo('autonomy_cycle_health', { cycle: this.metrics.cycles });
+      logInfo('autonomy_cycle_health', { cycle: cycleId });
       results.health = await this.selfHeal.runHealthCheck();
       
       // R2/R9: Background maintenance during idle
@@ -271,30 +279,6 @@ export class AutonomyMaster {
       results.remediation = this.ensureRemediationFromSelfAwareness(this.selfAwareness);
       results.pendingQueueRemediation = this.ensureRemediationFromPendingQueue(results.pendingQueue);
 
-      // Death-spiral detection: track consecutive no-progress cycles
-      const hasProgress = results.health.status === 'healthy' || results.health.issues?.length === 0;
-      if (hasProgress) {
-        this.consecutiveNoProgressCycles = 0;
-        if (this.degraded) {
-          this.degraded = false;
-          logInfo('autonomy_recovered_from_degraded', { cycle: this.metrics.cycles });
-        }
-      } else {
-        this.consecutiveNoProgressCycles++;
-        if (this.consecutiveNoProgressCycles >= this.degradedModeThreshold && !this.degraded) {
-          this.degraded = true;
-          logInfo('autonomy_entering_degraded_mode', {
-            cycle: this.metrics.cycles,
-            consecutiveNoProgressCycles: this.consecutiveNoProgressCycles,
-            threshold: this.degradedModeThreshold
-          });
-          // Create a remediation entry for the death spiral
-          this.ensureRemediationFromDeathSpiral(this.consecutiveNoProgressCycles);
-        }
-      }
-      results.degraded = this.degraded;
-      results.consecutiveNoProgressCycles = this.consecutiveNoProgressCycles;
-
       if (this.config.runtime?.selfPokeEnabled !== false) {
         this.nudges = buildAutonomyNudges({
           config: this.config,
@@ -307,10 +291,36 @@ export class AutonomyMaster {
       } else {
         this.nudges = [];
       }
+
+      const hasCriticalNudge = this.nudges.some((item) => String(item?.severity || '').toLowerCase() === 'critical');
+
+      // Death-spiral detection: track consecutive no-progress cycles
+      const hasProgress = (results.health.status === 'healthy' || results.health.issues?.length === 0) && !hasCriticalNudge;
+      if (hasProgress) {
+        this.consecutiveNoProgressCycles = 0;
+        if (this.degraded) {
+          this.degraded = false;
+          logInfo('autonomy_recovered_from_degraded', { cycle: cycleId });
+        }
+      } else {
+        this.consecutiveNoProgressCycles++;
+        if (this.consecutiveNoProgressCycles >= this.degradedModeThreshold && !this.degraded) {
+          this.degraded = true;
+          logInfo('autonomy_entering_degraded_mode', {
+            cycle: cycleId,
+            consecutiveNoProgressCycles: this.consecutiveNoProgressCycles,
+            threshold: this.degradedModeThreshold
+          });
+          // Create a remediation entry for the death spiral
+          this.ensureRemediationFromDeathSpiral(this.consecutiveNoProgressCycles);
+        }
+      }
+      results.degraded = this.degraded;
+      results.consecutiveNoProgressCycles = this.consecutiveNoProgressCycles;
       
       // Phase 2: Self-Test (every 5 cycles)
-      if (this.metrics.cycles % 5 === 0) {
-        logInfo('autonomy_cycle_tests', { cycle: this.metrics.cycles });
+      if (cycleId % 5 === 0) {
+        logInfo('autonomy_cycle_tests', { cycle: cycleId });
         results.tests = await this.runQuickTests();
         this.metrics.testsRun++;
         if (results.tests.overallOk) {
@@ -319,16 +329,16 @@ export class AutonomyMaster {
       }
       
       // Phase 3: Auto-Improvement Analysis (every 10 cycles)
-      if (this.metrics.cycles % 10 === 0) {
-        logInfo('autonomy_cycle_improvement', { cycle: this.metrics.cycles });
+      if (cycleId % 10 === 0) {
+        logInfo('autonomy_cycle_improvement', { cycle: cycleId });
         const improvements = await this.autoImprove.analyzeAndImprove();
         results.improvements = improvements.improvements || [];
         this.metrics.improvementsApplied += results.improvements.length;
       }
       
       // Phase 4: Skill Learning (every 15 cycles)
-      if (this.metrics.cycles % 15 === 0) {
-        logInfo('autonomy_cycle_learning', { cycle: this.metrics.cycles });
+      if (cycleId % 15 === 0) {
+        logInfo('autonomy_cycle_learning', { cycle: cycleId });
         const skills = await this.skillLearner.learnFromRecentMissions();
         results.skills = skills;
         this.metrics.skillsLearned += skills.length;
@@ -355,7 +365,7 @@ export class AutonomyMaster {
       
       const cycleDuration = Date.now() - cycleStart;
       logInfo('autonomy_cycle_complete', { 
-        cycle: this.metrics.cycles, 
+        cycle: cycleId, 
         durationMs: cycleDuration,
         issues: results.issues.length,
         improvements: results.improvements.length,
@@ -366,7 +376,15 @@ export class AutonomyMaster {
     } catch (error) {
       logError('autonomy_cycle_failed', { error: String(error.message || error) });
       return { error: String(error.message || error) };
-    }
+      } finally {
+        if (this.currentCyclePromise === cyclePromise) {
+          this.currentCyclePromise = null;
+        }
+      }
+    })();
+
+    this.currentCyclePromise = cyclePromise;
+    return cyclePromise;
   }
   
   /**

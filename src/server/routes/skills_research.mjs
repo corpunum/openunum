@@ -2,9 +2,13 @@ function isPlainObject(value) {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
 }
 
+function runApiTool(ctx, name, args = {}) {
+  return ctx.agent.runTool(name, args, { summarizeResult: false, surface: 'api' });
+}
+
 export async function handleSkillsResearchRoute({ req, res, url, ctx }) {
   if (req.method === 'GET' && url.pathname === '/api/skills') {
-    const out = await ctx.agent.runTool('skill_list', {});
+    const out = await runApiTool(ctx, 'skill_list', {});
     ctx.sendJson(res, 200, out);
     return true;
   }
@@ -15,7 +19,7 @@ export async function handleSkillsResearchRoute({ req, res, url, ctx }) {
       ctx.sendJson(res, 400, { ok: false, error: 'invalid_payload' });
       return true;
     }
-    const out = await ctx.agent.runTool('skill_install', body || {});
+    const out = await runApiTool(ctx, 'skill_install', body || {});
     ctx.sendJson(res, 200, out);
     return true;
   }
@@ -31,7 +35,7 @@ export async function handleSkillsResearchRoute({ req, res, url, ctx }) {
       ctx.sendJson(res, 400, { ok: false, error: 'skill_name_required' });
       return true;
     }
-    const out = await ctx.agent.runTool('skill_review', { name });
+    const out = await runApiTool(ctx, 'skill_review', { name });
     ctx.sendJson(res, 200, out);
     return true;
   }
@@ -47,7 +51,7 @@ export async function handleSkillsResearchRoute({ req, res, url, ctx }) {
       ctx.sendJson(res, 400, { ok: false, error: 'skill_name_required' });
       return true;
     }
-    const out = await ctx.agent.runTool('skill_approve', { name });
+    const out = await runApiTool(ctx, 'skill_approve', { name });
     ctx.sendJson(res, 200, out);
     return true;
   }
@@ -63,7 +67,7 @@ export async function handleSkillsResearchRoute({ req, res, url, ctx }) {
       ctx.sendJson(res, 400, { ok: false, error: 'skill_name_required' });
       return true;
     }
-    const out = await ctx.agent.runTool('skill_execute', { name, args: body.args || {} });
+    const out = await runApiTool(ctx, 'skill_execute', { name, args: body.args || {} });
     ctx.sendJson(res, 200, out);
     return true;
   }
@@ -79,13 +83,13 @@ export async function handleSkillsResearchRoute({ req, res, url, ctx }) {
       ctx.sendJson(res, 400, { ok: false, error: 'skill_name_required' });
       return true;
     }
-    const out = await ctx.agent.runTool('skill_uninstall', { name });
+    const out = await runApiTool(ctx, 'skill_uninstall', { name });
     ctx.sendJson(res, 200, out);
     return true;
   }
 
   if (req.method === 'GET' && url.pathname === '/api/email/status') {
-    const out = await ctx.agent.runTool('email_status', {});
+    const out = await runApiTool(ctx, 'email_status', {});
     ctx.sendJson(res, 200, out);
     return true;
   }
@@ -96,7 +100,7 @@ export async function handleSkillsResearchRoute({ req, res, url, ctx }) {
       ctx.sendJson(res, 400, { ok: false, error: 'invalid_payload' });
       return true;
     }
-    const out = await ctx.agent.runTool('email_send', body || {});
+    const out = await runApiTool(ctx, 'email_send', body || {});
     ctx.sendJson(res, 200, out);
     return true;
   }
@@ -107,7 +111,7 @@ export async function handleSkillsResearchRoute({ req, res, url, ctx }) {
       ctx.sendJson(res, 400, { ok: false, error: 'invalid_payload' });
       return true;
     }
-    const out = await ctx.agent.runTool('email_list', body || {});
+    const out = await runApiTool(ctx, 'email_list', body || {});
     ctx.sendJson(res, 200, out);
     return true;
   }
@@ -118,7 +122,7 @@ export async function handleSkillsResearchRoute({ req, res, url, ctx }) {
       ctx.sendJson(res, 400, { ok: false, error: 'invalid_payload' });
       return true;
     }
-    const out = await ctx.agent.runTool('email_read', body || {});
+    const out = await runApiTool(ctx, 'email_read', body || {});
     ctx.sendJson(res, 200, out);
     return true;
   }
@@ -129,7 +133,7 @@ export async function handleSkillsResearchRoute({ req, res, url, ctx }) {
       ctx.sendJson(res, 400, { ok: false, error: 'invalid_payload' });
       return true;
     }
-    const out = await ctx.agent.runTool('gworkspace_call', body || {});
+    const out = await runApiTool(ctx, 'gworkspace_call', body || {});
     ctx.sendJson(res, 200, out);
     return true;
   }
@@ -140,13 +144,13 @@ export async function handleSkillsResearchRoute({ req, res, url, ctx }) {
       ctx.sendJson(res, 400, { ok: false, error: 'invalid_payload' });
       return true;
     }
-    const out = await ctx.agent.runTool('research_run_daily', { simulate: Boolean(body?.simulate) });
+    const out = await runApiTool(ctx, 'research_run_daily', { simulate: Boolean(body?.simulate) });
     ctx.sendJson(res, 200, out);
     return true;
   }
 
   if (req.method === 'GET' && url.pathname === '/api/research/recent') {
-    const out = await ctx.agent.runTool('research_list_recent', {
+    const out = await runApiTool(ctx, 'research_list_recent', {
       limit: Number(url.searchParams.get('limit') || 10)
     });
     ctx.sendJson(res, 200, out);
@@ -154,7 +158,7 @@ export async function handleSkillsResearchRoute({ req, res, url, ctx }) {
   }
 
   if (req.method === 'GET' && url.pathname === '/api/research/queue') {
-    const out = await ctx.agent.runTool('research_review_queue', {
+    const out = await runApiTool(ctx, 'research_review_queue', {
       limit: Number(url.searchParams.get('limit') || 50)
     });
     ctx.sendJson(res, 200, out);
@@ -167,7 +171,7 @@ export async function handleSkillsResearchRoute({ req, res, url, ctx }) {
       ctx.sendJson(res, 400, { ok: false, error: 'invalid_payload' });
       return true;
     }
-    const out = await ctx.agent.runTool('research_approve', {
+    const out = await runApiTool(ctx, 'research_approve', {
       url: String(body?.url || ''),
       note: String(body?.note || '')
     });

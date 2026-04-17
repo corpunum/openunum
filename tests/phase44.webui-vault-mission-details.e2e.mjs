@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { chromium } from 'playwright';
-import { startServer, stopServer } from './_helpers.mjs';
+import { PLAYWRIGHT_STABLE_ARGS, startServer, stopServer } from './_helpers.mjs';
 
 const DEFAULT_DYNAMIC_PORT = 18000 + (process.pid % 2000);
 const TEST_PORT = Number(process.env.OPENUNUM_TEST_PORT || DEFAULT_DYNAMIC_PORT);
@@ -22,7 +22,7 @@ try {
   proc = await startServer();
   browser = await chromium.launch({
     headless: true,
-    args: ['--disable-gpu', '--disable-dev-shm-usage']
+    args: PLAYWRIGHT_STABLE_ARGS
   });
 
   {

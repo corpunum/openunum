@@ -52,8 +52,8 @@ describe('ui model routing helpers', () => {
   });
 
   it('builds provider model patch map', () => {
-    const out = buildProviderModelsPatch('ollama-cloud', 'minimax-m2.7:cloud', [{ provider: 'openrouter', model: 'auto' }]);
-    expect(out['ollama-cloud']).toBe('ollama-cloud/minimax-m2.7:cloud');
+    const out = buildProviderModelsPatch('ollama-cloud', 'qwen3.5:397b-cloud', [{ provider: 'openrouter', model: 'auto' }]);
+    expect(out['ollama-cloud']).toBe('ollama-cloud/qwen3.5:397b-cloud');
     expect(out.openrouter).toBe('openrouter/auto');
   });
 });

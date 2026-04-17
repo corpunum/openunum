@@ -12,6 +12,8 @@ import { GoogleWorkspaceClient } from './google-workspace.mjs';
 import { ResearchManager } from '../research/manager.mjs';
 import { ExecutionPolicyEngine } from '../core/execution-policy-engine.mjs';
 import { FinalityGadget } from '../core/finality.mjs';
+import { resolveExecutionEnvelope } from '../core/model-execution-envelope.mjs';
+import { IndependentVerifier } from '../core/verifier.mjs';
 import { getHomeDir } from '../config.mjs';
 import { validateToolCall } from '../core/preflight-validator.mjs';
 import { summarizeToolResult } from '../core/tool-result-summarizer.mjs';
@@ -79,9 +81,10 @@ export class ToolRuntime {
       retryBackoffMs: config.runtime?.executorRetryBackoffMs ?? 700
     });
     this.policyEngine = new ExecutionPolicyEngine(config.runtime || {});
+    this.verifier = new IndependentVerifier({ config, memoryStore });
     this.modelBackedRegistry = createModelBackedToolRegistry(config);
     this.finalityGadget = new FinalityGadget({
-      requiredSuccesses: Number(config.runtime?.finalitySuccesses || 2) // Default: 2 consecutive successes for irreversible ops
+      requiredSuccesses: Number(config.runtime?.finalitySuccesses || 3)
     });
     this.backupRoot = path.join(os.homedir(), '.openunum', 'backups');
     this.hooksRoot = path.join(getHomeDir(), 'hooks');
@@ -128,7 +131,15 @@ export class ToolRuntime {
   }
 
   isToolAllowed(toolName, context = {}) {
-    const list = Array.isArray(context?.allowedTools) ? context.allowedTools : null;
+    let list = Array.isArray(context?.allowedTools) ? context.allowedTools : null;
+    if ((!list || !list.length) && context?.provider && context?.model) {
+      const envelope = resolveExecutionEnvelope({
+        provider: context.provider,
+        model: context.model,
+        runtime: this.config.runtime
+      });
+      list = Array.isArray(envelope.toolAllowlist) ? envelope.toolAllowlist : null;
+    }
     if (!list || !list.length) return true;
     const allow = new Set(list.map((name) => String(name || '').trim()).filter(Boolean));
     return allow.has(String(toolName || '').trim());
@@ -300,12 +311,50 @@ export class ToolRuntime {
     }
   }
 
+  buildFinalityKey(toolName, args = {}, context = {}) {
+    const hashText = (value) => crypto.createHash('sha256').update(String(value || '')).digest('hex');
+    const stable = (value) => {
+      if (Array.isArray(value)) return value.map((item) => stable(item));
+      if (!value || typeof value !== 'object') return value;
+      return Object.fromEntries(
+        Object.keys(value)
+          .sort()
+          .map((key) => [key, stable(value[key])])
+      );
+    };
+    const normalizedTool = String(toolName || '').trim();
+    const sessionId = String(context?.sessionId || 'global').trim();
+    const operationId = String(args?.operationId || context?.operationId || '').trim();
+    let target = stable(args || {});
+
+    if (normalizedTool === 'file_write') {
+      target = { path: args?.path || '', contentHash: hashText(args?.content || '') };
+    } else if (normalizedTool === 'file_patch') {
+      target = { path: args?.path || '', findHash: hashText(args?.find || ''), replaceHash: hashText(args?.replace || '') };
+    } else if (normalizedTool === 'shell_run') {
+      target = { cmdHash: hashText(args?.cmd || ''), cwd: args?.cwd || '' };
+    } else if (normalizedTool === 'session_delete') {
+      target = { sessionId: args?.sessionId || '', force: Boolean(args?.force) };
+    } else if (normalizedTool === 'session_clear') {
+      target = { keepSessionId: args?.keepSessionId || '', force: Boolean(args?.force) };
+    }
+
+    return [
+      'tool',
+      normalizedTool,
+      sessionId,
+      operationId || JSON.stringify(target)
+    ].join(':');
+  }
+
   async run(name, args, context = {}) {
     const auditId = crypto.randomUUID();
     let currentArgs = isPlainObject(args) ? { ...args } : {};
     const hookEvents = [];
     const hookFacts = [];
     const hookArtifacts = [];
+    const toolMeta = TOOL_CAPABILITY_META[name] || {};
+    const finalityTrackedTools = new Set(['file_write', 'file_patch', 'shell_run', 'session_delete', 'session_clear', 'git_push', 'skill_uninstall']);
 
     // R1: PRE-FLIGHT - Log intent to execute tool (tamper-evident)
     try {
@@ -442,6 +491,11 @@ export class ToolRuntime {
     }
 
     let result;
+    const finalityKey = (Boolean(toolMeta.destructive) ||
+      finalityTrackedTools.has(name) ||
+      (name === 'shell_run' && hasUnsafeShellMetacharacters(String(currentArgs?.cmd || ''))))
+      ? this.buildFinalityKey(name, currentArgs, context)
+      : null;
     try {
       result = await this.executeTool(name, currentArgs, context);
     } catch (error) {
@@ -476,46 +530,46 @@ export class ToolRuntime {
       auditId
     };
 
+    try {
+      const verification = await this.verifier.verifyToolResult(name, currentArgs, result);
+      result._verification = {
+        verified: Boolean(verification?.verified),
+        confidence: Number(verification?.confidence || 0),
+        checks: Array.isArray(verification?.checks) ? verification.checks : []
+      };
+    } catch (error) {
+      result._verification = {
+        verified: false,
+        error: String(error.message || error)
+      };
+    }
+
     this.recordToolResult(name, Boolean(result?.ok));
 
-    // R11/R12: Finality Gadget - gate irreversible tool operations
-    // Irreversible tools require consecutive success validations before finalization
-    const IRREVERSIBLE_TOOLS = new Set([
-      'file_write', 'file_patch', 'shell_run', 'git_push'
-    ]);
-    const isIrreversible = IRREVERSIBLE_TOOLS.has(name) ||
-      (name === 'shell_run' && hasUnsafeShellMetacharacters(String(args?.cmd || '')));
-
-    if (isIrreversible && result?.ok) {
-      const finalityId = `tool:${name}:${context?.sessionId || 'unknown'}:${auditId}`;
-      const finalityResult = await this.finalityGadget.recordExecution(finalityId, true);
-
-      if (!finalityResult.finalized) {
-        // Not yet finalized - add a warning but allow the operation
-        result._finality = {
-          finalized: false,
-          consecutiveSuccesses: this.finalityGadget.countConsecutiveSuccesses(
-            this.finalityGadget.executionHistory.get(finalityId) || []
-          ),
-          requiredSuccesses: this.finalityGadget.requiredSuccesses,
-          note: `Irreversible operation ${name} requires ${this.finalityGadget.requiredSuccesses} consecutive successes before finalization`
-        };
-      } else {
-        result._finality = {
-          finalized: true,
-          checkpoint: finalityResult.checkpoint
-        };
-      }
-    } else if (isIrreversible && !result?.ok) {
-      // Failed irreversible operation - reset finality counter
-      const finalityId = `tool:${name}:${context?.sessionId || 'unknown'}:${auditId}`;
-      await this.finalityGadget.recordExecution(finalityId, false);
-      result._finality = { finalized: false, note: `Irreversible operation ${name} failed - finality counter reset` };
+    if (finalityKey) {
+      const verificationPassed = result._verification?.verified !== false;
+      const finalityResult = await this.finalityGadget.recordExecution(finalityKey, Boolean(result?.ok) && verificationPassed, {
+        toolName: name
+      });
+      result._finality = {
+        key: finalityKey,
+        finalized: Boolean(finalityResult?.finalized),
+        consecutiveSuccesses: Number(finalityResult?.consecutiveSuccesses || 0),
+        requiredSuccesses: this.finalityGadget.requiredSuccesses,
+        checkpoint: finalityResult?.checkpoint || null,
+        note: finalityResult?.finalized
+          ? `Operation ${name} satisfied finality requirements.`
+          : `Operation ${name} has ${Number(finalityResult?.consecutiveSuccesses || 0)}/${this.finalityGadget.requiredSuccesses} successful verified confirmations.`
+      };
     }
 
     this.logRun(context, name, currentArgs, result);
 
-    // Summarize large tool results to save context budget
+    if (context?.summarizeResult === false) {
+      return result;
+    }
+
+    // Summarize large tool results to save context budget inside the agent loop.
     const summarized = summarizeToolResult(name, result);
     return summarized;
   }

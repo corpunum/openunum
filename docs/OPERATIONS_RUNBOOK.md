@@ -338,7 +338,7 @@ curl -sS http://127.0.0.1:18880/api/telegram/status
 - Config: `~/.openunum/openunum.json`
 - DB: `~/.openunum/openunum.db`
 - Executor log: `~/.openunum/logs/executor.jsonl`
-- Audit log: `~/.openunum/logs/audit.jsonl` (Phase 4)
+- Audit log: `~/.openunum/audit/audit-log.jsonl`
 - Replay patterns: `~/.openunum/data/replay-patterns.json` (Phase 4)
 
 Useful DB inspection (example):

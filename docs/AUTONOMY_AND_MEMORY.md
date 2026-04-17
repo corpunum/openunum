@@ -11,6 +11,7 @@ Stored in `config.runtime.autonomyMode` and controlled by `POST /api/autonomy/mo
 - moderate retry and tool-loop budget
 - mission defaults: `continueUntilDone=true`, `hardStepCap=120`, `maxRetries=3`, `intervalMs=400`
 - fallback routing remains available
+- current cloud-primary baseline keeps `ollama-cloud/qwen3.5:397b-cloud` as the main controller unless runtime config explicitly changes it
 
 ### `compact-local`
 - constrained local-first operation
@@ -64,6 +65,7 @@ SSE payload now includes:
 ## 4. Canonical Memory Surfaces
 
 Primary runtime memory lives in `OPENUNUM_HOME/openunum.db` (default `~/.openunum/openunum.db`).
+Audit truth lives in `OPENUNUM_HOME/audit/audit-log.jsonl`.
 
 Active SQLite tables/operators should care about:
 - `sessions`

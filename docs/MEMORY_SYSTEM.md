@@ -63,7 +63,7 @@ Managed by `AutonomyMaster`, the system identifies idle periods to perform memor
 
 **Example:**
 ```javascript
-const retriever = createHybridRetriever({ workspaceRoot: '/home/corp-unum/openunum' });
+const retriever = createHybridRetriever({ workspaceRoot: process.cwd() });
 
 const results = await retriever.retrieve('parabolic strategy decisions', {
   useHybrid: true,
@@ -250,7 +250,7 @@ ollama pull nomic-embed-text
 
 ### Memory Dir Not Found
 ```
-INFO: memory_dir_not_found { path: "/home/corp-unum/openunum/data/memory" }
+INFO: memory_dir_not_found { path: "/path/to/openunum/data/memory" }
 ```
 **Fix:** Create directory:
 ```bash

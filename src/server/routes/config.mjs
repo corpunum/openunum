@@ -1,3 +1,5 @@
+import { summarizeModelCatalog } from '../../models/catalog.mjs';
+
 import { validateConfigPatch, validateProvidersConfigPatch } from '../contracts/request-contracts.mjs';
 
 export async function handleConfigRoute({ req, res, url, ctx }) {
@@ -14,7 +16,7 @@ export async function handleConfigRoute({ req, res, url, ctx }) {
       browser: sanitized.browser,
       channels: { telegram: { enabled: Boolean(ctx.config.channels?.telegram?.enabled), hasToken: Boolean(ctx.config.channels?.telegram?.botToken) } },
       capabilities: ctx.buildCapabilitiesPayload(),
-      modelCatalog: catalog,
+      modelCatalog: summarizeModelCatalog(catalog),
       providerConfig: ctx.getProviderConfigPayload(),
       authCatalog: await ctx.buildAuthCatalogPayload()
     });

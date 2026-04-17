@@ -27,8 +27,11 @@ try {
   assert.equal(Boolean(catalog.json.fallback?.canonical_key), true);
 
   for (const provider of catalog.json.providers) {
+    assert.equal(typeof provider.model_count, 'number');
+    assert.equal(provider.model_count >= (provider.models?.length || 0), true);
+    assert.equal(provider.top_model == null || typeof provider.top_model === 'string', true);
     let previousScore = Number.POSITIVE_INFINITY;
-    provider.models.forEach((model, index) => {
+    (provider.models || []).forEach((model, index) => {
       assert.equal(model.rank, index + 1);
       assert.equal(typeof model.canonical_key, 'string');
       assert.equal(model.capability_score <= previousScore, true);

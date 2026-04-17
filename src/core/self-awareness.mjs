@@ -53,12 +53,14 @@ export function buildSelfAwarenessSnapshot({
   const recoveryRate = assistantTurnCount > 0 ? recoveryStyleCount / assistantTurnCount : 0;
   const genericAckRate = assistantTurnCount > 0 ? genericAckCount / assistantTurnCount : 0;
   const coverage = clamp(sessionIds.length / Math.max(1, Number(sessionScanLimit || 12)), 0, 1);
-
-  const score = clamp(
-    100 - (recoveryRate * 75) - (genericAckRate * 55) + (coverage * 8),
-    0,
-    100
-  );
+  const hasEvidence = assistantTurnCount > 0;
+  const score = hasEvidence
+    ? clamp(
+      100 - (recoveryRate * 75) - (genericAckRate * 55) + (coverage * 8),
+      0,
+      100
+    )
+    : 0;
 
   const issues = [];
   if (recoveryStyleCount > 0) {
@@ -73,7 +75,7 @@ export function buildSelfAwarenessSnapshot({
 
   return {
     score: Number(score.toFixed(1)),
-    status: score >= 85 ? 'healthy' : (score >= 70 ? 'watch' : 'degraded'),
+    status: !hasEvidence ? 'insufficient_evidence' : score >= 85 ? 'healthy' : (score >= 70 ? 'watch' : 'degraded'),
     sampledAt: new Date().toISOString(),
     sessionsScanned: sessionIds.length,
     assistantTurnsScanned: assistantTurnCount,
@@ -86,4 +88,3 @@ export function buildSelfAwarenessSnapshot({
     issues
   };
 }
-

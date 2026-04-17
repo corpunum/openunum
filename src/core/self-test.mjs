@@ -2,7 +2,7 @@ import { loadConfig, saveConfig, defaultConfig, getHomeDir } from '../config.mjs
 import { MemoryStore } from '../memory/store.mjs';
 import { OpenUnumAgent } from './agent.mjs';
 import { CDPBrowser } from '../browser/cdp.mjs';
-import { SelfHealMonitor } from './selfheal.mjs';
+import { SelfHealSystem } from './self-heal.mjs';
 import fs from 'node:fs';
 import path from 'node:path';
 import { execSync } from 'node:child_process';
@@ -196,20 +196,20 @@ export class SelfTestSuite {
   async testSelfHeal() {
     const test = { name: 'self_heal', category: 'recovery' };
     try {
-      if (!this.selfHealMonitor) {
+      if (!this.selfHealSystem) {
         test.passed = false;
-        test.error = 'SelfHealMonitor not available';
+        test.error = 'SelfHealSystem not available';
         this.results.push(test);
         return;
       }
-      const health = await this.selfHealMonitor.runFullHealthCheck();
-      if (health.ok) {
+      const health = await this.selfHealSystem.runHealthCheck();
+      if (health.status === 'healthy') {
         test.passed = true;
-        test.details = { checks: Object.keys(health.checks) };
+        test.details = { checks: Object.keys(health.issues || {}).length, status: health.status };
       } else {
         test.passed = false;
         test.error = 'Health check failed';
-        test.details = health.checks;
+        test.details = { issues: health.issues?.length || 0, status: health.status };
       }
     } catch (error) {
       test.passed = false;
@@ -288,7 +288,7 @@ export async function runSelfTest() {
   const memory = new MemoryStore();
   const agent = new OpenUnumAgent({ config, memoryStore: memory });
   const browser = new CDPBrowser(config.browser?.cdpUrl);
-  const selfHealMonitor = new SelfHealMonitor({ config, agent, browser, memory });
-  const suite = new SelfTestSuite({ config, agent, browser, memory, selfHealMonitor });
+  const selfHealSystem = new SelfHealSystem({ config, agent, memoryStore: memory });
+  const suite = new SelfTestSuite({ config, agent, browser, memory, selfHealSystem });
   return suite.runAllTests();
 }
