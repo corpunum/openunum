@@ -281,14 +281,48 @@ export class SessionStoreMethods {
         `SELECT
           s.id,
           s.created_at,
-          (SELECT content FROM messages m WHERE m.session_id = s.id AND m.role = 'user' ORDER BY m.id ASC LIMIT 1) AS first_user,
-          (SELECT content FROM messages m WHERE m.session_id = s.id ORDER BY m.id DESC LIMIT 1) AS last_content,
-          (SELECT role FROM messages m WHERE m.session_id = s.id ORDER BY m.id DESC LIMIT 1) AS last_role,
-          (SELECT created_at FROM messages m WHERE m.session_id = s.id ORDER BY m.id DESC LIMIT 1) AS last_message_at,
-          (SELECT COUNT(*) FROM messages m WHERE m.session_id = s.id) AS message_count
+          first_user.first_user,
+          latest.last_content,
+          latest.last_role,
+          latest.last_message_at,
+          COALESCE(message_counts.message_count, 0) AS message_count
          FROM sessions s
+         LEFT JOIN (
+           SELECT first_message.session_id, first_message.content AS first_user
+           FROM messages first_message
+           INNER JOIN (
+             SELECT session_id, MIN(id) AS first_user_id
+             FROM messages
+             WHERE role = 'user'
+             GROUP BY session_id
+           ) first_ids
+             ON first_ids.session_id = first_message.session_id
+            AND first_ids.first_user_id = first_message.id
+         ) first_user
+           ON first_user.session_id = s.id
+         LEFT JOIN (
+           SELECT latest_message.session_id,
+                  latest_message.content AS last_content,
+                  latest_message.role AS last_role,
+                  latest_message.created_at AS last_message_at
+           FROM messages latest_message
+           INNER JOIN (
+             SELECT session_id, MAX(id) AS latest_message_id
+             FROM messages
+             GROUP BY session_id
+           ) latest_ids
+             ON latest_ids.session_id = latest_message.session_id
+            AND latest_ids.latest_message_id = latest_message.id
+         ) latest
+           ON latest.session_id = s.id
+         LEFT JOIN (
+           SELECT session_id, COUNT(*) AS message_count
+           FROM messages
+           GROUP BY session_id
+         ) message_counts
+           ON message_counts.session_id = s.id
          ORDER BY COALESCE(
-           (SELECT created_at FROM messages m WHERE m.session_id = s.id ORDER BY m.id DESC LIMIT 1),
+           latest.last_message_at,
            s.created_at
          ) DESC
          LIMIT ?`

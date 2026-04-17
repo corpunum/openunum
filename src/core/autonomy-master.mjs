@@ -26,6 +26,23 @@ import { AutonomyRemediationQueue } from './autonomy-remediation-queue.mjs';
 import { SleepCycle } from './sleep-cycle.mjs';
 import { MemoryConsolidator } from './memory-consolidator.mjs';
 
+function buildPendingSelfAwarenessSnapshot() {
+  return {
+    score: 0,
+    status: 'initializing',
+    sampledAt: null,
+    sessionsScanned: 0,
+    assistantTurnsScanned: 0,
+    metrics: {
+      recoveryStyleCount: 0,
+      genericAckCount: 0,
+      recoveryRate: 0,
+      genericAckRate: 0
+    },
+    issues: ['Self-awareness snapshot is initializing.']
+  };
+}
+
 export function getAutonomyMaster({ config, agent, memoryStore, browser, pendingChats }) {
   return new AutonomyMaster({ config, agent, memoryStore, browser, pendingChats });
 }
@@ -96,7 +113,8 @@ export class AutonomyMaster {
       pendingChatStuckMs: Math.max(5000, Number(config?.runtime?.pendingChatStuckMs || 45000))
     };
     this.nudges = [];
-    this.selfAwareness = buildSelfAwarenessSnapshot({ memoryStore: this.memoryStore });
+    this.selfAwareness = buildPendingSelfAwarenessSnapshot();
+    this.selfAwarenessRefreshPromise = null;
     
     // Load persisted state
     this.loadState();
@@ -158,6 +176,12 @@ export class AutonomyMaster {
     
     this.active = true;
     logInfo('autonomy_master_started', { intervalMs: this.monitorIntervalMs });
+
+    setImmediate(() => {
+      this.refreshSelfAwarenessSnapshot().catch((error) => {
+        logWarn('self_awareness_refresh_failed', { error: String(error.message || error) });
+      });
+    });
     
     // Run initial cycle
     this.runCycle();
@@ -168,6 +192,20 @@ export class AutonomyMaster {
     }, this.monitorIntervalMs);
     
     return true;
+  }
+
+  async refreshSelfAwarenessSnapshot() {
+    if (this.selfAwarenessRefreshPromise) {
+      return this.selfAwarenessRefreshPromise;
+    }
+    this.selfAwarenessRefreshPromise = Promise.resolve().then(() => {
+      const snapshot = buildSelfAwarenessSnapshot({ memoryStore: this.memoryStore });
+      this.selfAwareness = snapshot;
+      return snapshot;
+    }).finally(() => {
+      this.selfAwarenessRefreshPromise = null;
+    });
+    return this.selfAwarenessRefreshPromise;
   }
   
   /**
@@ -273,10 +311,9 @@ export class AutonomyMaster {
         results.recovery = recovery;
       }
 
-      this.selfAwareness = buildSelfAwarenessSnapshot({ memoryStore: this.memoryStore });
-      results.selfAwareness = this.selfAwareness;
+      results.selfAwareness = await this.refreshSelfAwarenessSnapshot();
       results.pendingQueue = this.getPendingQueueDiagnostics();
-      results.remediation = this.ensureRemediationFromSelfAwareness(this.selfAwareness);
+      results.remediation = this.ensureRemediationFromSelfAwareness(results.selfAwareness);
       results.pendingQueueRemediation = this.ensureRemediationFromPendingQueue(results.pendingQueue);
 
       if (this.config.runtime?.selfPokeEnabled !== false) {
@@ -284,7 +321,7 @@ export class AutonomyMaster {
           config: this.config,
           memoryStore: this.memoryStore,
           health: results.health,
-          selfAwareness: this.selfAwareness,
+          selfAwareness: results.selfAwareness,
           maxItems: 8
         });
         results.nudges = this.nudges;
@@ -597,6 +634,13 @@ export class AutonomyMaster {
         health: null,
         maxItems: 8
       });
+    if (this.selfAwareness.status === 'initializing' && !this.selfAwarenessRefreshPromise) {
+      setImmediate(() => {
+        this.refreshSelfAwarenessSnapshot().catch((error) => {
+          logWarn('self_awareness_refresh_failed', { error: String(error.message || error) });
+        });
+      });
+    }
     return {
       active: this.active,
       degraded: this.degraded,
@@ -607,7 +651,7 @@ export class AutonomyMaster {
         uptimeMs: Date.now() - this.metrics.startTime
       },
       thresholds: this.thresholds,
-      selfAwareness: this.selfAwareness || buildSelfAwarenessSnapshot({ memoryStore: this.memoryStore }),
+      selfAwareness: this.selfAwareness,
       pendingQueue: this.getPendingQueueDiagnostics(),
       remediation: this.remediationQueue.list({ limit: 30 }),
       nudges,
