@@ -43,12 +43,13 @@ export class ProofScorerCouncil {
       });
 
       results.proofScore = proofScore;
+      const overallScore = Number(proofScore.score ?? proofScore.overallScore ?? 0);
 
       // Check if proof score meets threshold
-      if (proofScore.overallScore < this.minProofScore) {
+      if (overallScore < this.minProofScore) {
         results.passed = false;
         results.requiresRevision = true;
-        results.reason = `proof_quality_insufficient: score ${proofScore.overallScore.toFixed(2)} < threshold ${this.minProofScore}`;
+        results.reason = `proof_quality_insufficient: score ${overallScore.toFixed(2)} < threshold ${this.minProofScore}`;
       }
 
       // Check for unsupported claims

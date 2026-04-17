@@ -3,6 +3,8 @@
  * Maps task roles to appropriate model tiers with allow/block lists.
  */
 
+import { MODEL_TIER_ORDER, inferTier } from './model-execution-envelope.mjs';
+
 export const roleModelRegistry = {
   research: {
     minTier: 'balanced',
@@ -12,7 +14,7 @@ export const roleModelRegistry = {
   },
   code_gen: {
     minTier: 'full',
-    recommended: ['openai-codex/gpt-5.4', 'ollama-cloud/qwen3.5:397b-cloud'],
+    recommended: ['ollama-cloud/qwen3.5:397b-cloud', 'openai/gpt-5.4'],
     blocked: [],
     description: 'Code generation requiring full capability'
   },
@@ -42,11 +44,19 @@ export const roleModelRegistry = {
   }
 };
 
-const MODEL_TIER_ORDER = ['compact', 'balanced', 'full'];
-
 function getTierIndex(tier) {
   const idx = MODEL_TIER_ORDER.indexOf(tier);
   return idx >= 0 ? idx : 0;
+}
+
+function parseModelRef(modelRef = '') {
+  const raw = String(modelRef || '').trim();
+  if (!raw.includes('/')) return { provider: '', model: raw };
+  const [provider, ...modelParts] = raw.split('/');
+  return {
+    provider: String(provider || '').trim(),
+    model: modelParts.join('/').trim()
+  };
 }
 
 export class RoleModelResolver {
@@ -81,7 +91,8 @@ export class RoleModelResolver {
    */
   isModelAllowed(role, modelRef) {
     const config = this.resolve(role);
-    const model = String(modelRef || '').toLowerCase();
+    const normalizedRef = String(modelRef || '').trim();
+    const model = normalizedRef.toLowerCase();
 
     // Check blocked list first
     if (config.blocked.some(b => b.toLowerCase() === model)) {
@@ -91,22 +102,35 @@ export class RoleModelResolver {
       };
     }
 
-    // Check if model meets minimum tier
-    // For simplicity, we assume recommended models meet the tier requirement
-    // In production, you'd have a separate tier mapping per model
+    const { provider, model: modelId } = parseModelRef(normalizedRef);
+    const inferredTier = inferTier(provider, modelId || normalizedRef);
+    const meetsMinTier = getTierIndex(inferredTier) >= getTierIndex(config.minTier);
+
     const isRecommended = config.recommended.some(r => r.toLowerCase() === model);
     if (isRecommended) {
       return {
-        allowed: true,
-        reason: `Model '${modelRef}' is recommended for role '${role}'`
+        allowed: meetsMinTier,
+        reason: meetsMinTier
+          ? `Model '${modelRef}' is recommended for role '${role}'`
+          : `Model '${modelRef}' is recommended but does not meet minimum tier '${config.minTier}'`
       };
     }
 
-    // Unknown model - allow if not blocked (permissive default)
+    if (!meetsMinTier) {
+      return {
+        allowed: false,
+        reason: `Model '${modelRef}' inferred tier '${inferredTier}' is below required tier '${config.minTier}' for role '${role}'`
+      };
+    }
+
     return {
       allowed: true,
-      reason: `Model '${modelRef}' is not explicitly recommended but not blocked for role '${role}'`
+      reason: `Model '${modelRef}' inferred tier '${inferredTier}' satisfies role '${role}'`
     };
+  }
+
+  isAllowed(role, modelRef) {
+    return this.isModelAllowed(role, modelRef);
   }
 
   /**

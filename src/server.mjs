@@ -136,7 +136,21 @@ const prunePendingChats = chatRuntime.prunePendingChats;
 const autonomyMaster = getAutonomyMaster({ config, agent, memoryStore: memory, browser, pendingChats });
 // Update agent's sleepCycle now that autonomyMaster is initialized
 agent.sleepCycle = autonomyMaster.sleepCycle;
-const selfHeal = new SelfHealOrchestrator({ config, agent, browser, memory });
+let server = null;
+const selfHeal = new SelfHealOrchestrator({
+  config,
+  agent,
+  browser,
+  memory,
+  probes: {
+    serverResponsive: async () => ({
+      ok: Boolean(server?.listening),
+      host: config.server.host,
+      port: config.server.port,
+      uptimeSeconds: Math.round(process.uptime())
+    })
+  }
+});
 const API_ERROR_CONTRACT_VERSION = '2026-04-02.api-errors.v1';
 const TOOL_CATALOG_CONTRACT_VERSION = '2026-04-02.tool-catalog.v1';
 
@@ -253,7 +267,7 @@ async function runSelfHeal(dryRun = false) {
 }
 
 
-const server = http.createServer(async (req, res) => {
+server = http.createServer(async (req, res) => {
   try {
     const url = new URL(req.url || '/', `http://${req.headers.host || '127.0.0.1'}`);
     const parseRequestBody = (request) => parseBody(request, {

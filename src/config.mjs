@@ -10,6 +10,8 @@ import {
 
 dotenv.config();
 
+const DEFAULT_FALLBACK_PROVIDER_CHAIN = ['ollama-cloud', 'nvidia', 'openrouter', 'openai'];
+
 function normalizeProviderId(rawProvider) {
   const provider = String(rawProvider || 'ollama-cloud').trim().toLowerCase();
   if (provider === 'generic') return 'openai';
@@ -27,12 +29,12 @@ function normalizeModelRef(provider, model) {
 function normalizeOllamaLocalModelRef(modelRef) {
   const raw = String(modelRef || '').trim().replace(/^ollama-local\//, '');
   if (!raw) return 'ollama-local/gemma4:cpu';
-  if (raw === 'gemma4:latest' || raw === 'gemma4') return 'ollama-local/gemma4:cpu';
-  if (raw === 'gemma4:cpu') return 'ollama-local/gemma4:cpu';
-  return 'ollama-local/gemma4:cpu';
+  // Allow explicitly configured local models, only default unknown to gemma4
+  // This preserves user configuration for models like qwen2.5-coder:1.5b
+  return `ollama-local/${raw || 'gemma4:cpu'}`;
 }
 
-function normalizeModelConfig(model = {}) {
+export function normalizeModelConfig(model = {}) {
   const providerModels = { ...(model.providerModels || {}) };
   if (providerModels.generic && !providerModels.openai) {
     providerModels.openai = normalizeModelRef('openai', providerModels.generic);
@@ -56,9 +58,25 @@ function normalizeModelConfig(model = {}) {
   if (provider === 'ollama-local') {
     currentModel = normalizeOllamaLocalModelRef(currentModel);
   }
-  const fallbackProviders = (model.routing?.fallbackProviders || [])
+  if (currentModel) {
+    providerModels[provider] = currentModel;
+  }
+
+  const disabledProviders = (model.routing?.disabledProviders || [])
     .map((item) => normalizeProviderId(item))
-    .filter((item, index, arr) => item && arr.indexOf(item) === index);
+    .filter((item, index, arr) => item && arr.indexOf(item) === index && item !== provider);
+  const fallbackEnabled = model.routing?.fallbackEnabled !== false;
+  const forcePrimaryProvider = model.routing?.forcePrimaryProvider === true;
+  let fallbackProviders = (model.routing?.fallbackProviders || [])
+    .map((item) => normalizeProviderId(item))
+    .filter((item, index, arr) => item && arr.indexOf(item) === index && item !== provider && !disabledProviders.includes(item));
+
+  if (!fallbackEnabled) {
+    fallbackProviders = [];
+  } else if (!fallbackProviders.length && !forcePrimaryProvider) {
+    fallbackProviders = DEFAULT_FALLBACK_PROVIDER_CHAIN
+      .filter((item) => item && item !== provider && !disabledProviders.includes(item));
+  }
 
   return {
     ...model,
@@ -68,7 +86,10 @@ function normalizeModelConfig(model = {}) {
     contextHints,
     routing: {
       ...(model.routing || {}),
-      fallbackProviders
+      fallbackEnabled,
+      fallbackProviders,
+      forcePrimaryProvider,
+      disabledProviders
     },
     openaiBaseUrl: model.openaiBaseUrl || model.genericBaseUrl || 'https://api.openai.com/v1',
     openaiApiKey: model.openaiApiKey || model.genericApiKey || ''
@@ -136,13 +157,10 @@ export function defaultConfig() {
           maxToolIterations: 3,
           allowedTools: [
             'file_read',
-            'file_write',
-            'file_patch',
-            'file_restore_last',
+            'file_search',
+            'file_grep',
+            'file_info',
             'session_list',
-            'session_delete',
-            'session_clear',
-            'shell_run',
             'http_request',
             'browser_status',
             'browser_extract',
@@ -150,13 +168,15 @@ export function defaultConfig() {
             'summarize',
             'classify',
             'extract',
+            'parse_function_args',
+            'embed_text',
             'skill_list',
             'email_status',
             'research_list_recent'
           ],
           odd: {
             maxConfidenceRequired: 0.7,
-            allowedTools: ['file_read', 'http_request', 'browser_snapshot', 'skill_list', 'email_status', 'research_list_recent'],
+            allowedTools: ['file_read', 'file_search', 'file_grep', 'file_info', 'session_list', 'http_request', 'browser_status', 'browser_extract', 'browser_snapshot', 'summarize', 'classify', 'extract', 'parse_function_args', 'embed_text', 'skill_list', 'email_status', 'research_list_recent'],
             blockedTools: ['file_write', 'shell_run', 'file_patch', 'desktop_open', 'desktop_xdotool'],
             requireHumanApproval: true
           }
@@ -251,9 +271,9 @@ export function defaultConfig() {
     },
     model: {
       provider: 'ollama-cloud',
-      model: 'ollama-cloud/minimax-m2.7:cloud',
+      model: 'ollama-cloud/qwen3.5:397b-cloud',
       providerModels: {
-        'ollama-cloud': 'ollama-cloud/minimax-m2.7:cloud',
+        'ollama-cloud': 'ollama-cloud/qwen3.5:397b-cloud',
         'ollama-local': 'ollama-local/gemma4:cpu',
         openrouter: 'openrouter/openai/gpt-4o-mini',
         nvidia: 'nvidia/qwen/qwen3-coder-480b-a35b-instruct',
@@ -261,7 +281,7 @@ export function defaultConfig() {
         openai: 'openai/gpt-4o-mini'
       },
       contextHints: {
-        'ollama-cloud/minimax-m2.7:cloud': 32768,
+        'ollama-cloud/qwen3.5:397b-cloud': 262144,
         'ollama-local/gemma4:cpu': 32768,
         'ollama-local/nomic-embed-text:latest': 8192,
         'openrouter/openai/gpt-4o-mini': 128000,
@@ -371,9 +391,6 @@ export function loadConfig() {
   }
   config = applySecretsToConfig(config);
   config.model = normalizeModelConfig(config.model);
-  if (!config.model.routing.fallbackProviders?.length) {
-    config.model.routing.fallbackProviders = ['ollama-cloud', 'nvidia', 'openrouter', 'openai'];
-  }
   return config;
 }
 

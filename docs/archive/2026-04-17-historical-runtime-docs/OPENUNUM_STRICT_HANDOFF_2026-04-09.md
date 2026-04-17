@@ -2,6 +2,8 @@
 
 This document is the canonical implementation handoff for the next agent.
 
+> Historical handoff: this file captures the repo state and runtime assumptions from 2026-04-09. For current runtime truth, use `docs/CURRENT_STATE_MATRIX.md`, `docs/AGENT_ONBOARDING.md`, and `docs/CHANGELOG_CURRENT.md`.
+
 ## Execution Updates
 
 ### 2026-04-09 (Model-backed tools phase-one slice)
@@ -148,7 +150,7 @@ This document is the canonical implementation handoff for the next agent.
 
 ## Repository Context
 
-- Repository root: `/home/corp-unum/openunum`
+- Repository root: repository workspace
 - Primary runtime entrypoints:
   - `src/server.mjs`
   - `src/cli.mjs`
@@ -275,7 +277,7 @@ These are not optional. The next agent should preserve them while implementing t
      - `src/secrets/store.mjs:598`
 
 6. Debug/utility scripts contain hardcoded local DB paths.
-   - `scripts/get-session.mjs` opens `/home/corp-unum/openunum/openunum.db`.
+   - `scripts/get-session.mjs` opens the SQLite database through a repo-local absolute path assumption.
    - Impact: utility tooling is misleading or broken on any other machine.
    - Evidence:
      - `scripts/get-session.mjs:1`
@@ -357,7 +359,7 @@ These are not optional. The next agent should preserve them while implementing t
      - `src/server/routes/ui.mjs:9`
 
 19. Operations docs and examples are strongly tied to one local deployment shape.
-   - Many docs assume `127.0.0.1:18880`, `/home/corp-unum/openunum`, or local OpenClaw paths.
+   - Many docs assume fixed localhost ports, repo-root absolute paths, or local OpenClaw paths.
    - Impact: operator docs are accurate for one machine, not for portable deployment.
 
 ## Execution Plan

@@ -3,6 +3,7 @@ export async function handleHealthRoute({ req, res, url, ctx }) {
     const health = await ctx.runHealthCheck();
     ctx.sendJson(res, 200, {
       ok: true,
+      healthy: Boolean(health?.ok),
       service: 'openunum',
       health
     });
@@ -32,7 +33,7 @@ export async function handleHealthRoute({ req, res, url, ctx }) {
 
   if (req.method === 'GET' && url.pathname === '/api/health/check') {
     const health = await ctx.runHealthCheck();
-    ctx.sendJson(res, health.ok ? 200 : 503, health);
+    ctx.sendJson(res, health?.ok ? 200 : 503, health);
     return true;
   }
 

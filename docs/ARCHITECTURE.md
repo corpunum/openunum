@@ -1,7 +1,7 @@
 # OpenUnum Architecture
 
-**Version:** 2.5.0  
-**Last Updated:** 2026-04-16
+**Version:** 2.5.1  
+**Last Updated:** 2026-04-17
 
 ---
 
@@ -44,6 +44,7 @@ Unified retrieval pipeline:
 - Tamper-evident HMAC-SHA256 chain hashing
 - Logs every tool execution and critical mission state change
 - Provides a cryptographically verifiable history of agent actions
+- Canonical storage: `OPENUNUM_HOME/audit/audit-log.jsonl`
 - 3-tier HMAC secret resolution: env var > persisted random file (0600) > insecure fallback with CRITICAL warning
 
 ### 6. Autonomy Master (`src/core/autonomy-master.mjs`)
@@ -52,6 +53,7 @@ Unified retrieval pipeline:
 - **Sleep Cycles:** Triggers `MemoryConsolidator` (Hippocampal Replay) during idle periods
 - **Consolidation Triggers:** Time-based (24h) and count-based (50 memories) in addition to sleep
 - **Death-Spiral Detection:** Tracks `consecutiveNoProgressCycles`, enters degraded mode, auto-creates remediations
+- **Single-flight Cycles:** overlapping runs collapse to one in-flight cycle
 - **Auto-Start:** Enabled by default (`autonomyMasterAutoStart: true`)
 
 ---
@@ -61,7 +63,9 @@ Unified retrieval pipeline:
 ```
 User Input
     ↓
-FastPathRouter (Short-circuit check) → [Deterministic Reply]
+FastPathRouter / deterministic routes → [Deterministic Reply]
+    ↓
+Safety Council (pre-flight ODD + tool allowlist + self-protection checks)
     ↓
 Context Compiler (Assembles context via Unified Hybrid Retrieval)
     ↓
@@ -69,11 +73,9 @@ Role-Model Escalation (Check if current model meets role tier, auto-escalate if 
     ↓
 LLM (Generates Thought + Tool Calls)
     ↓
-Tool Runtime (Executes tools + Finality checks for irreversible ops + Logs to Audit Trail)
+Tool Runtime (Executes tools + verifier checks + finality tracking + audit logging)
     ↓
-Proof Scorer (Validates completion) + Independent Verifier (5-check validation)
-    ↓
-Safety Council (ODD enforcement via execution envelope tier allowlists)
+Proof Scorer (Validates completion) + Independent Verifier (post-flight reply validation)
     ↓
 Audit Log (Records task_complete state with HMAC chain)
     ↓
@@ -85,10 +87,10 @@ Response (With trace metadata + verification + finality info)
 ## Memory System
 
 ### Storage Locations
-- **Sessions:** `data/sessions/*.json`
-- **Memories:** `data/memory/*.md` (for hybrid retrieval)
+- **Canonical runtime memory:** `OPENUNUM_HOME/openunum.db`
+- **Audit trail:** `OPENUNUM_HOME/audit/audit-log.jsonl`
 - **Working Memory:** `OPENUNUM_HOME/working-memory/*.json` (repo-local `data/working-memory/*.json` is legacy fallback/debug state only)
-- **Static Cache:** `data/static-system-instructions.md`
+- **Legacy/generated repo-local artifacts:** `data/*` (non-canonical unless explicitly documented)
 
 ### Embedding Model
 - **Provider:** Ollama (localhost:11434)
@@ -111,17 +113,20 @@ Response (With trace metadata + verification + finality info)
 ### Tool Runtime
 - Located: `src/tools/runtime.mjs`
 - Features: Argument generation, fallback handling, result compaction
-- Finality: `FinalityGadget` checks for irreversible tools (`file_write`, `file_patch`, `shell_run`, `git_push`)
+- Compact envelopes are read-only by default
+- Tool results receive independent verifier metadata before trace/log emission
+- Finality uses stable operation keys plus persisted confirmation history; tracked operations require `3` verified successes before `_finality.finalized=true`
 - Backend substrate: `src/tools/backends/*` (registry/contracts/profiles/governor/adapters)
 
 ---
 
 ## Autonomy Enhancements
 
-### Throttling (`src/core/autonomy-throttle.mjs`)
-- Prevents runaway tool loops
-- Enforces pauses between actions
-- Detects and breaks cycles
+### Bounded Health + Recovery (`src/core/self-heal.mjs`, `src/core/self-heal-orchestrator.mjs`)
+- Health checks are parallel and time-bounded
+- `/api/health` is a service wrapper and no longer re-enters self-heal via HTTP
+- `/api/health/check` is the strict health-status endpoint
+- Browser/CDP degradation remains a subsystem issue and feeds autonomy remediation
 
 ### Task Decomposition (`src/core/task-decomposer.mjs`)
 - Breaks large tasks into subplans
@@ -140,7 +145,7 @@ Response (With trace metadata + verification + finality info)
 ```bash
 OLLAMA_BASE_URL=http://127.0.0.1:11434
 OPENUNUM_PORT=18881
-OPENUNUM_WORKSPACE=/home/corp-unum/openunum
+OPENUNUM_WORKSPACE=$PWD
 ```
 
 ---

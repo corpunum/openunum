@@ -3,8 +3,10 @@
 **Date:** 2026-04-07  
 **Session:** council-validation-complete  
 **Evaluator:** Main Agent (Governance Orchestrator)  
-**Scope:** `/home/corp-unum/openunum/`  
+**Scope:** repository workspace  
 **Status:** ✅ COMPLETE — All 7 Council Members Evaluated
+
+> Historical snapshot: this report reflects the 2026-04-07 council audit. Several items listed below have since been closed, including audit logging, independent verification, and tier-scoped ODD enforcement. Use `docs/CURRENT_STATE_MATRIX.md`, `docs/AGENT_ONBOARDING.md`, and `docs/CHANGELOG_CURRENT.md` for live runtime truth.
 
 ---
 

@@ -8,12 +8,12 @@ The Role-Model Registry maps task roles (categories of work) to appropriate AI m
 
 | Role | Min Tier | Recommended Models | Blocked Models | Description |
 |------|----------|-------------------|----------------|-------------|
-| `research` | balanced | `ollama/qwen3.5:397b-cloud`, `nvidia/llama-3.3-nemotron-super-49b-v1` | `ollama/qwen3.5:9b-64k` | Research tasks requiring synthesis and reasoning |
-| `code_gen` | full | `openai-codex/gpt-5.4`, `ollama/qwen3.5:397b-cloud` | — | Code generation requiring full capability |
-| `code_review` | balanced | `ollama/qwen3.5:397b-cloud`, `nvidia/llama-3.3-nemotron-super-49b-v1` | — | Code review and analysis |
-| `file_ops` | compact | `ollama/qwen3.5:9b-64k` | — | Simple file operations |
-| `browser_automation` | balanced | `ollama/qwen3.5:397b-cloud` | — | Browser automation tasks |
-| `chat` | compact | `ollama/qwen3.5:9b-64k`, `ollama/qwen3.5:397b-cloud` | — | General conversation |
+| `research` | balanced | `ollama-cloud/qwen3.5:397b-cloud`, `nvidia/llama-3.3-nemotron-super-49b-v1` | `ollama-local/gemma4:cpu` | Research tasks requiring synthesis and reasoning |
+| `code_gen` | full | `ollama-cloud/qwen3.5:397b-cloud`, `openai/gpt-5.4` | — | Code generation requiring full capability |
+| `code_review` | balanced | `ollama-cloud/qwen3.5:397b-cloud`, `nvidia/llama-3.3-nemotron-super-49b-v1` | — | Code review and analysis |
+| `file_ops` | compact | `ollama-local/gemma4:cpu` | — | Simple file operations |
+| `browser_automation` | balanced | `ollama-cloud/qwen3.5:397b-cloud` | — | Browser automation tasks |
+| `chat` | compact | `ollama-local/gemma4:cpu`, `ollama-cloud/qwen3.5:397b-cloud` | — | General conversation |
 
 ### Tier Hierarchy
 
@@ -26,7 +26,7 @@ The Role-Model Registry maps task roles (categories of work) to appropriate AI m
 1. A task type is classified (e.g., "research", "code_gen", "file_ops")
 2. The `RoleModelResolver` looks up the role in the registry
 3. It returns the recommended models filtered by what's currently available
-4. The task planner selects the first available recommended model
+4. The task planner selects a recommended model that also satisfies the role's inferred minimum tier
 
 ## API
 
@@ -40,12 +40,12 @@ resolver.resolve('research');
 // → { minTier: 'balanced', recommended: [...], blocked: [...], description: '...' }
 
 // Check if a model is allowed
-resolver.isModelAllowed('research', 'ollama/qwen3.5:9b-64k');
-// → { allowed: false, reason: "Model is blocked for role 'research'" }
+resolver.isModelAllowed('research', 'ollama-local/gemma4:cpu');
+// → { allowed: false, reason: "Model ... is below required tier ..." }
 
 // Get available recommended models
-resolver.getRecommended('research', ['ollama/qwen3.5:397b-cloud', 'ollama/qwen3.5:9b-64k']);
-// → ['ollama/qwen3.5:397b-cloud']
+resolver.getRecommended('research', ['ollama-cloud/qwen3.5:397b-cloud', 'ollama-local/gemma4:cpu']);
+// → ['ollama-cloud/qwen3.5:397b-cloud']
 ```
 
 ## REST API
@@ -96,8 +96,8 @@ The `GoalTaskPlanner` uses `RoleModelResolver` to select models for each step:
 
 ```javascript
 const planner = new GoalTaskPlanner();
-const result = planner.resolveModelForTask('research', ['ollama/qwen3.5:397b-cloud', 'ollama/qwen3.5:9b-64k']);
-// → { model: 'ollama/qwen3.5:397b-cloud', reason: '...', minTier: 'balanced' }
+const result = planner.resolveModelForTask('research', ['ollama-cloud/qwen3.5:397b-cloud', 'ollama-local/gemma4:cpu']);
+// → { model: 'ollama-cloud/qwen3.5:397b-cloud', reason: '...', minTier: 'balanced' }
 ```
 
 ## Customization

@@ -109,6 +109,7 @@ export function bindSettingsProviderVaultActions(ctx) {
   };
 
   q('saveRuntime').onclick = async () => {
+    const fallbackEnabled = q('fallbackEnabled').value === 'true';
     const out = await jpost('/api/config', {
       runtime: {
         autonomyMode: q('autonomyMode').value,
@@ -117,8 +118,10 @@ export function bindSettingsProviderVaultActions(ctx) {
       },
       model: {
         routing: {
-          fallbackEnabled: q('fallbackEnabled').value === 'true',
-          fallbackProviders: computeOnlineFallbackSequence(getFallbackSequence(), getModelCatalog()).map((entry) => entry.provider)
+          fallbackEnabled,
+          fallbackProviders: fallbackEnabled
+            ? computeOnlineFallbackSequence(getFallbackSequence(), getModelCatalog()).map((entry) => entry.provider)
+            : []
         }
       }
     });
@@ -132,4 +135,3 @@ export function bindSettingsProviderVaultActions(ctx) {
     await runWebuiWireValidation('runtime_save');
   };
 }
-

@@ -22,8 +22,11 @@ Primary runtime truth is in:
 - `OPENUNUM_HOME/openunum.db` (default `~/.openunum/openunum.db`)
 
 Read runtime state through API/CLI first:
+- `GET /api/health`
+- `GET /api/health/check`
 - `GET /api/runtime/state-contract`
 - `GET /api/runtime/config-parity`
+- `GET /api/audit/diagnostics`
 - `GET /api/autonomy/master/status`
 - `GET /api/chat/diagnostics`
 - `node src/cli.mjs runtime status`
@@ -50,6 +53,8 @@ Interpretation:
 
 - `ollama-local`: local CPU lane (gemma4 + embeddings only)
 - `ollama-cloud`: cloud model lane
+- current primary controller model: `ollama-cloud/qwen3.5:397b-cloud`
+- current operational routing profile: `forcePrimaryProvider=true`, `fallbackEnabled=false` until extra providers are intentionally enabled
 - additional providers: `nvidia`, `openrouter`, `xiaomimimo`, `openai`
 
 ## Model-Backed Logical Tools
@@ -87,6 +92,8 @@ pnpm gate:ui-surface
 pnpm gate:repo-hygiene
 ```
 
+`pnpm smoke:ui:noauth` is self-contained by default and launches a temporary server unless you explicitly point it at an existing base URL.
+
 ## Working Rules
 
 - Continue from `docs/ROADMAP.md`, not from archived phase docs unless explicitly requested.
@@ -99,12 +106,16 @@ pnpm gate:repo-hygiene
 The following systems are now active and wired into the agent runtime:
 
 - **Autonomy Master auto-starts** by default (`autonomyMasterAutoStart: true` in `src/config.mjs`). Sleep cycles, memory consolidation, self-heal, and self-improvement all run automatically.
-- **Death-spiral detection** in `AutonomyMaster`: tracks consecutive no-progress cycles and enters degraded mode, auto-creating remediations.
+- **Autonomy cycle execution is single-flight** in `AutonomyMaster`: overlapping timer/manual cycles collapse onto one in-flight run.
+- **Death-spiral detection** in `AutonomyMaster`: tracks consecutive no-progress cycles, enters degraded mode, and now treats critical audit/parity/self-awareness signals as real no-progress.
 - **Memory consolidation** triggers on time (24h) and count (50 memories), not just sleep cycles.
-- **ODD enforcement** via `SafetyCouncil.checkODD()` → `resolveExecutionEnvelope()` → tier-based tool allowlists.
-- **Independent Verifier** (`src/core/verifier.mjs`): 5-check system (tool appropriateness, output quality, goal alignment, safety compliance, context coherence). All results audit-logged.
-- **Role-model escalation** (`src/core/role-model-registry.mjs` → `agent.mjs`): auto-escalates to a higher-tier model when the current model doesn't meet the role's minimum tier.
+- **ODD enforcement** uses the real execution envelope. Compact-tier allowlists are read-only by default, and preflight now passes provider/model plus proposed tools.
+- **Independent Verifier** (`src/core/verifier.mjs`): 5-check system (tool appropriateness, output quality, goal alignment, safety compliance, context coherence). Tool results and post-flight replies now pass through real verifier calls, with all verifier events audit-logged.
+- **Role-model escalation** (`src/core/role-model-registry.mjs` → `agent.mjs`): tier checks now use inferred model tier instead of permissive allow-by-default behavior.
+- **Role-model escalation availability filter**: recommended routes are now skipped when the provider is disabled, missing required auth/base URL, or otherwise not routable in the current runtime config.
 - **Freshness decay** wired into `HybridRetriever` at 30% weight (`src/memory/recall.mjs` → `applyFreshnessAndReturn()`).
-- **FinalityGadget** (`src/core/finality.mjs` → `tools/runtime.mjs`): consecutive-success rule for irreversible tools.
-- **Audit HMAC secret** uses 3-tier resolution: `AUDIT_HMAC_SECRET` env > `~/.openunum/audit-hmac-secret` file > insecure fallback with CRITICAL warning.
-- **Legacy `selfheal.mjs`** is archived. Canonical self-heal path: `src/core/self-heal.mjs` + `src/core/self-heal-orchestrator.mjs`.
+- **FinalityGadget** (`src/core/finality.mjs` → `tools/runtime.mjs`): stable operation keys, persisted state, and default `3` verified successes for tracked destructive/high-risk operations.
+- **Audit log** now lives at `OPENUNUM_HOME/audit/audit-log.jsonl`. HMAC secret resolution remains: `AUDIT_HMAC_SECRET` env > `~/.openunum/audit-hmac-secret` file > insecure fallback with CRITICAL warning.
+- **Self-awareness** returns `insufficient_evidence` instead of a false healthy score when there are no assistant turns to evaluate.
+- **Health surface is bounded**: `/api/health` no longer re-enters self-heal via HTTP, and strict health status lives on `/api/health/check`.
+- **Legacy `selfheal.mjs`** is archived under `maintenance/archive/legacy-core/`. Canonical self-heal path: `src/core/self-heal.mjs` + `src/core/self-heal-orchestrator.mjs`.

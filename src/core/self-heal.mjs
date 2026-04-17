@@ -11,10 +11,11 @@ import { probeCdpEndpoint } from '../browser/cdp.mjs';
  */
 
 export class SelfHealSystem {
-  constructor({ config, agent, memoryStore }) {
+  constructor({ config, agent, memoryStore, probes = {} }) {
     this.config = config;
     this.agent = agent;
     this.memoryStore = memoryStore;
+    this.probes = probes;
     this.healthState = {
       lastCheck: null,
       status: 'unknown',
@@ -31,24 +32,35 @@ export class SelfHealSystem {
    */
   async runHealthCheck() {
     const checks = [];
-    const issues = [];
 
     // 1. Check server responsiveness
     checks.push({
       name: 'server_responsive',
+      timeoutMs: 1000,
       check: async () => {
-        try {
-          const res = await fetch(`http://${this.config.server.host}:${this.config.server.port}/api/health`);
-          return { ok: res.ok, latency: res.ok ? 'ok' : 'failed' };
-        } catch (e) {
-          return { ok: false, error: String(e.message || e) };
+        if (typeof this.probes.serverResponsive === 'function') {
+          const result = await this.probes.serverResponsive();
+          return {
+            ok: result?.ok !== false,
+            mode: 'probe',
+            ...(result || {})
+          };
         }
+        const startedAt = Date.now();
+        await new Promise((resolve) => setTimeout(resolve, 0));
+        return {
+          ok: true,
+          mode: 'in_process',
+          latencyMs: Date.now() - startedAt,
+          uptimeSeconds: Math.round(process.uptime())
+        };
       }
     });
 
     // 2. Check config file integrity
     checks.push({
       name: 'config_valid',
+      timeoutMs: 1000,
       check: async () => {
         try {
           const cfg = loadConfig();
@@ -62,6 +74,7 @@ export class SelfHealSystem {
     // 3. Check database integrity
     checks.push({
       name: 'database_valid',
+      timeoutMs: 1000,
       check: async () => {
         try {
           const dbPath = path.join(getHomeDir(), 'openunum.db');
@@ -77,9 +90,10 @@ export class SelfHealSystem {
     // 4. Check Ollama connectivity
     checks.push({
       name: 'ollama_reachable',
+      timeoutMs: 3000,
       check: async () => {
         try {
-          const res = await fetch(`${this.config.model.ollamaBaseUrl}/api/tags`);
+          const res = await this.fetchWithTimeout(`${this.config.model.ollamaBaseUrl}/api/tags`, 3000);
           return { ok: res.ok, modelsAvailable: res.ok };
         } catch (e) {
           return { ok: false, error: String(e.message || e) };
@@ -90,9 +104,10 @@ export class SelfHealSystem {
     // 5. Check browser CDP
     checks.push({
       name: 'browser_cdp',
+      timeoutMs: 2500,
       check: async () => {
         try {
-          const out = await probeCdpEndpoint(this.config.browser.cdpUrl);
+          const out = await probeCdpEndpoint(this.config.browser.cdpUrl, { timeoutMs: 2500 });
           return {
             ok: out.ok === true,
             version: out.ok ? String(out.mode || 'connected') : 'failed',
@@ -107,9 +122,10 @@ export class SelfHealSystem {
     // 6. Check disk space
     checks.push({
       name: 'disk_space',
+      timeoutMs: 5000,
       check: async () => {
         try {
-          const { stdout } = await this.runShell('df -h /home | tail -1');
+          const { stdout } = await this.runShell('df -h /home | tail -1', 5000);
           const parts = stdout.trim().split(/\s+/);
           const usePercent = parseInt(parts[4] || '0', 10);
           return { ok: usePercent < 90, usagePercent: usePercent };
@@ -122,9 +138,10 @@ export class SelfHealSystem {
     // 7. Check available RAM
     checks.push({
       name: 'memory_available',
+      timeoutMs: 5000,
       check: async () => {
         try {
-          const { stdout } = await this.runShell('free -m | grep Mem | awk \'{print $7}\'');
+          const { stdout } = await this.runShell('free -m | grep Mem | awk \'{print $7}\'', 5000);
           const availableMB = parseInt(stdout.trim(), 10);
           return { ok: availableMB > 500, availableMB };
         } catch (e) {
@@ -133,28 +150,33 @@ export class SelfHealSystem {
       }
     });
 
-    // Run all checks
-    for (const check of checks) {
+    const checkResults = await Promise.all(checks.map(async (check) => {
       try {
-        const result = await check.check();
-        this.healthState.lastCheck = new Date().toISOString();
-        
-        if (!result.ok) {
-          issues.push({
-            check: check.name,
-            timestamp: new Date().toISOString(),
-            error: result.error || 'check_failed',
-            details: result
-          });
-        }
+        const result = await Promise.race([
+          Promise.resolve().then(() => check.check()),
+          this.timeoutAfter(check.timeoutMs || 3000)
+        ]);
+        return { check: check.name, result };
       } catch (error) {
-        issues.push({
+        return {
           check: check.name,
-          timestamp: new Date().toISOString(),
-          error: `check_exception: ${String(error.message || error)}`
-        });
+          result: {
+            ok: false,
+            error: `check_exception: ${String(error.message || error)}`
+          }
+        };
       }
-    }
+    }));
+
+    this.healthState.lastCheck = new Date().toISOString();
+    const issues = checkResults
+      .filter(({ result }) => !result?.ok)
+      .map(({ check, result }) => ({
+        check,
+        timestamp: this.healthState.lastCheck,
+        error: result?.error || 'check_failed',
+        details: result || {}
+      }));
 
     this.healthState.issues = issues;
     this.healthState.status = issues.length === 0 ? 'healthy' : 'degraded';
@@ -165,10 +187,16 @@ export class SelfHealSystem {
     }
 
     return {
+      ok: issues.length === 0,
       status: this.healthState.status,
       timestamp: this.healthState.lastCheck,
       checksPassed: checks.length - issues.length,
       checksFailed: issues.length,
+      checks: checkResults.map(({ check, result }) => ({
+        name: check,
+        ok: Boolean(result?.ok),
+        details: result || {}
+      })),
       issues
     };
   }
@@ -398,6 +426,22 @@ export class SelfHealSystem {
     return new Promise((r) => setTimeout(r, ms));
   }
 
+  timeoutAfter(timeoutMs) {
+    return new Promise((_, reject) => {
+      setTimeout(() => reject(new Error(`timeout_after_${timeoutMs}ms`)), timeoutMs);
+    });
+  }
+
+  async fetchWithTimeout(url, timeoutMs = 2500) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+    try {
+      return await fetch(url, { signal: controller.signal });
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
   /**
    * Helper: Find Chrome binary
    */
@@ -432,9 +476,9 @@ export class SelfHealSystem {
       },
       model: {
         provider: 'ollama-cloud',
-        model: 'ollama-cloud/minimax-m2.7:cloud',
+        model: 'ollama-cloud/qwen3.5:397b-cloud',
         providerModels: {
-          'ollama-cloud': 'ollama-cloud/minimax-m2.7:cloud',
+          'ollama-cloud': 'ollama-cloud/qwen3.5:397b-cloud',
           'ollama-local': 'ollama-local/gemma4:cpu',
           openrouter: 'openrouter/openai/gpt-4o-mini',
           nvidia: 'nvidia/qwen/qwen3-coder-480b-a35b-instruct',

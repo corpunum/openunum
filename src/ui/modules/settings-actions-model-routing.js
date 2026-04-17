@@ -45,7 +45,9 @@ export function bindSettingsModelRoutingActions(ctx) {
     const provider = q('provider').value;
     const selectedModel = q('modelList').value;
     ensureFallbackSequence(provider);
-    const onlineFallbackSequence = computeOnlineFallbackSequence(getFallbackSequence(), getModelCatalog());
+    const onlineFallbackSequence = enabled
+      ? computeOnlineFallbackSequence(getFallbackSequence(), getModelCatalog())
+      : [];
     const providerModels = buildProviderModelsPatch(provider, selectedModel, onlineFallbackSequence);
     await jpost('/api/config', {
       model: {
@@ -73,4 +75,3 @@ export function bindSettingsModelRoutingActions(ctx) {
     await runWebuiWireValidation('routing_save');
   };
 }
-

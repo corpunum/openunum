@@ -2,11 +2,12 @@
 
 OpenUnum is an Ubuntu-first autonomous agent framework built around the principles in `BRAIN.MD`: framework orientation, bounded autonomy, model agnosticism, truthful completion, continuous validation, and self-improvement through memory.
 
-## Current State (2026-04-11)
+## Current State (2026-04-17)
 
 Implemented and active:
 - modular WebUI backed by the active server/runtime routes
 - multi-provider runtime with explicit `ollama-local` and `ollama-cloud` lanes
+- current cloud-primary controller baseline: `ollama-cloud/qwen3.5:397b-cloud`
 - chat trace visibility, pending SSE updates, and completion-cache handoff
 - mission runner with proof-aware completion, effective step-limit reporting, and stall guardrails
 - SQLite-backed runtime memory (`facts`, `tool_runs`, `strategy_outcomes`, `route_lessons`, `memory_artifacts`, `session_compactions`)
@@ -22,6 +23,15 @@ Recent hardening in this tranche:
 - `web_fetch` now returns canonical success shape (`ok: true`) and recovery synthesis now prefers successful evidence over circuit-open noise
 - runtime overview and UI asset serving now cache low-volatility reads to reduce WebUI overhead
 - working-memory anchors now prefer `OPENUNUM_HOME/working-memory` over repo-local generated state
+- config parity now fails impossible provider states such as disabled active primary + forced-primary routing
+- compact execution envelopes are read-only by default; mutating tools are no longer in the compact allowlist
+- audit log storage now lives under `OPENUNUM_HOME/audit/audit-log.jsonl`
+- independent verification now runs on tool results and post-flight replies
+- finality tracking uses stable operation keys, default `3` verified successes, and persisted state
+- autonomy cycles now run single-flight and degrade on critical health/audit/parity/self-awareness signals
+- `/api/health` and autonomy health checks are now bounded and non-recursive
+- role-model escalation now skips disabled/unconfigured provider routes instead of escalating into dead lanes
+- legacy `selfheal.mjs` / `health-monitor.mjs` are archived out of `src/`
 
 ## Fast Start
 
@@ -62,6 +72,8 @@ Canonical umbrella gate:
 pnpm verify
 ```
 
+`pnpm smoke:ui:noauth` starts an isolated temporary server unless `OPENUNUM_BASE_URL` or `OPENUNUM_API_URL` is explicitly set.
+
 ## New-Agent Read Order
 
 1. `BRAIN.MD`
@@ -99,14 +111,18 @@ node src/cli.mjs sessions list
 ## Runtime Notes
 
 - Default autonomy preset is `autonomy-first`.
+- Default cloud-primary model is `ollama-cloud/qwen3.5:397b-cloud`.
+- Operational routing baseline currently pins that cloud model as the primary route with fallback disabled until additional providers are explicitly configured.
 - Other supported presets are `compact-local` and `relentless`.
 - Mission payloads are now guarded: `maxSteps` is bounded to `1..120`, `hardStepCap` to `1..300`, and `maxRetries` to `0..20`.
 - Working-memory anchors are generated runtime artifacts, not canonical repo inputs.
+- Audit truth lives at `OPENUNUM_HOME/audit/audit-log.jsonl`, not repo-root generated data.
 - `GET /api/config` is sanitized. Use `GET /api/providers/config` and `GET /api/auth/catalog` for provider/auth readiness.
 - Live autonomy/operator telemetry surfaces:
   - `GET /api/autonomy/master/status`
   - `GET /api/autonomy/remediations`
   - `GET /api/chat/diagnostics`
+  - `GET /api/audit/diagnostics`
 
 ## Deployment
 

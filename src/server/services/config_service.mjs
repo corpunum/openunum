@@ -1,25 +1,13 @@
 import { normalizeProviderId } from '../../models/catalog.mjs';
+import { normalizeModelConfig } from '../../config.mjs';
 import { applySecretsToConfig, loadSecretStore, mergeSecrets, saveSecretStore } from '../../secrets/store.mjs';
 
 export function createConfigService({ config, PROVIDER_ORDER, reloadConfigSecrets }) {
   function normalizeModelSettings() {
-    config.model.provider = normalizeProviderId(config.model.provider);
-    config.model.providerModels = config.model.providerModels || {};
-    if (config.model.providerModels.generic && !config.model.providerModels.openai) {
-      config.model.providerModels.openai = String(config.model.providerModels.generic).replace(/^generic\//, 'openai/');
-    }
-    delete config.model.providerModels.generic;
-    config.model.openaiBaseUrl = config.model.openaiBaseUrl || config.model.genericBaseUrl || 'https://api.openai.com/v1';
-    config.model.openaiApiKey = config.model.openaiApiKey || config.model.genericApiKey || '';
+    config.model = normalizeModelConfig(config.model || {});
     config.model.genericBaseUrl = config.model.openaiBaseUrl;
     config.model.genericApiKey = config.model.openaiApiKey;
-    config.model.model = String(config.model.model || '')
-      .replace(/^generic\//, 'openai/')
-      .replace(/^ollama\//, `${config.model.provider}/`);
     config.model.routing = config.model.routing || {};
-    config.model.routing.fallbackProviders = (config.model.routing.fallbackProviders || PROVIDER_ORDER)
-      .map((provider) => normalizeProviderId(provider))
-      .filter((provider, index, arr) => provider && arr.indexOf(provider) === index);
     config.model.behaviorOverrides = config.model.behaviorOverrides || {};
   }
 

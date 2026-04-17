@@ -90,8 +90,11 @@ import { createHybridRetriever } from '../memory/recall.mjs';
 import { FastPathRouter } from './fast-path-router.mjs';
 import { SafetyCouncil } from './council/safety-council.mjs';
 import { ProofScorerCouncil } from './council/proof-scorer.mjs';
+import { IndependentVerifier } from './verifier.mjs';
 import { logEvent } from './audit-log.mjs';
 import { logInfo, logError } from '../logger.mjs';
+import { saveConfig } from '../config.mjs';
+import { buildConfigParityReport } from './config-parity-check.mjs';
 
 export { isConversationalAliveQuestion };
 
@@ -229,6 +232,7 @@ export class OpenUnumAgent {
     // R4: Council Middleware - Pre-flight and Post-flight validation
     this.safetyCouncil = new SafetyCouncil({ config, memoryStore: this.memoryStore });
     this.proofScorerCouncil = new ProofScorerCouncil({ config });
+    this.independentVerifier = new IndependentVerifier({ config, memoryStore: this.memoryStore });
 
     // R6: Role-Model Registry - maps task roles to appropriate model tiers
     this.roleModelResolver = new RoleModelResolver(roleModelRegistry);
@@ -628,19 +632,51 @@ export class OpenUnumAgent {
 
   buildProviderAttempts() {
     const preferred = this.config.model.provider;
+    const disabledProviders = new Set(
+      (this.config.model.routing?.disabledProviders || [])
+        .map((provider) => String(provider || '').trim())
+        .filter(Boolean)
+    );
     if (this.config.model.routing?.forcePrimaryProvider) {
-      return [{ provider: preferred, model: this.config.model.model }];
+      return disabledProviders.has(preferred)
+        ? []
+        : [{ provider: preferred, model: this.config.model.model }];
     }
     const fallbackEnabled = this.config.model.routing?.fallbackEnabled !== false;
     const fallbacks = fallbackEnabled ? (this.config.model.routing?.fallbackProviders || []) : [];
-    const providers = uniq([preferred, ...fallbacks]).filter(Boolean);
+    const providers = uniq([preferred, ...fallbacks])
+      .filter(Boolean)
+      .filter((provider) => !disabledProviders.has(provider));
     const now = Date.now();
     let selected = providers.filter((provider) => shouldUseProvider(this.providerAvailability.get(provider), now));
-    if (!selected.length) selected = [preferred];
+    if (!selected.length && providers.length > 0) selected = [providers[0]];
     return selected.map((provider) => ({
       provider,
       model: provider === preferred ? this.config.model.model : this.getModelForProvider(provider)
     }));
+  }
+
+  canAttemptProviderRoute(provider, model = '') {
+    const normalizedProvider = String(provider || '').trim().toLowerCase();
+    const report = buildConfigParityReport(this.config, process.env);
+    const matrix = report.providerMatrix?.[normalizedProvider];
+    if (!matrix) {
+      return { ok: false, reason: 'provider_unknown' };
+    }
+    if (matrix.disabled) {
+      return { ok: false, reason: 'provider_disabled' };
+    }
+    if (!matrix.baseUrlConfigured) {
+      return { ok: false, reason: 'provider_base_url_missing' };
+    }
+    if (!normalizedProvider.startsWith('ollama-') && !matrix.apiKeyConfigured) {
+      return { ok: false, reason: 'provider_api_key_missing' };
+    }
+    const resolvedModel = String(model || this.getModelForProvider(normalizedProvider) || '').trim();
+    if (!resolvedModel) {
+      return { ok: false, reason: 'provider_model_missing' };
+    }
+    return { ok: true, model: resolvedModel };
   }
 
   shouldSpawnRepairQuest({ sessionId, toolName, sideQuestMode = false, errorCode = '' } = {}) {
@@ -827,7 +863,7 @@ export class OpenUnumAgent {
           if (!disabled.includes(provider)) {
             this.config.model.routing = this.config.model.routing || {};
             this.config.model.routing.disabledProviders = [...disabled, provider];
-            this.saveConfig(this.config);
+            saveConfig(this.config);
             this.memoryStore.rememberFact(`model.${provider}.status`, 'quota_limit');
           }
         }
@@ -1026,7 +1062,9 @@ export class OpenUnumAgent {
             sessionId,
             deadlineAt: turnStartedAt + turnBudgetMs,
             allowedTools: turnToolAllowlist,
-            policyMode: this.config?.runtime?.autonomyPolicy?.mode || 'execute'
+            policyMode: this.config?.runtime?.autonomyPolicy?.mode || 'execute',
+            provider,
+            model
           });
         } catch (error) {
           result = { ok: false, error: String(error.message || error) };
@@ -1038,7 +1076,7 @@ export class OpenUnumAgent {
           step: i + 1,
           reason: result?.error || ''
         });
-        
+
         // PHASE 2: Spawn repair side-quest after repeated failures (throttled, never recursive).
         if (
           toolRunFailed(result) &&
@@ -1288,6 +1326,61 @@ export class OpenUnumAgent {
       answerShape: trace.answerAssessment?.shape || 'unknown',
       answerScore: trace.answerAssessment?.score || 0
     };
+    try {
+      const verification = await this.independentVerifier.verify({
+        userMessage: originalUserMessage,
+        assistantReply: finalText,
+        toolRuns: executedTools,
+        context: {
+          sessionId,
+          toolRuns: executedTools
+        }
+      });
+      trace.independentVerification = verification;
+      const severeIssues = (verification.issues || []).filter((issue) => ['high', 'critical'].includes(String(issue?.severity || '').toLowerCase()));
+      if (!verification.verified && severeIssues.length > 0) {
+        const criticalIssue = severeIssues.find(i => String(i?.severity || '').toLowerCase() === 'critical');
+        if (criticalIssue) {
+          // Critical verification failure: trigger revision cycle instead of just warning
+          logInfo('critical_verification_failure', { issue: criticalIssue.issue, sessionId });
+          messages.push({
+            role: 'system',
+            content: `Critical verification failure: ${criticalIssue.issue}. Review your response and fix the issue before delivering. Ensure tool results support your claims and no safety/compliance issues exist.`
+          });
+          // Retry one more provider turn with revision instruction
+          const revisionRun = await this.runOneProviderTurn({
+            provider,
+            model,
+            messages,
+            sessionId,
+            routedTools,
+            contextPackInputs,
+            workingMemory,
+            toolsAllow,
+            sideQuestMode: true
+          });
+          finalText = revisionRun.finalText;
+          trace.independentVerificationPostRevision = await this.independentVerifier.verify({
+            userMessage: originalUserMessage,
+            assistantReply: finalText,
+            toolRuns: revisionRun.trace?.iterations?.flatMap(iter => iter?.toolCalls || []) || [],
+            context: { sessionId }
+          });
+        } else {
+          // High severity but not critical: add warning but continue
+          trace.finalization = {
+            ...(trace.finalization || {}),
+            state: 'partial'
+          };
+          finalText = `${finalText}\n\nVerification warning: ${String(severeIssues[0]?.issue || 'post-flight verification failed')}.`;
+        }
+      }
+    } catch (error) {
+      trace.independentVerification = {
+        verified: false,
+        error: String(error.message || error)
+      };
+    }
     this.lastRuntime = { provider, model };
     this.config.model.providerModels = this.config.model.providerModels || {};
     this.config.model.providerModels[provider] = model;
@@ -1318,7 +1411,7 @@ export class OpenUnumAgent {
           logInfo('council_postflight_revision_required', {
             sessionId,
             reason: proofResult.reason,
-            proofScore: proofResult.proofScore?.overallScore
+            proofScore: Number(proofResult.proofScore?.score ?? proofResult.proofScore?.overallScore ?? 0)
           });
 
           // Add revision prompt and continue iteration
@@ -1327,14 +1420,24 @@ export class OpenUnumAgent {
             content: `Proof quality insufficient: ${proofResult.reason}. Please provide stronger evidence for your claims before claiming completion.`
           });
 
-          // Recursive call with revision flag (one retry only)
-          return await this.chat({
-            message,
+          const revisionRun = await this.runOneProviderTurn({
+            provider,
+            model,
+            messages,
             sessionId,
-            modelOverride,
+            routedTools,
+            contextPackInputs,
+            workingMemory,
             toolsAllow,
             sideQuestMode: true
           });
+          trace.councilProofRevision = {
+            attempted: true,
+            reason: proofResult.reason,
+            proofScore: Number(proofResult.proofScore?.score ?? proofResult.proofScore?.overallScore ?? 0)
+          };
+          trace.councilProofRevisionTrace = revisionRun.trace;
+          finalText = revisionRun.finalText;
         }
       } catch (e) {
         logError('council_postflight_failed', { error: String(e.message || e) });
@@ -1381,13 +1484,27 @@ export class OpenUnumAgent {
       return deterministicRepoReply;
     }
 
+    const skills = loadSkills();
+    let routedTools = inferRoutedTools(message);
+
     // R4: PRE-FLIGHT COUNCIL - Safety and ODD validation
     if (this.config.runtime?.councilEnabled !== false) {
+      const currentModel = this.getCurrentModel();
+      const provider = currentModel.activeProvider || currentModel.provider || this.config.model.provider;
+      const model = currentModel.activeModel || currentModel.model || this.config.model.model;
+      const envelope = resolveExecutionEnvelope({
+        provider,
+        model,
+        runtime: this.config.runtime
+      });
       const councilResult = await this.safetyCouncil.preFlight({
         message,
         sessionId,
         context: {
-          executionTier: this.getCurrentExecutionTier?.() || 'standard'
+          provider,
+          model,
+          executionTier: envelope.tier,
+          proposedTools: routedTools.map((item) => item.tool)
         }
       });
 
@@ -1405,9 +1522,6 @@ export class OpenUnumAgent {
         };
       }
     }
-
-    const skills = loadSkills();
-    let routedTools = inferRoutedTools(message);
 
     this.memoryStore.addMessage(sessionId, 'user', message);
     
@@ -1661,8 +1775,10 @@ export class OpenUnumAgent {
       allowed: roleCheck.allowed,
       reason: roleCheck.reason
     };
-    if (!roleCheck.allowed && !this.config.model.routing?.forcePrimaryProvider) {
+    if (!roleCheck.allowed) {
       // Auto-escalate: find a recommended model that meets the tier requirement
+      // Note: This check is ALWAYS performed regardless of forcePrimaryProvider setting
+      // to ensure weak models cannot be used for tasks requiring higher tiers
       const recommended = roleConfig.recommended || [];
       for (const recModel of recommended) {
         const [recProvider, ...recModelParts] = recModel.split('/');
@@ -1670,7 +1786,8 @@ export class OpenUnumAgent {
         if (recProvider && recModelName) {
           const recRef = `${recProvider}/${recModelName}`;
           const recCheck = this.roleModelResolver.isAllowed(roleMode.mode, recRef);
-          if (recCheck.allowed) {
+          const routeReadiness = this.canAttemptProviderRoute(recProvider, recModelName);
+          if (recCheck.allowed && routeReadiness.ok) {
             logInfo('role_model_escalation', {
               role: roleMode.mode,
               from: currentModelRef,
@@ -1681,8 +1798,8 @@ export class OpenUnumAgent {
             routeTelemetry.roleModel.escalatedTo = recRef;
             // Prepend the recommended model as first attempt
             effectiveAttempts = [
-              { provider: recProvider, model: recModelName },
-              ...effectiveAttempts
+              { provider: recProvider, model: routeReadiness.model },
+              ...effectiveAttempts.filter((attempt) => !(attempt.provider === recProvider && attempt.model === routeReadiness.model))
             ];
             break;
           }

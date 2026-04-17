@@ -231,6 +231,9 @@ export function createRuntimeService({
     const effectivePhase = String(phase || '').trim() || 'phase0';
     const effectiveNextAction = String(nextAction || '').trim() || 'Review diagnostics and proceed with planned work';
     const parity = buildConfigParityReport(config, process.env);
+    const effectiveFallbackProviders = Array.isArray(parity.summary?.effectiveFallbackProviders)
+      ? parity.summary.effectiveFallbackProviders
+      : [];
     const blockers = (parity.issues || [])
       .filter((issue) => issue?.level === 'error')
       .map((issue) => String(issue?.code || '').trim())
@@ -243,7 +246,8 @@ export function createRuntimeService({
       nextAction: effectiveNextAction,
       verifiedObservations: [
         `active_provider:${String(config.model?.provider || 'unknown')}`,
-        `fallback_count:${Array.isArray(config.model?.routing?.fallbackProviders) ? config.model.routing.fallbackProviders.length : 0}`,
+        `fallback_enabled:${String(config.model?.routing?.fallbackEnabled !== false)}`,
+        `fallback_count:${effectiveFallbackProviders.length}`,
         `parity_severity:${String(parity.severity || 'unknown')}`
       ],
       permissions: {
@@ -328,7 +332,8 @@ export function createRuntimeService({
       };
       config.model.routing.forcePrimaryProvider = true;
       config.model.routing.fallbackEnabled = false;
-      config.model.routing.fallbackProviders = [config.model.provider];
+      config.model.routing.fallbackProviders = [];
+      normalizeModelSettings();
       autonomyMaster.stop();
       return 'compact-local';
     }
@@ -350,7 +355,8 @@ export function createRuntimeService({
       };
       config.model.routing.forcePrimaryProvider = true;
       config.model.routing.fallbackEnabled = false;
-      config.model.routing.fallbackProviders = [config.model.provider];
+      config.model.routing.fallbackProviders = [];
+      normalizeModelSettings();
       if (config.runtime.autonomyMasterAutoStart) autonomyMaster.start();
       return 'relentless';
     }
@@ -372,6 +378,7 @@ export function createRuntimeService({
     if (!config.model.routing.fallbackProviders?.length) {
       config.model.routing.fallbackProviders = [...PROVIDER_ORDER];
     }
+    normalizeModelSettings();
     autonomyMaster.stop();
     return 'autonomy-first';
   }

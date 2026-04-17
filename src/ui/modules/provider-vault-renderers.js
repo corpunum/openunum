@@ -122,6 +122,10 @@ export function createProviderVaultRenderers({
         const cp = authCatalog.providers.find((p) => p.provider === provider);
         let runtimeConfigCache = getRuntimeConfigCache();
         runtimeConfigCache = runtimeConfigCache || await jget('/api/config');
+        if (runtimeConfigCache?.model?.provider === provider && !cp?.disabled) {
+          setStatus('providerStatus', `switch primary provider before disabling ${provider}`, { type: 'warn', title: 'Provider Vault' });
+          return;
+        }
         const existingDisabled = runtimeConfigCache?.model?.routing?.disabledProviders || [];
         const nextDisabled = !cp.disabled;
         await jpost('/api/config', {
@@ -164,15 +168,15 @@ export function createProviderVaultRenderers({
         if (!provider) return;
         let runtimeConfigCache = getRuntimeConfigCache();
         runtimeConfigCache = runtimeConfigCache || await jget('/api/config');
+        if (runtimeConfigCache?.model?.provider === provider) {
+          setStatus('providerStatus', `switch primary provider before removing ${provider}`, { type: 'warn', title: 'Provider Vault' });
+          return;
+        }
         const providerModels = { ...(runtimeConfigCache?.model?.providerModels || {}) };
         delete providerModels[provider];
         const fallbackProviders = (runtimeConfigCache?.model?.routing?.fallbackProviders || []).filter((p) => p !== provider);
         const disabledProviders = [...new Set([...(runtimeConfigCache?.model?.routing?.disabledProviders || []), provider])];
         const modelPatch = { providerModels, routing: { fallbackProviders, disabledProviders } };
-        if (runtimeConfigCache?.model?.provider === provider) {
-          modelPatch.provider = 'ollama-cloud';
-          modelPatch.model = stripProviderPrefix(providerModels['ollama-cloud'] || 'minimax-m2.7:cloud', getModelProviderIds());
-        }
         await jpost('/api/config', { model: modelPatch });
         setRuntimeConfigCache(null);
         setStatus('providerStatus', `removed from routing ${provider}`, { type: 'warn', title: 'Provider Vault' });

@@ -117,10 +117,11 @@ After every change, update:
 - **Self-reading index refresh** (`pnpm docs:index`) after major architecture/doc movement
 - **Session-imitation regression replay** (`pnpm test:imitation`) to guard continuation/memory behavior
 - **Secrets-at-rest hardening**: prefer encrypted passphrase backend for production deployments
-- **Canonical self-heal path**: keep runtime + autonomy surfaces on `src/core/self-heal-orchestrator.mjs` and `src/core/self-heal.mjs` (SelfHealSystem); `selfheal.mjs` (SelfHealMonitor) is still imported by self-test and orchestrator
+- **Canonical self-heal path**: keep runtime + autonomy surfaces on `src/core/self-heal-orchestrator.mjs` and `src/core/self-heal.mjs` (SelfHealSystem); legacy monitors belong under `maintenance/archive/legacy-core/`, not on active import paths
 - **Death-spiral detection**: `AutonomyMaster` tracks `consecutiveNoProgressCycles` and enters degraded mode when threshold exceeded; `ensureRemediationFromDeathSpiral()` auto-creates remediations
 - **WebUI/backend wire validation**: after provider/model/skill/routing add-delete-edit actions, verify API wiring + runtime reflections before claiming success
 - **Provider split discipline**: treat `ollama-local` and `ollama-cloud` as separate lanes (local lane restricted to gemma4 + embeddings; cloud lane for cloud models)
+- **Profile honesty**: local-first remains the architecture target, but the active operational profile must be documented exactly; at the moment that means cloud-primary control on `ollama-cloud/qwen3.5:397b-cloud` until the local-first cutover is ready
 
 **Phase 1-3 Implemented Systems (Document These):**
 - **Verifier** (`src/core/verifier.mjs`) — Independent 5-check validation (tool appropriateness, output quality, goal alignment, safety compliance, context coherence)

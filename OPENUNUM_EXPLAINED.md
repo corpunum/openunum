@@ -16,7 +16,7 @@ Most AI assistants claim autonomy but operate as black boxes. OpenUnum takes a d
 
 **2. Local-First Intelligence**
 
-The default model for all routine tasks is a local model via Ollama. Cloud providers are treated as fallback/augmentation paths when local inference is unavailable, context requirements are high, or policy/routing requires stronger models. This minimizes costs, improves resilience, and keeps routine workloads local-first.
+Local-first remains the architectural target, but the current operational baseline is intentionally cloud-primary while the runtime is being hardened. Today the controller runs on `ollama-cloud/qwen3.5:397b-cloud`, while local Ollama still handles the memory/embedding lane and model-backed helper tools where configured. The goal is to switch back to a true local-first controller profile once the bounded-autonomy, verification, and UI/runtime surfaces are stable enough to carry it.
 
 **3. Framework Over Product**
 

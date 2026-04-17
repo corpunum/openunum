@@ -214,6 +214,7 @@ export function scoreProofQuality({ assistantText, toolRuns, taskGoal }) {
 
   return {
     score: Math.round(finalScore * 1000) / 1000,
+    overallScore: Math.round(finalScore * 1000) / 1000,
     confident,
     evidence,
     breakdown,

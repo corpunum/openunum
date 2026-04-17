@@ -5,6 +5,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 import { promisify } from 'node:util';
+import { buildConfigParityReport } from './config-parity-check.mjs';
+import { getAuditDiagnostics } from './audit-log.mjs';
 
 const execFileAsync = promisify(execFile);
 
@@ -38,10 +40,17 @@ export class SelfHealMonitor {
     // Check 1: Config integrity
     try {
       const cfg = loadConfig();
+      const parity = buildConfigParityReport(cfg, process.env);
       if (!cfg.runtime || !cfg.model || !cfg.server) {
         throw new Error('Missing required config sections');
       }
-      checks.config = { ok: true, loaded: true };
+      checks.config = {
+        ok: parity.ok,
+        loaded: true,
+        paritySeverity: parity.severity,
+        errorCodes: (parity.issues || []).filter((issue) => issue.level === 'error').map((issue) => issue.code)
+      };
+      if (!parity.ok) allOk = false;
     } catch (error) {
       checks.config = { ok: false, error: String(error.message || error) };
       allOk = false;
@@ -95,13 +104,18 @@ export class SelfHealMonitor {
     // Check 5: Provider connectivity
     try {
       const testModel = this.agent.getCurrentModel();
+      const attempts = typeof this.agent.buildProviderAttempts === 'function'
+        ? this.agent.buildProviderAttempts()
+        : [];
       checks.provider = { 
-        ok: true, 
+        ok: attempts.length > 0,
         provider: testModel.provider, 
         model: testModel.model,
         activeProvider: testModel.activeProvider,
-        activeModel: testModel.activeModel
+        activeModel: testModel.activeModel,
+        routedAttempts: attempts.length
       };
+      if (attempts.length === 0) allOk = false;
     } catch (error) {
       checks.provider = { ok: false, error: String(error.message || error) };
       allOk = false;
@@ -110,7 +124,21 @@ export class SelfHealMonitor {
     // Check 6: Server responsiveness (internal)
     checks.server = { ok: true, uptime: process.uptime(), pid: process.pid };
 
-    // Check 7: Log file writeable
+    // Check 7: Audit integrity
+    try {
+      const audit = getAuditDiagnostics();
+      checks.audit = {
+        ok: audit.ok === true,
+        issueCodes: (audit.issues || []).map((issue) => issue.code),
+        auditLogPath: audit.auditLogPath
+      };
+      if (audit.ok !== true) allOk = false;
+    } catch (error) {
+      checks.audit = { ok: false, error: String(error.message || error) };
+      allOk = false;
+    }
+
+    // Check 8: Log file writeable
     try {
       const homeDir = process.env.OPENUNUM_HOME || path.join(os.homedir(), '.openunum');
       const testLogPath = path.join(homeDir, 'logs', `health-test-${Date.now()}.log`);
@@ -122,7 +150,7 @@ export class SelfHealMonitor {
       allOk = false;
     }
 
-    // Check 8: Skills directory
+    // Check 9: Skills directory
     try {
       const homeDir = process.env.OPENUNUM_HOME || path.join(os.homedir(), '.openunum');
       const skillsDir = path.join(homeDir, 'skills');

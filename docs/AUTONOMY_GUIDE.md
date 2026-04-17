@@ -182,7 +182,7 @@ GET  /api/missions/status?id= # Get mission status
 ├── src/
 │   ├── core/
 │   │   ├── agent.mjs          # Main agent logic
-│   │   ├── selfheal.mjs       # Self-healing monitor
+│   │   ├── self-heal.mjs      # Canonical self-healing system
 │   │   ├── self-test.mjs      # Self-testing framework
 │   │   ├── auto-improve.mjs   # Auto-improvement engine
 │   │   ├── daemon-manager.mjs # Process management
