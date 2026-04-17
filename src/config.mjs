@@ -134,7 +134,7 @@ export function defaultConfig() {
       contextFallbackTokens: 16000,
       executorRetryAttempts: 3,
       executorRetryBackoffMs: 700,
-      providerRequestTimeoutMs: 120000,
+      providerRequestTimeoutMs: 240000,
       agentTurnTimeoutMs: 420000,
       maxRequestBodyBytes: 1048576,
       autonomyMode: 'autonomy-first',

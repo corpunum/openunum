@@ -8,7 +8,7 @@ export class OpenAICompatibleProvider {
 
   async chat({ messages, tools = [], timeoutMs, nativeWebSearch = false }) {
     const effectiveTimeout = Number.isFinite(timeoutMs)
-      ? Math.max(1000, Math.min(Number(timeoutMs), this.timeoutMs))
+      ? Math.max(1000, Number(timeoutMs))
       : this.timeoutMs;
     const toolDefs = tools.length > 0
       ? tools

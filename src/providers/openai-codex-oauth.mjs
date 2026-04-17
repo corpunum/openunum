@@ -183,7 +183,7 @@ export class OpenAICodexOAuthProvider {
 
   async chat({ messages, tools = [], timeoutMs }) {
     const effectiveTimeout = Number.isFinite(timeoutMs)
-      ? Math.max(1000, Math.min(Number(timeoutMs), this.timeoutMs))
+      ? Math.max(1000, Number(timeoutMs))
       : this.timeoutMs;
     const apiKey = await this.resolveApiKey();
     const controller = new AbortController();

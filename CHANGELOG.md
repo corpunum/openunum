@@ -4,6 +4,14 @@ All notable changes to OpenUnum are documented in this file.
 
 ---
 
+## [2.4.2] - 2026-04-17
+
+### Changed
+- **Increased Generation Budgets**: Doubled `providerRequestTimeoutMs` to 240,000ms (4 minutes) to support complex coding and reasoning tasks that require long token generation sequences.
+- **Improved Timeout Orchestration**: Updated all providers (`Ollama`, `OpenAI-Compatible`, `Codex OAuth`) to respect the full turn budget passed from the agent core, preventing premature timeouts on heavy requests.
+
+---
+
 ## [2.4.1] - 2026-04-17
 
 ### Added

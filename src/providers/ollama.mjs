@@ -104,7 +104,7 @@ export class OllamaProvider {
 
   async chat({ messages, tools = [], timeoutMs }) {
     const effectiveTimeout = Number.isFinite(timeoutMs)
-      ? Math.max(1000, Math.min(Number(timeoutMs), this.timeoutMs))
+      ? Math.max(1000, Number(timeoutMs))
       : this.timeoutMs;
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(new Error('provider_timeout')), effectiveTimeout);
