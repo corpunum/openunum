@@ -911,6 +911,11 @@ export function buildPivotHints({ executedTools = [], permissionDenials = [], ti
   const hints = [];
   const failedTools = executedTools.filter((item) => item?.result?.ok === false);
   const repeatedFailures = new Map();
+  const distinctProviderFailures = new Set(
+    (Array.isArray(providerFailures) ? providerFailures : [])
+      .map((item) => String(item?.provider || '').trim())
+      .filter(Boolean)
+  );
   for (const item of failedTools) {
     repeatedFailures.set(item.name, (repeatedFailures.get(item.name) || 0) + 1);
   }
@@ -938,10 +943,57 @@ export function buildPivotHints({ executedTools = [], permissionDenials = [], ti
   if (timedOut) {
     hints.push('Turn timed out. Narrow the scope or switch to a faster provider/model.');
   }
-  if (providerFailures.length >= 2) {
+  if (distinctProviderFailures.size >= 2) {
     hints.push('Multiple providers failed. Prefer the healthiest provider path and reduce prompt complexity.');
   }
   return [...new Set(hints)].slice(0, 5);
+}
+
+export function formatProviderFailureReply({ failures = [], effectiveAttempts = [], routing = {} } = {}) {
+  const failureItems = Array.isArray(failures) ? failures : [];
+  const attemptItems = Array.isArray(effectiveAttempts) ? effectiveAttempts : [];
+  const distinctFailureProviders = new Set(
+    failureItems.map((item) => String(item?.provider || '').trim()).filter(Boolean)
+  );
+  const distinctAttemptRoutes = new Set(
+    attemptItems
+      .map((item) => {
+        const provider = String(item?.provider || '').trim();
+        const model = String(item?.model || '').trim();
+        return provider && model ? `${provider}/${model}` : '';
+      })
+      .filter(Boolean)
+  );
+  const distinctProviderCount = distinctFailureProviders.size || distinctAttemptRoutes.size;
+  const forcePrimaryProvider = routing?.forcePrimaryProvider === true;
+  const fallbackEnabled = routing?.fallbackEnabled !== false;
+  const timeoutOnly = failureItems.length > 0 && failureItems.every((item) => item?.kind === 'timeout');
+
+  const lines = [
+    distinctProviderCount > 1 ? 'All provider attempts failed.' : 'Primary provider failed.'
+  ];
+
+  if (forcePrimaryProvider) {
+    lines.push('This runtime stayed on the primary provider because forcePrimaryProvider is enabled.');
+  } else if (!fallbackEnabled) {
+    lines.push('Fallback routing is disabled for this runtime.');
+  } else if (distinctProviderCount <= 1 && distinctAttemptRoutes.size <= 1) {
+    lines.push('No alternate provider route was available for this turn.');
+  }
+
+  for (const item of failureItems) {
+    const provider = String(item?.provider || 'provider').trim();
+    const kind = String(item?.kind || 'unknown').trim();
+    const action = String(item?.action || 'none').trim();
+    const error = String(item?.error || 'unknown_error').trim();
+    lines.push(`${provider}: kind=${kind} action=${action} error=${error}`);
+  }
+
+  if (timeoutOnly) {
+    lines.push('The active model exhausted its turn budget before it could finish this task.');
+  }
+
+  return lines.filter(Boolean).join('\n');
 }
 
 const EXECUTION_PROFILES = [

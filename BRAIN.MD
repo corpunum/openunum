@@ -194,6 +194,8 @@ Agents must be able to:
 | **`ollama-cloud` Falls Through Default Behavior** | Provider key `ollama-cloud` not matched in `defaultBehaviorFor` | Check both `ollama` and `ollama-cloud` in conditional branches |
 | **Planner Misclassification on Tool-Free Turns** | Knowledge/creative queries with `toolRuns=0` always become `planner_heavy_no_exec` | Only classify as planner if no iteration has assistant content >20 chars |
 | **Hard Timeout Kills Multi-Iteration Turns** | 90s `chatHardTimeoutMs` kills cloud-model agent loops mid-processing | Set `chatHardTimeoutMs: 300000` for cloud-primary deployments |
+| **Generic Verb Decomposition Drift** | Checklist fills with low-value `Execute: read/write/build` steps and weak completion signals | Map verbs to actionable step text and disable decomposition for broad weak-signal verb lists |
+| **Council Revision Recursion on Mild Deficit** | Post-flight proof gate forces extra revision turns even when evidence is already present | Skip revision when deficit is mild (`<= 0.08`) and tool/verifier evidence exists; log skip telemetry |
 
 ## Decision Making Framework
 

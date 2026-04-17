@@ -48,6 +48,7 @@ import {
   deterministicGreetingReply,
   deterministicLightChatReply,
   extractAutomaticFacts,
+  formatProviderFailureReply,
   getExecutionProfile,
   getLastUserMessage,
   inferParamsB,
@@ -105,6 +106,8 @@ function inferFinalizationState({ finalText = '', trace = null, progress = null 
     /^status:\s*partial/im,
     /^status:\s*ok[\s\S]*❌/im,
     /all configured providers failed/i,
+    /all provider attempts failed/i,
+    /primary provider failed/i,
     /\binsufficient evidence\b/i,
     /\btool_circuit_open\b/i,
     /\brequest is taking too long\b/i,
@@ -128,7 +131,26 @@ function inferFinalizationState({ finalText = '', trace = null, progress = null 
   };
 }
 
-export { inferFinalizationState, enforceVisibleReplyContract };
+function shouldSkipCouncilRevisionForMildProofDeficit({
+  proofResult = null,
+  minProofScore = 0.7,
+  executedTools = [],
+  independentVerification = null
+} = {}) {
+  const reason = String(proofResult?.reason || '');
+  if (!reason.startsWith('proof_quality_insufficient')) return false;
+  const score = Number(proofResult?.proofScore?.score ?? proofResult?.proofScore?.overallScore ?? 0);
+  if (!Number.isFinite(score)) return false;
+  const threshold = Number(minProofScore);
+  if (!Number.isFinite(threshold)) return false;
+  const scoreGap = threshold - score;
+  const mildDeficit = scoreGap > 0 && scoreGap <= 0.08;
+  if (!mildDeficit) return false;
+  const hasEvidence = (Array.isArray(executedTools) && executedTools.length > 0) || independentVerification?.verified === true;
+  return hasEvidence;
+}
+
+export { inferFinalizationState, enforceVisibleReplyContract, shouldSkipCouncilRevisionForMildProofDeficit };
 
 function enforceVisibleReplyContract({
   finalText = '',
@@ -1408,37 +1430,59 @@ export class OpenUnumAgent {
         trace.councilProofScore = proofResult.proofScore;
 
         if (proofResult.requiresRevision && !sideQuestMode) {
-          logInfo('council_postflight_revision_required', {
-            sessionId,
-            reason: proofResult.reason,
-            proofScore: Number(proofResult.proofScore?.score ?? proofResult.proofScore?.overallScore ?? 0)
+          const shouldSkipRevision = shouldSkipCouncilRevisionForMildProofDeficit({
+            proofResult,
+            minProofScore: this.config.runtime?.minProofScore ?? 0.7,
+            executedTools,
+            independentVerification: trace?.independentVerification
           });
+          if (shouldSkipRevision) {
+            logInfo('council_postflight_revision_skipped_mild_deficit', {
+              sessionId,
+              reason: proofResult.reason,
+              proofScore: Number(proofResult.proofScore?.score ?? proofResult.proofScore?.overallScore ?? 0),
+              toolCalls: Array.isArray(executedTools) ? executedTools.length : 0
+            });
+            trace.councilProofRevision = {
+              attempted: false,
+              skipped: true,
+              skipReason: 'mild_proof_deficit_with_evidence',
+              reason: proofResult.reason,
+              proofScore: Number(proofResult.proofScore?.score ?? proofResult.proofScore?.overallScore ?? 0)
+            };
+          } else {
+            logInfo('council_postflight_revision_required', {
+              sessionId,
+              reason: proofResult.reason,
+              proofScore: Number(proofResult.proofScore?.score ?? proofResult.proofScore?.overallScore ?? 0)
+            });
 
-          // Add revision prompt and continue iteration
-          messages.push({
-            role: 'system',
-            content: `Proof quality insufficient: ${proofResult.reason}. Please provide stronger evidence for your claims before claiming completion.`
-          });
+            // Add revision prompt and continue iteration
+            messages.push({
+              role: 'system',
+              content: `Proof quality insufficient: ${proofResult.reason}. Please provide stronger evidence for your claims before claiming completion.`
+            });
 
-          const revisionRun = await this.runOneProviderTurn({
-            provider,
-            model,
-            messages,
-            sessionId,
-            routedTools,
-            contextPackInputs,
-            workingMemory,
-            toolsAllow,
-            sideQuestMode: true
-          });
-          trace.councilProofRevision = {
-            attempted: true,
-            reason: proofResult.reason,
-            proofScore: Number(proofResult.proofScore?.score ?? proofResult.proofScore?.overallScore ?? 0)
-          };
-          trace.councilProofRevisionTrace = revisionRun.trace;
-          if (revisionRun.finalText && revisionRun.finalText !== 'No response generated.') {
-            finalText = revisionRun.finalText;
+            const revisionRun = await this.runOneProviderTurn({
+              provider,
+              model,
+              messages,
+              sessionId,
+              routedTools,
+              contextPackInputs,
+              workingMemory,
+              toolsAllow,
+              sideQuestMode: true
+            });
+            trace.councilProofRevision = {
+              attempted: true,
+              reason: proofResult.reason,
+              proofScore: Number(proofResult.proofScore?.score ?? proofResult.proofScore?.overallScore ?? 0)
+            };
+            trace.councilProofRevisionTrace = revisionRun.trace;
+            if (revisionRun.finalText && revisionRun.finalText !== 'No response generated.') {
+              finalText = revisionRun.finalText;
+            }
           }
         }
       } catch (e) {
@@ -1808,6 +1852,16 @@ export class OpenUnumAgent {
         }
       }
     }
+    routeTelemetry.routePolicy = {
+      preferredProvider: this.config.model.provider,
+      preferredModel: this.config.model.model,
+      forcePrimaryProvider: this.config.model.routing?.forcePrimaryProvider === true,
+      fallbackEnabled: this.config.model.routing?.fallbackEnabled !== false,
+      effectiveAttempts: effectiveAttempts.map((attempt) => ({
+        provider: attempt.provider,
+        model: attempt.model
+      }))
+    };
 
     // FastAwarenessRouter: classify message and potentially short-circuit
     const awarenessStartedAt = Date.now();
@@ -1985,9 +2039,15 @@ export class OpenUnumAgent {
             const errorMessage = String(error.message || error);
             const kind = classifyProviderFailure(error);
             const decision = resolveFallbackAction(kind, attemptNo);
+            const hasAlternateRoute = effectiveAttempts.some((candidate) =>
+              candidate.provider !== attempt.provider || candidate.model !== attempt.model
+            );
+            const action = decision.action === 'switch_provider' && !hasAlternateRoute
+              ? 'no_alternative_route'
+              : decision.action;
             this.markProviderFailure(attempt.provider, {
               kind,
-              action: decision.action,
+              action,
               cooldownMs: decision.cooldownMs,
               errorMessage
             });
@@ -1996,11 +2056,11 @@ export class OpenUnumAgent {
               model: attempt.model,
               attempt: attemptNo,
               kind,
-              action: decision.action,
+              action,
               cooldownMs: decision.cooldownMs,
               error: errorMessage
             });
-            if (decision.action === 'retry_same_provider' && attemptNo < 2) continue;
+            if (action === 'retry_same_provider' && attemptNo < 2) continue;
             break;
           }
         }
@@ -2010,7 +2070,11 @@ export class OpenUnumAgent {
       const failureLines = failures.map((item) => `${item.provider}: kind=${item.kind} action=${item.action} error=${item.error}`);
 
       if (!finalText) {
-        finalText = `All configured providers failed.\n${failureLines.join('\n')}`;
+        finalText = formatProviderFailureReply({
+          failures,
+          effectiveAttempts,
+          routing: routeTelemetry.routePolicy
+        });
         trace = {
           provider: this.config.model.provider,
           model: this.config.model.model,

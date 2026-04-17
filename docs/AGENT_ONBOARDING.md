@@ -54,7 +54,7 @@ Interpretation:
 - `ollama-local`: local CPU lane (gemma4 + embeddings only)
 - `ollama-cloud`: cloud model lane
 - current primary controller model: `ollama-cloud/qwen3.5:397b-cloud`
-- current operational routing profile: `forcePrimaryProvider=true`, `fallbackEnabled=false` until extra providers are intentionally enabled
+- current operational routing profile: cloud-primary with controlled fallback (`forcePrimaryProvider=false`, `fallbackEnabled=true`)
 - additional providers: `nvidia`, `openrouter`, `xiaomimimo`, `openai`
 
 ## Deterministic and Fast-Path Routing
@@ -147,3 +147,8 @@ Six bugs fixed that caused the `ollama-cloud/qwen3.5:397b-cloud` model to return
 5. **Planner misclassification**: `learnControllerBehavior` classified any turn with `toolRuns=0` and multiple iterations as `planner_heavy_no_exec`, even when the model returned substantive content. Now checks that no iteration has assistant content >20 chars before classifying.
 
 6. **Hard timeout**: `chatHardTimeoutMs` defaulted to 90s, killing cloud-model agent turns mid-processing. Set to 300s in runtime config.
+
+## Follow-Up Stabilization (2026-04-17)
+
+- **Task decomposition quality guard**: spot-the-difference HTML/game prompts now decompose into concrete implementation steps instead of generic `Execute: <verb>` fallback steps; broad weak-signal verb lists no longer trigger decomposition.
+- **Council revision anti-loop guard**: when proof deficit is mild (`<= 0.08`) and evidence already exists (tool runs and/or independent verifier), the post-flight council records a skip note instead of forcing another recursive revision turn.

@@ -23,6 +23,13 @@ This folder contains superseded and historical docs removed from active onboardi
 - `MODULAR_AGENT_ARCHITECTURE_NICE_TO_HAVE.md`
   - exploratory design notes not part of current architecture contract
 
+## Archived on 2026-04-17 (Runtime hardening follow-up)
+
+- `2026-04-17-historical-runtime-docs/OPENUNUM_FULL_REVIEW_AUTONOMY_PROPOSALS_2026-04-13.md`
+  - point-in-time full-review proposal moved out of active onboarding path
+- `2026-04-17-historical-runtime-docs/spot-difference-game.html`
+  - generated acceptance artifact kept for history, not part of active runtime surface
+
 ## Legacy Runtime Surfaces
 
 - `maintenance/autonomy-coordinator.legacy.mjs`

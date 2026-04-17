@@ -118,7 +118,7 @@ node src/cli.mjs sessions list
 
 - Default autonomy preset is `autonomy-first`.
 - Default cloud-primary model is `ollama-cloud/qwen3.5:397b-cloud`.
-- Operational routing baseline currently pins that cloud model as the primary route with fallback disabled until additional providers are explicitly configured.
+- Operational routing baseline is cloud-primary with controlled fallback enabled (`forcePrimaryProvider=false`, `fallbackEnabled=true`) so long turns can recover when the primary route degrades.
 - Other supported presets are `compact-local` and `relentless`.
 - Mission payloads are now guarded: `maxSteps` is bounded to `1..120`, `hardStepCap` to `1..300`, and `maxRetries` to `0..20`.
 - Working-memory anchors are generated runtime artifacts, not canonical repo inputs.

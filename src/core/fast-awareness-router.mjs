@@ -231,6 +231,11 @@ export class FastAwarenessRouter {
     };
 
     const featureScores = this._scoreLowIntentFeatures(normalized);
+    const startsWithContinuation = /^(continue|go on|proceed|keep going|and then|after that)\b/.test(normalized);
+    const looksLikeFreshBuildTask =
+      normalized.split(/\s+/).filter(Boolean).length > 12 &&
+      /\b(create|build|write|make)\b/.test(normalized) &&
+      /\b(html|page|game|app|tool|site)\b/.test(normalized);
 
     const hasTaskSignal = TASK_SIGNAL_RE.test(normalized);
     if (featureScores.greeting >= this.config.minFeatureGreetingScore && !hasTaskSignal) {
@@ -288,8 +293,13 @@ export class FastAwarenessRouter {
       scores.taskMeta = Math.min(1.0, Math.max(scores.taskMeta, 0.9));
     }
 
-    if (/\b(continue|go on|proceed|keep going)\b/.test(normalized)) {
+    if (startsWithContinuation) {
       scores.continuation = Math.min(1.0, Math.max(scores.continuation, 0.9));
+    }
+
+    if (looksLikeFreshBuildTask && !startsWithContinuation) {
+      scores.continuation = Math.min(scores.continuation, 0.45);
+      scores.external = Math.min(scores.external, 0.45);
     }
 
     return scores;

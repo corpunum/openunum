@@ -4,7 +4,7 @@ export function createChatRuntimeService({ agent, saveConfig, config }) {
   const pendingChats = new Map();
   const completedChats = new Map();
   const completedTtlMs = Math.max(5000, Number(config?.runtime?.chatCompletionCacheTtlMs || 180000));
-  const hardTimeoutMs = Math.max(15000, Number(config?.runtime?.chatHardTimeoutMs || 90000));
+  const hardTimeoutMs = Math.max(15000, Number(config?.runtime?.chatHardTimeoutMs || 300000));
   const pendingStuckMs = Math.max(5000, Number(config?.runtime?.pendingChatStuckMs || 45000));
 
   function isoNow() {

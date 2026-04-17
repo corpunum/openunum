@@ -130,5 +130,8 @@ Canonical umbrella gate:
 ### Council Revision Death Loop
 The council proof-scorer can trigger recursive `runOneProviderTurn` calls for revision. If the revision model call returns empty content (common with Qwen 3.5 thinking-mode responses), the revision result "No response generated." would overwrite good first-response text. Fix: revision `finalText` is only accepted if it is not the "No response generated." fallback.
 
+### Council Mild-Deficit Recursion Noise
+Even after overwrite protection, post-flight proof checks could still trigger extra revision turns on small score deficits despite existing tool/verifier evidence. Fix: skip revision when reason is `proof_quality_insufficient`, deficit is mild (`<= 0.08`), and evidence already exists; strict revision still applies to larger deficits.
+
 ### Behavior Registry Misclassification
 `learnControllerBehavior` can classify tool-free substantive responses as `planner_heavy_no_exec` (e.g., knowledge queries, creative prompts where the model correctly responds without tool calls). This cascades: the `planner_heavy_no_exec` class then causes the system prompt to include planner-directed guidance, degrading future turns. Fix: only classify as planner if no iteration has assistant content >20 chars. Operator remediation: reset the DB entry if the class drifts.

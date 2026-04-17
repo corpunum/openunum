@@ -1,0 +1,877 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Spot The Difference</title>
+  <style>
+    * {
+      box-sizing: border-box;
+    }
+
+    :root {
+      color-scheme: dark;
+      --bg: #101418;
+      --panel: #f4f2ea;
+      --panel-text: #172026;
+      --accent: #0f766e;
+      --accent-2: #d97706;
+      --success: #15803d;
+      --danger: #b91c1c;
+      --muted: #5f6b76;
+      --line: #d5d8dd;
+      --surface: #1a232b;
+    }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      font-family: Inter, "Segoe UI", system-ui, sans-serif;
+      background: var(--bg);
+      color: #f7fafc;
+    }
+
+    main {
+      max-width: 1100px;
+      margin: 0 auto;
+      padding: 24px 20px 40px;
+    }
+
+    .topbar {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+      align-items: end;
+      justify-content: space-between;
+      margin-bottom: 20px;
+    }
+
+    .title-block h1 {
+      margin: 0;
+      font-size: 2rem;
+      line-height: 1.1;
+    }
+
+    .title-block p {
+      margin: 6px 0 0;
+      color: #bdd5d2;
+      max-width: 640px;
+      line-height: 1.5;
+    }
+
+    .hud {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(110px, 1fr));
+      gap: 10px;
+      width: min(100%, 520px);
+    }
+
+    .stat {
+      background: #182028;
+      border: 1px solid #24313d;
+      border-radius: 8px;
+      padding: 12px 14px;
+      min-height: 72px;
+    }
+
+    .stat-label {
+      display: block;
+      color: #9eb4b0;
+      font-size: 0.78rem;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+
+    .stat-value {
+      display: block;
+      margin-top: 8px;
+      color: #f7fafc;
+      font-size: 1.35rem;
+      font-weight: 700;
+    }
+
+    .stage {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 16px;
+      align-items: start;
+    }
+
+    .board {
+      background: var(--panel);
+      color: var(--panel-text);
+      border-radius: 8px;
+      padding: 12px;
+      box-shadow: 0 18px 40px rgba(0, 0, 0, 0.24);
+    }
+
+    .board-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 10px;
+      font-weight: 700;
+    }
+
+    .board-tag {
+      color: var(--muted);
+      font-size: 0.92rem;
+      font-weight: 600;
+    }
+
+    canvas {
+      width: 100%;
+      height: auto;
+      display: block;
+      aspect-ratio: 4 / 3;
+      border-radius: 8px;
+      border: 1px solid var(--line);
+      background: #dbe7f3;
+    }
+
+    .meta {
+      display: grid;
+      grid-template-columns: minmax(0, 1.5fr) minmax(280px, 1fr);
+      gap: 16px;
+      margin-top: 18px;
+    }
+
+    .panel {
+      background: #182028;
+      border: 1px solid #24313d;
+      border-radius: 8px;
+      padding: 16px;
+    }
+
+    .panel h2 {
+      margin: 0 0 10px;
+      font-size: 1.1rem;
+    }
+
+    .panel p {
+      margin: 0;
+      color: #c7d2dc;
+      line-height: 1.5;
+    }
+
+    .difference-list {
+      margin: 12px 0 0;
+      padding: 0;
+      list-style: none;
+      display: grid;
+      gap: 8px;
+    }
+
+    .difference-list li {
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      align-items: center;
+      padding: 10px 12px;
+      border-radius: 8px;
+      background: #12181e;
+      color: #d7e0e8;
+    }
+
+    .difference-list li.found {
+      background: rgba(21, 128, 61, 0.18);
+      color: #e7fff0;
+    }
+
+    .pill {
+      border-radius: 999px;
+      padding: 5px 9px;
+      font-size: 0.78rem;
+      font-weight: 700;
+      background: rgba(15, 118, 110, 0.18);
+      color: #87ece2;
+      white-space: nowrap;
+    }
+
+    .pill.found {
+      background: rgba(21, 128, 61, 0.28);
+      color: #b8f5cc;
+    }
+
+    .status-line {
+      margin-top: 14px;
+      min-height: 24px;
+      color: #f1d59f;
+      font-weight: 600;
+    }
+
+    .actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin-top: 14px;
+    }
+
+    button {
+      border: 0;
+      border-radius: 8px;
+      padding: 12px 16px;
+      font: inherit;
+      font-weight: 700;
+      cursor: pointer;
+      transition: transform 120ms ease, opacity 120ms ease, background 120ms ease;
+    }
+
+    button:hover {
+      transform: translateY(-1px);
+    }
+
+    button.primary {
+      background: var(--accent);
+      color: #f4fffe;
+    }
+
+    button.secondary {
+      background: #273440;
+      color: #ebf2f7;
+    }
+
+    button[disabled] {
+      opacity: 0.5;
+      cursor: default;
+      transform: none;
+    }
+
+    .celebration {
+      margin-top: 12px;
+      color: #bff8d1;
+      font-weight: 700;
+    }
+
+    @media (max-width: 920px) {
+      .stage,
+      .meta {
+        grid-template-columns: 1fr;
+      }
+
+      .hud {
+        grid-template-columns: repeat(2, minmax(110px, 1fr));
+        width: 100%;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <section class="topbar">
+      <div class="title-block">
+        <h1>Spot The Difference</h1>
+        <p>Click inside the right scene. Clear the first scene with 3 differences, then move into harder rounds with 4 and 5 differences.</p>
+      </div>
+      <div class="hud" aria-label="Game status">
+        <div class="stat">
+          <span class="stat-label">Level</span>
+          <span class="stat-value" id="levelValue">1 / 3</span>
+        </div>
+        <div class="stat">
+          <span class="stat-label">Found</span>
+          <span class="stat-value" id="foundValue">0 / 3</span>
+        </div>
+        <div class="stat">
+          <span class="stat-label">Attempts</span>
+          <span class="stat-value" id="attemptValue">0</span>
+        </div>
+        <div class="stat">
+          <span class="stat-label">Next</span>
+          <span class="stat-value" id="nextValue">Locked</span>
+        </div>
+      </div>
+    </section>
+
+    <section class="stage" aria-label="Spot the difference boards">
+      <article class="board">
+        <div class="board-header">
+          <span>Reference</span>
+          <span class="board-tag" id="sceneNameA">Sunlit Meadow</span>
+        </div>
+        <canvas id="leftCanvas" width="480" height="360"></canvas>
+      </article>
+      <article class="board">
+        <div class="board-header">
+          <span>Play Here</span>
+          <span class="board-tag" id="sceneNameB">Find the differences</span>
+        </div>
+        <canvas id="rightCanvas" width="480" height="360" aria-label="Interactive scene"></canvas>
+      </article>
+    </section>
+
+    <section class="meta">
+      <article class="panel">
+        <h2>Targets</h2>
+        <p id="levelCopy"></p>
+        <ul class="difference-list" id="differenceList"></ul>
+      </article>
+
+      <article class="panel">
+        <h2>Round Control</h2>
+        <p id="statusCopy">Find every difference in the right scene to unlock the next round.</p>
+        <div class="status-line" id="statusLine">Round 1 is live.</div>
+        <div class="actions">
+          <button class="primary" id="nextButton" disabled>Next Round</button>
+          <button class="secondary" id="restartButton">Restart</button>
+        </div>
+        <div class="celebration" id="celebrationLine" hidden>Round cleared.</div>
+      </article>
+    </section>
+  </main>
+
+  <script>
+    const leftCanvas = document.getElementById('leftCanvas');
+    const rightCanvas = document.getElementById('rightCanvas');
+    const leftCtx = leftCanvas.getContext('2d');
+    const rightCtx = rightCanvas.getContext('2d');
+
+    const levelValue = document.getElementById('levelValue');
+    const foundValue = document.getElementById('foundValue');
+    const attemptValue = document.getElementById('attemptValue');
+    const nextValue = document.getElementById('nextValue');
+    const sceneNameA = document.getElementById('sceneNameA');
+    const sceneNameB = document.getElementById('sceneNameB');
+    const levelCopy = document.getElementById('levelCopy');
+    const differenceList = document.getElementById('differenceList');
+    const statusLine = document.getElementById('statusLine');
+    const statusCopy = document.getElementById('statusCopy');
+    const celebrationLine = document.getElementById('celebrationLine');
+    const nextButton = document.getElementById('nextButton');
+    const restartButton = document.getElementById('restartButton');
+
+    const levels = [
+      {
+        title: 'Sunlit Meadow',
+        copy: 'Round 1 keeps it straightforward: three broad changes in a meadow scene.',
+        differences: [
+          { id: 'sun', label: 'The sun changes color and shrinks.', x: 82, y: 70, r: 28 },
+          { id: 'tree', label: 'The tree canopy shifts to autumn orange.', x: 330, y: 180, r: 40 },
+          { id: 'flower', label: 'One flower cluster disappears on the right.', x: 396, y: 290, r: 26 }
+        ],
+        draw(ctx, variant) {
+          drawSky(ctx, '#bce7ff', '#eaf8ff');
+          drawGround(ctx, '#7ecb72', '#4ca14d');
+          drawSun(ctx, 82, 70, variant === 'modified' ? 20 : 28, variant === 'modified' ? '#f59e0b' : '#facc15');
+          drawCloud(ctx, 185, 78, '#ffffff');
+          drawCloud(ctx, 270, 96, '#f8fbff');
+          drawHouse(ctx, 178, 182, '#f3e2c0', '#b76e42');
+          drawTree(ctx, 328, 190, variant === 'modified' ? '#e6863b' : '#2e8b57');
+          drawFlowers(ctx, [
+            [74, 282, '#ec4899'],
+            [110, 300, '#f472b6'],
+            [398, 292, '#db2777'],
+            [428, 280, '#f59e0b']
+          ].filter(([x]) => variant !== 'modified' || x !== 398));
+        }
+      },
+      {
+        title: 'Harbor Watch',
+        copy: 'Round 2 adds four tighter targets across a harbor scene.',
+        differences: [
+          { id: 'flag', label: 'The boat flag changes from teal to red.', x: 174, y: 204, r: 24 },
+          { id: 'beacon', label: 'The lighthouse beacon goes dark.', x: 400, y: 118, r: 24 },
+          { id: 'buoy', label: 'The buoy loses its bright top stripe.', x: 82, y: 282, r: 24 },
+          { id: 'gull', label: 'One gull vanishes from the sky.', x: 290, y: 82, r: 22 }
+        ],
+        draw(ctx, variant) {
+          drawSky(ctx, '#9dd5ff', '#eef8ff');
+          drawWater(ctx);
+          drawPier(ctx);
+          drawLighthouse(ctx, variant !== 'modified');
+          drawBoat(ctx, variant === 'modified' ? '#dc2626' : '#0f766e');
+          drawBuoy(ctx, variant !== 'modified');
+          drawGulls(ctx, variant !== 'modified');
+        }
+      },
+      {
+        title: 'Night Shift',
+        copy: 'Round 3 uses five smaller changes in a night city scene.',
+        differences: [
+          { id: 'moon', label: 'The moon becomes a full moon instead of a crescent.', x: 78, y: 68, r: 26 },
+          { id: 'window', label: 'A high window lights up.', x: 196, y: 166, r: 24 },
+          { id: 'cat', label: 'The cat disappears from the alley.', x: 372, y: 302, r: 26 },
+          { id: 'sign', label: 'The cafe sign changes from amber to teal.', x: 120, y: 202, r: 30 },
+          { id: 'star', label: 'One star goes missing near the tower.', x: 318, y: 74, r: 18 }
+        ],
+        draw(ctx, variant) {
+          drawNightSky(ctx);
+          drawMoon(ctx, variant === 'modified' ? 'full' : 'crescent');
+          drawStars(ctx, variant !== 'modified');
+          drawCity(ctx, variant === 'modified');
+          drawStreet(ctx);
+        }
+      }
+    ];
+
+    const state = {
+      levelIndex: 0,
+      foundIds: new Set(),
+      attempts: 0,
+      flash: null
+    };
+
+    function drawSky(ctx, top, bottom) {
+      const gradient = ctx.createLinearGradient(0, 0, 0, 240);
+      gradient.addColorStop(0, top);
+      gradient.addColorStop(1, bottom);
+      ctx.fillStyle = gradient;
+      ctx.fillRect(0, 0, 480, 230);
+    }
+
+    function drawGround(ctx, top, bottom) {
+      const gradient = ctx.createLinearGradient(0, 230, 0, 360);
+      gradient.addColorStop(0, top);
+      gradient.addColorStop(1, bottom);
+      ctx.fillStyle = gradient;
+      ctx.fillRect(0, 220, 480, 140);
+    }
+
+    function drawSun(ctx, x, y, r, color) {
+      ctx.fillStyle = color;
+      ctx.beginPath();
+      ctx.arc(x, y, r, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    function drawCloud(ctx, x, y, color) {
+      ctx.fillStyle = color;
+      ctx.beginPath();
+      ctx.ellipse(x, y, 44, 22, 0, 0, Math.PI * 2);
+      ctx.ellipse(x - 36, y + 4, 28, 18, 0, 0, Math.PI * 2);
+      ctx.ellipse(x + 32, y + 4, 30, 18, 0, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    function drawHouse(ctx, x, y, wallColor, roofColor) {
+      ctx.fillStyle = wallColor;
+      ctx.fillRect(x, y, 96, 82);
+      ctx.fillStyle = roofColor;
+      ctx.beginPath();
+      ctx.moveTo(x - 12, y + 8);
+      ctx.lineTo(x + 48, y - 36);
+      ctx.lineTo(x + 108, y + 8);
+      ctx.closePath();
+      ctx.fill();
+      ctx.fillStyle = '#7c4a28';
+      ctx.fillRect(x + 36, y + 36, 24, 46);
+      ctx.fillStyle = '#c4e4ff';
+      ctx.fillRect(x + 12, y + 18, 18, 18);
+      ctx.fillRect(x + 66, y + 18, 18, 18);
+    }
+
+    function drawTree(ctx, x, y, canopyColor) {
+      ctx.fillStyle = '#7c4a28';
+      ctx.fillRect(x - 16, y, 24, 82);
+      ctx.fillStyle = canopyColor;
+      ctx.beginPath();
+      ctx.arc(x - 2, y - 12, 52, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    function drawFlowers(ctx, flowers) {
+      flowers.forEach(([x, y, color]) => {
+        ctx.fillStyle = '#2f7a35';
+        ctx.fillRect(x - 1.5, y - 16, 3, 16);
+        ctx.fillStyle = color;
+        ctx.beginPath();
+        ctx.arc(x, y - 18, 7, 0, Math.PI * 2);
+        ctx.fill();
+      });
+    }
+
+    function drawWater(ctx) {
+      const gradient = ctx.createLinearGradient(0, 160, 0, 360);
+      gradient.addColorStop(0, '#8fd4e7');
+      gradient.addColorStop(1, '#2c7da0');
+      ctx.fillStyle = gradient;
+      ctx.fillRect(0, 150, 480, 210);
+      ctx.strokeStyle = 'rgba(255,255,255,0.35)';
+      ctx.lineWidth = 2;
+      for (let y = 190; y < 340; y += 28) {
+        ctx.beginPath();
+        ctx.moveTo(24, y);
+        for (let x = 24; x <= 456; x += 28) {
+          ctx.quadraticCurveTo(x + 14, y - 7, x + 28, y);
+        }
+        ctx.stroke();
+      }
+    }
+
+    function drawPier(ctx) {
+      ctx.fillStyle = '#6b4f3a';
+      ctx.fillRect(0, 246, 186, 18);
+      for (let x = 18; x < 180; x += 28) {
+        ctx.fillRect(x, 264, 8, 58);
+      }
+    }
+
+    function drawLighthouse(ctx, beaconOn) {
+      ctx.fillStyle = '#f4efe7';
+      ctx.fillRect(388, 124, 34, 132);
+      ctx.fillStyle = '#d97706';
+      ctx.fillRect(388, 154, 34, 18);
+      ctx.fillRect(388, 202, 34, 18);
+      ctx.fillStyle = '#374151';
+      ctx.fillRect(396, 104, 18, 22);
+      if (beaconOn) {
+        ctx.fillStyle = 'rgba(254, 240, 138, 0.85)';
+        ctx.beginPath();
+        ctx.moveTo(405, 108);
+        ctx.lineTo(460, 84);
+        ctx.lineTo(460, 132);
+        ctx.closePath();
+        ctx.fill();
+      }
+    }
+
+    function drawBoat(ctx, flagColor) {
+      ctx.fillStyle = '#6b3f2c';
+      ctx.beginPath();
+      ctx.moveTo(112, 238);
+      ctx.lineTo(228, 238);
+      ctx.lineTo(204, 274);
+      ctx.lineTo(132, 274);
+      ctx.closePath();
+      ctx.fill();
+      ctx.fillStyle = '#f8fafc';
+      ctx.fillRect(166, 154, 4, 84);
+      ctx.beginPath();
+      ctx.moveTo(170, 158);
+      ctx.lineTo(170, 218);
+      ctx.lineTo(220, 196);
+      ctx.closePath();
+      ctx.fill();
+      ctx.fillStyle = flagColor;
+      ctx.beginPath();
+      ctx.moveTo(170, 154);
+      ctx.lineTo(196, 164);
+      ctx.lineTo(170, 174);
+      ctx.closePath();
+      ctx.fill();
+    }
+
+    function drawBuoy(ctx, striped) {
+      ctx.fillStyle = '#ef4444';
+      ctx.beginPath();
+      ctx.arc(82, 286, 14, 0, Math.PI * 2);
+      ctx.fill();
+      if (striped) {
+        ctx.fillStyle = '#fef2f2';
+        ctx.fillRect(70, 282, 24, 6);
+      }
+    }
+
+    function drawGulls(ctx, includeSecond) {
+      ctx.strokeStyle = '#ffffff';
+      ctx.lineWidth = 2;
+      [[246, 68], [290, 82], [340, 62]].forEach(([x, y], index) => {
+        if (!includeSecond && index === 1) return;
+        ctx.beginPath();
+        ctx.arc(x - 10, y, 12, Math.PI, 0);
+        ctx.arc(x + 10, y, 12, Math.PI, 0);
+        ctx.stroke();
+      });
+    }
+
+    function drawNightSky(ctx) {
+      const gradient = ctx.createLinearGradient(0, 0, 0, 320);
+      gradient.addColorStop(0, '#0b1120');
+      gradient.addColorStop(1, '#19253a');
+      ctx.fillStyle = gradient;
+      ctx.fillRect(0, 0, 480, 360);
+    }
+
+    function drawMoon(ctx, mode) {
+      ctx.fillStyle = '#fef3c7';
+      ctx.beginPath();
+      ctx.arc(78, 68, 24, 0, Math.PI * 2);
+      ctx.fill();
+      if (mode === 'crescent') {
+        ctx.fillStyle = '#19253a';
+        ctx.beginPath();
+        ctx.arc(92, 62, 22, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+
+    function drawStars(ctx, includeStar) {
+      const stars = [
+        [144, 44],
+        [224, 86],
+        [318, 74],
+        [394, 54],
+        [428, 118]
+      ];
+      ctx.fillStyle = '#f8fafc';
+      stars.forEach(([x, y], index) => {
+        if (!includeStar && index === 2) return;
+        ctx.beginPath();
+        ctx.arc(x, y, 3.2, 0, Math.PI * 2);
+        ctx.fill();
+      });
+    }
+
+    function drawCity(ctx, litWindow) {
+      const buildings = [
+        { x: 40, w: 90, h: 150, color: '#1f2937' },
+        { x: 156, w: 88, h: 204, color: '#111827' },
+        { x: 266, w: 76, h: 170, color: '#1e293b' },
+        { x: 360, w: 86, h: 188, color: '#0f172a' }
+      ];
+
+      buildings.forEach((building) => {
+        ctx.fillStyle = building.color;
+        ctx.fillRect(building.x, 360 - building.h, building.w, building.h);
+      });
+
+      const windows = [
+        [62, 248], [92, 248], [62, 284], [92, 284],
+        [180, 192], [210, 192], [180, 228], [210, 228],
+        [286, 224], [314, 224], [286, 260], [314, 260],
+        [384, 208], [414, 208], [384, 244], [414, 244]
+      ];
+
+      windows.forEach(([x, y], index) => {
+        ctx.fillStyle = index === 4 && litWindow ? '#f59e0b' : '#dbeafe';
+        ctx.fillRect(x, y, 16, 22);
+      });
+
+      ctx.fillStyle = litWindow ? '#0f766e' : '#d97706';
+      ctx.fillRect(84, 190, 72, 20);
+      ctx.fillStyle = '#f8fafc';
+      ctx.font = 'bold 11px sans-serif';
+      ctx.fillText('CAFE', 102, 204);
+    }
+
+    function drawStreet(ctx) {
+      ctx.fillStyle = '#10151e';
+      ctx.fillRect(0, 316, 480, 44);
+      ctx.strokeStyle = '#d1a93d';
+      ctx.lineWidth = 4;
+      ctx.setLineDash([18, 14]);
+      ctx.beginPath();
+      ctx.moveTo(0, 338);
+      ctx.lineTo(480, 338);
+      ctx.stroke();
+      ctx.setLineDash([]);
+
+      ctx.fillStyle = '#111827';
+      ctx.beginPath();
+      ctx.ellipse(372, 302, 28, 14, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.beginPath();
+      ctx.arc(392, 296, 8, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.beginPath();
+      ctx.moveTo(386, 288);
+      ctx.lineTo(390, 280);
+      ctx.lineTo(394, 288);
+      ctx.closePath();
+      ctx.fill();
+      ctx.beginPath();
+      ctx.moveTo(396, 288);
+      ctx.lineTo(400, 280);
+      ctx.lineTo(404, 288);
+      ctx.closePath();
+      ctx.fill();
+    }
+
+    function drawNightStreetVariant(ctx, variant) {
+      drawNightSky(ctx);
+      drawMoon(ctx, variant === 'modified' ? 'full' : 'crescent');
+      drawStars(ctx, variant !== 'modified');
+      drawCity(ctx, variant === 'modified');
+      drawStreet(ctx);
+      if (variant === 'modified') {
+        ctx.fillStyle = '#19253a';
+        ctx.beginPath();
+        ctx.ellipse(372, 302, 29, 15, 0, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+
+    function clearCanvas(ctx) {
+      ctx.clearRect(0, 0, 480, 360);
+    }
+
+    function drawScene(ctx, variant) {
+      clearCanvas(ctx);
+      const level = levels[state.levelIndex];
+      if (level.title === 'Night Shift') {
+        drawNightStreetVariant(ctx, variant);
+      } else {
+        level.draw(ctx, variant);
+      }
+    }
+
+    function drawMarkers(ctx) {
+      const level = levels[state.levelIndex];
+      level.differences.forEach((difference) => {
+        if (!state.foundIds.has(difference.id)) return;
+        ctx.save();
+        ctx.fillStyle = 'rgba(21, 128, 61, 0.92)';
+        ctx.strokeStyle = '#f8fafc';
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.arc(difference.x, difference.y, difference.r * 0.52, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+        ctx.fillStyle = '#ffffff';
+        ctx.font = 'bold 24px sans-serif';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText('✓', difference.x, difference.y + 1);
+        ctx.restore();
+      });
+
+      if (state.flash) {
+        const { x, y, good } = state.flash;
+        ctx.save();
+        ctx.fillStyle = good ? 'rgba(21, 128, 61, 0.26)' : 'rgba(185, 28, 28, 0.22)';
+        ctx.strokeStyle = good ? '#4ade80' : '#ef4444';
+        ctx.lineWidth = 4;
+        ctx.beginPath();
+        ctx.arc(x, y, 18, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+        ctx.restore();
+      }
+    }
+
+    function renderBoards() {
+      drawScene(leftCtx, 'original');
+      drawScene(rightCtx, 'modified');
+      drawMarkers(rightCtx);
+    }
+
+    function setFlash(x, y, good) {
+      state.flash = { x, y, good };
+      renderBoards();
+      window.setTimeout(() => {
+        state.flash = null;
+        renderBoards();
+      }, 260);
+    }
+
+    function updateHud() {
+      const level = levels[state.levelIndex];
+      const foundCount = state.foundIds.size;
+      const totalLevels = levels.length;
+      const readyForNext = foundCount === level.differences.length;
+
+      levelValue.textContent = `${state.levelIndex + 1} / ${totalLevels}`;
+      foundValue.textContent = `${foundCount} / ${level.differences.length}`;
+      attemptValue.textContent = `${state.attempts}`;
+      nextValue.textContent = readyForNext
+        ? (state.levelIndex === totalLevels - 1 ? 'Restart' : 'Unlocked')
+        : 'Locked';
+
+      sceneNameA.textContent = level.title;
+      sceneNameB.textContent = `${level.differences.length} live targets`;
+      levelCopy.textContent = level.copy;
+
+      differenceList.innerHTML = '';
+      level.differences.forEach((difference) => {
+        const li = document.createElement('li');
+        if (state.foundIds.has(difference.id)) li.classList.add('found');
+        li.innerHTML = `
+          <span>${difference.label}</span>
+          <span class="pill ${state.foundIds.has(difference.id) ? 'found' : ''}">
+            ${state.foundIds.has(difference.id) ? 'Found' : 'Hidden'}
+          </span>
+        `;
+        differenceList.appendChild(li);
+      });
+
+      nextButton.disabled = !readyForNext;
+      nextButton.textContent = state.levelIndex === totalLevels - 1 ? 'Restart Run' : 'Next Round';
+      celebrationLine.hidden = !readyForNext;
+      celebrationLine.textContent = state.levelIndex === totalLevels - 1
+        ? 'All rounds cleared. Restart whenever you want another pass.'
+        : 'Round cleared. Move on when you are ready.';
+    }
+
+    function setStatus(text) {
+      statusLine.textContent = text;
+    }
+
+    function completeRound() {
+      const level = levels[state.levelIndex];
+      setStatus(`Round ${state.levelIndex + 1} complete in ${state.attempts} attempts.`);
+      statusCopy.textContent = state.levelIndex === levels.length - 1
+        ? 'Every round is clear. Restart to replay the full stack.'
+        : `You found all ${level.differences.length} differences. The next round adds one more target.`;
+      updateHud();
+    }
+
+    function resetRound(levelIndex = state.levelIndex) {
+      state.levelIndex = levelIndex;
+      state.foundIds = new Set();
+      state.attempts = 0;
+      state.flash = null;
+      statusCopy.textContent = 'Find every difference in the right scene to unlock the next round.';
+      setStatus(`Round ${state.levelIndex + 1} is live.`);
+      updateHud();
+      renderBoards();
+    }
+
+    function advanceRound() {
+      if (state.foundIds.size !== levels[state.levelIndex].differences.length) return;
+      if (state.levelIndex === levels.length - 1) {
+        resetRound(0);
+        return;
+      }
+      resetRound(state.levelIndex + 1);
+    }
+
+    function hitTest(clientX, clientY) {
+      const rect = rightCanvas.getBoundingClientRect();
+      const scaleX = rightCanvas.width / rect.width;
+      const scaleY = rightCanvas.height / rect.height;
+      const x = (clientX - rect.left) * scaleX;
+      const y = (clientY - rect.top) * scaleY;
+      return { x, y };
+    }
+
+    function handleClick(event) {
+      const { x, y } = hitTest(event.clientX, event.clientY);
+      const level = levels[state.levelIndex];
+      const hit = level.differences.find((difference) => {
+        if (state.foundIds.has(difference.id)) return false;
+        const dx = x - difference.x;
+        const dy = y - difference.y;
+        return Math.hypot(dx, dy) <= difference.r;
+      });
+
+      state.attempts += 1;
+      attemptValue.textContent = `${state.attempts}`;
+
+      if (!hit) {
+        setFlash(x, y, false);
+        setStatus('Miss. Stay inside the altered details on the right scene.');
+        return;
+      }
+
+      state.foundIds.add(hit.id);
+      setFlash(hit.x, hit.y, true);
+      updateHud();
+      renderBoards();
+
+      if (state.foundIds.size === level.differences.length) {
+        completeRound();
+        return;
+      }
+
+      setStatus(`Found ${state.foundIds.size} of ${level.differences.length}. Keep scanning the right scene.`);
+    }
+
+    rightCanvas.addEventListener('click', handleClick);
+    nextButton.addEventListener('click', advanceRound);
+    restartButton.addEventListener('click', () => resetRound(0));
+
+    resetRound(0);
+  </script>
+</body>
+</html>

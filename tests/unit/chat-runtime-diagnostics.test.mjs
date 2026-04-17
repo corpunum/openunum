@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { createChatRuntimeService } from '../../src/server/services/chat_runtime.mjs';
 
-function createService({ delayMs = 5 } = {}) {
+function createService({ delayMs = 5, runtime = null } = {}) {
   const agent = {
     chat: async ({ message, sessionId }) => {
       await new Promise((resolve) => setTimeout(resolve, delayMs));
@@ -22,7 +22,7 @@ function createService({ delayMs = 5 } = {}) {
     getCurrentModel: () => ({ provider: 'ollama-cloud', model: 'qwen3.5:397b-cloud' })
   };
   const config = {
-    runtime: {
+    runtime: runtime || {
       chatHardTimeoutMs: 2000,
       pendingChatStuckMs: 100,
       chatCompletionCacheTtlMs: 4000
@@ -53,5 +53,17 @@ describe('chat runtime diagnostics', () => {
     expect(diag.completed.length).toBeGreaterThanOrEqual(1);
     expect(diag.completed[0].sessionId).toBe('s2');
   });
-});
 
+  it('defaults hard timeout to 300000ms when chatHardTimeoutMs is absent', () => {
+    const svc = createService({
+      delayMs: 5,
+      runtime: {
+        pendingChatStuckMs: 100,
+        chatCompletionCacheTtlMs: 4000
+      }
+    });
+    svc.getOrStartChat('s3', 'ping');
+    const diag = svc.getPendingDiagnostics({ includeCompleted: false });
+    expect(diag.pending[0].hardTimeoutMs).toBe(300000);
+  });
+});

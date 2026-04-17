@@ -136,6 +136,7 @@ export function defaultConfig() {
       executorRetryBackoffMs: 700,
       providerRequestTimeoutMs: 240000,
       agentTurnTimeoutMs: 420000,
+      chatHardTimeoutMs: 300000,
       maxRequestBodyBytes: 1048576,
       autonomyMode: 'autonomy-first',
       missionDefaultContinueUntilDone: true,

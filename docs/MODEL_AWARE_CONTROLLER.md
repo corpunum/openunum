@@ -102,6 +102,12 @@ Six bugs fixed that caused `ollama-cloud/qwen3.5:397b-cloud` to return "No respo
 
 6. **Hard timeout killing agent turns**: `chatHardTimeoutMs` defaulted to 90s in `chat_runtime.mjs`, killing cloud-model agent loops mid-processing. Fix: set to 300s in runtime config.
 
+## Stabilization Follow-Up (2026-04-17)
+
+1. **Generic decomposition drift**: fallback checklist steps could still degrade into `Execute: <verb>` entries. Fix: map fallback verbs to actionable implementation steps and disable decomposition for broad weak-signal verb lists.
+
+2. **Council mild-deficit recursion noise**: proof-quality postflight could force recursive revisions even when the response already had evidence and the deficit was small. Fix: skip revision when proof deficit is mild (`<= 0.08`) and tool/verifier evidence exists.
+
 ## Next hardening pass
 
 1. Persist behavior registry snapshots to SQLite for cross-restart learning.

@@ -91,11 +91,41 @@ export class CompletionChecklist {
   }
 }
 
+const DETECT_STEP_MAP = {
+  read: 'Inspect the current implementation.',
+  write: 'Implement the requested changes.',
+  create: 'Create the requested artifact.',
+  delete: 'Remove the targeted artifact safely.',
+  install: 'Install required dependencies.',
+  configure: 'Apply the required configuration.',
+  test: 'Run tests for the changed surface.',
+  run: 'Run the relevant command or workflow.',
+  check: 'Check runtime and contract signals.',
+  list: 'List available candidates or state entries.',
+  find: 'Locate the required file or symbol.',
+  update: 'Update existing implementation details.',
+  modify: 'Adjust logic to match requirements.',
+  deploy: 'Deploy changes to the target environment.',
+  build: 'Build the requested output.',
+  verify: 'Verify the final state with concrete proof.'
+};
+
 /**
  * Auto-detect steps from user message (simple pattern matching)
  */
 export function detectSteps(message) {
   const patterns = [
+    {
+      regex: /(spot the difference|find .*differences?).*(html|web page|page|game)|\b(html|web page|page|game).*(spot the difference|differences?)/i,
+      steps: [
+        'Create the HTML structure and styling for side-by-side scenes.',
+        'Implement scene rendering with intentional visual differences.',
+        'Add click detection and difference hit validation.',
+        'Track progress counters and completion state.',
+        'Implement next-level progression and restart flow.',
+        'Verify the page loads and interactions work end to end.'
+      ]
+    },
     { regex: /read.*and.*write|read.*then.*modify/i, steps: ['Read the file', 'Modify content', 'Write changes'] },
     { regex: /find.*and.*replace|search.*and.*update/i, steps: ['Search for pattern', 'Replace matches', 'Verify changes'] },
     { regex: /install.*and.*configure/i, steps: ['Install package', 'Configure settings', 'Verify installation'] },
@@ -110,7 +140,10 @@ export function detectSteps(message) {
   // Extract action verbs
   const verbs = message.match(/\b(read|write|create|delete|install|configure|test|run|check|list|find|update|modify|deploy|build)\b/gi);
   if (verbs && verbs.length > 1) {
-    return [...new Set(verbs.map(v => v.toLowerCase()))].map(v => `Execute: ${v}`);
+    const unique = [...new Set(verbs.map(v => v.toLowerCase()))];
+    if (unique.length > 5) return null;
+    const mapped = unique.map((verb) => DETECT_STEP_MAP[verb]).filter(Boolean);
+    return mapped.length > 0 ? mapped : null;
   }
 
   return null;

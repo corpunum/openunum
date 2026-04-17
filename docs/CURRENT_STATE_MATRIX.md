@@ -35,6 +35,8 @@ This is the quick trust checkpoint for code, runtime, tests, docs, and remaining
 | Model-aware controller bug fixes | `src/core/model-behavior-registry.mjs`, `src/core/context-pack-builder.mjs`, `src/core/agent.mjs`, `src/core/agent-helpers.mjs` | Fixed (6 bugs: behavior description leak, ollama-cloud default miss, council revision overwrite, turn budget, planner misclassification, hard timeout) |
 | Cloud-model turn budget | `src/core/agent-helpers.mjs` → `strict-shell-cloud` profile | Fixed (180s/4 iters, was 60s/3) |
 | Chat hard timeout | `src/server/services/chat_runtime.mjs` → `chatHardTimeoutMs` | Fixed (300s, was 90s default) |
+| Task decomposition quality | `src/core/task-decomposer.mjs`, `src/core/completion-checklist.mjs` | Fixed (task-specific mapping + generic verb fallback guard) |
+| Council postflight recursion control | `src/core/agent.mjs` (`shouldSkipCouncilRevisionForMildProofDeficit`) | Fixed (skip mild proof-deficit revisions when evidence already exists) |
 
 ## Current Open Debt
 

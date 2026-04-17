@@ -2,6 +2,26 @@
 
 Date: 2026-04-17
 
+## Stability Follow-Up: Decomposition + Council Recursion Guard (2026-04-17)
+
+**Status:** Implemented and regression-covered
+
+### 1. Generic decomposition fallback replaced with actionable mapping
+- **Problem:** fallback decomposition could still emit low-value checklist steps like `Execute: write`, weakening autonomous plan quality and completion signals on complex prompts.
+- **Fix:** added verb-to-action mapping in both `task-decomposer` and `completion-checklist` fallback paths; added prompt-specific decomposition for spot-the-difference HTML/game requests; broad weak-signal verb lists now fail closed (no decomposition).
+- **Files:**
+  - `src/core/task-decomposer.mjs`
+  - `src/core/completion-checklist.mjs`
+  - `tests/unit/task-decomposer-regression.test.mjs`
+  - `tests/unit/completion-checklist-greeting.test.mjs`
+
+### 2. Council postflight mild-deficit recursion guard
+- **Problem:** post-flight proof checks could trigger unnecessary recursive revision turns when score deficits were small and evidence already existed, increasing latency and revision churn.
+- **Fix:** added `shouldSkipCouncilRevisionForMildProofDeficit()` in `agent.mjs`; if reason is `proof_quality_insufficient`, deficit is mild (`<= 0.08`), and evidence exists (tool calls and/or independent verifier), revision is skipped with explicit telemetry instead of forced recursion.
+- **Files:**
+  - `src/core/agent.mjs`
+  - `tests/unit/council-postflight-guard.test.mjs`
+
 ## Model-Aware Controller Bug Fixes (2026-04-17)
 
 **Status:** Implemented and tested

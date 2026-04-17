@@ -67,6 +67,12 @@ This roadmap is the live remediation plan aligned with `BRAIN.MD`.
 - planner misclassification fix (tool-free substantive responses no longer classified as `planner_heavy_no_exec`)
 - `chatHardTimeoutMs` set to 300s (was 90s default, killing cloud-model agent turns mid-processing)
 
+13. Stability follow-up — decomposition + council recursion guard
+- task decomposition now emits concrete steps for game/build prompts and avoids weak generic `Execute: <verb>` decomposition on broad low-signal verb lists
+- completion-checklist fallback now uses actionable mapped steps (no generic verb echo)
+- council postflight now skips recursive revision on mild proof-score deficits when tool/verifier evidence already exists
+- regression coverage added for decomposition quality and council mild-deficit skip behavior
+
 ## Next Priority Tranche
 
 1. Deeper frontend split

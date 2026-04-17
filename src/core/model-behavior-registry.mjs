@@ -26,7 +26,7 @@ const BEHAVIOR_CLASSES = {
   timeout_prone_deep_thinker: {
     classId: 'timeout_prone_deep_thinker',
     description: 'Good reasoning but may consume full turn budget before producing actionable output.',
-    tuning: { turnBudgetMs: 60000, maxIters: 3, preferHttpFirst: true, requireProofForDone: true },
+    tuning: { turnBudgetMs: 180000, maxIters: 4, preferHttpFirst: true, requireProofForDone: true },
     needs: { generalDirections: true, systemOverview: true, repoContext: false, openunumContext: true }
   }
 };

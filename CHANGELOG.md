@@ -4,6 +4,20 @@ All notable changes to OpenUnum are documented in this file.
 
 ---
 
+## [2.4.4] - 2026-04-17
+
+### Fixed
+- **Generic decomposition fallback quality**: task decomposition and checklist fallback no longer emit generic `Execute: <verb>` steps; spot-the-difference HTML/game prompts now map to concrete implementation steps and broad weak-signal verb lists no longer auto-decompose.
+- **Council postflight revision recursion noise**: proof council now skips recursive revision on mild proof deficits (`<= 0.08`) when tool/verifier evidence already exists, preventing unnecessary extra turns while preserving strict revision for stronger deficits.
+
+### Added
+- Unit regressions:
+  - `tests/unit/task-decomposer-regression.test.mjs`
+  - `tests/unit/council-postflight-guard.test.mjs`
+  - expanded `tests/unit/completion-checklist-greeting.test.mjs` for decomposition fallback behavior
+
+---
+
 ## [2.4.3] - 2026-04-17
 
 ### Fixed
