@@ -63,6 +63,7 @@ import { handleApprovalsRoute } from './server/routes/approvals.mjs';
 import { handleVerifierRoute } from './server/routes/verifier.mjs';
 import { handleAuditRoute } from './server/routes/audit.mjs';
 import { handleMemoryFreshnessRoute } from './server/routes/memory-freshness.mjs';
+import { handleEvalRoute } from './server/routes/eval.mjs';
 import { handleCommandRoute, handleCommandsListRoute } from './server/routes/commands.mjs';
 import { handleRuntimeRoute } from './server/routes/runtime.mjs';
 import { loadBuiltinCommands } from './commands/loader.mjs';
@@ -348,6 +349,14 @@ server = http.createServer(async (req, res) => {
         memory,
         sendJson
       }
+    })) return;
+
+    if (await handleEvalRoute({
+      req,
+      res,
+      url,
+      memory,
+      sendApiError: sendApiErrorBase
     })) return;
 
     if (await handleModelRoute({

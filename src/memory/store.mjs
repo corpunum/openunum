@@ -6,6 +6,8 @@ import { parseJson, scoreByOverlap, tokenize } from './store-helpers.mjs';
 import { installExecutionStoreMethods } from './store-execution-methods.mjs';
 import { installSessionStoreMethods } from './store-session-methods.mjs';
 import { initializeMemoryStoreSchema } from './store-schema.mjs';
+import { initializeTrajectoryMemorySchema } from '../eval/trajectory-memory.mjs';
+import { initializeEvalResultsSchema } from '../eval/runner.mjs';
 export class MemoryStore {
   constructor() {
     ensureHome();
@@ -25,6 +27,8 @@ export class MemoryStore {
       this.db.exec('PRAGMA synchronous = NORMAL;');
     } catch {}
     initializeMemoryStoreSchema(this.db);
+    initializeTrajectoryMemorySchema(this.db);
+    initializeEvalResultsSchema(this.db);
   }
 
   rememberFact(key, value) {
@@ -621,6 +625,18 @@ export class MemoryStore {
    * @param {{since?: string, tool?: string, limit?: number}} options
    * @returns {Array<{id: number, sessionId: string, goalHint: string, routeSignature: string, surface: string, outcome: string, errorExcerpt: string, note: string, createdAt: string}>}
    */
+  getStrategyOutcomes({ since = null, limit = 200 } = {}) {
+    let query = 'SELECT id, goal, strategy, success, evidence, created_at FROM strategy_outcomes WHERE 1=1';
+    const params = [];
+    if (since) {
+      query += ' AND created_at >= ?';
+      params.push(String(since));
+    }
+    query += ' ORDER BY created_at DESC LIMIT ?';
+    params.push(Math.max(1, Math.min(1000, Number(limit || 200))));
+    return this.db.prepare(query).all(...params);
+  }
+
   getRouteLessons({ since = null, tool = null, limit = 200 } = {}) {
     let query = 'SELECT * FROM route_lessons WHERE 1=1';
     const params = [];

@@ -1,11 +1,11 @@
 # Codebase Map
 
-This map is implementation-accurate as of 2026-04-09.
+This map is implementation-accurate as of 2026-04-20.
 
 ## Top-Level Structure
 
 - `src/server.mjs`: HTTP API server and Web UI host
-- `src/server/routes/*.mjs`: extracted route handlers (health, ui, sessions, missions, model, auth, config, autonomy, chat/tools, browser, telegram, research, **providers**, **state**, **roles**, **approvals**, **audit**, **verifier**, **memory-freshness**)
+- `src/server/routes/*.mjs`: extracted route handlers (health, ui, sessions, missions, model, auth, config, autonomy, chat/tools, browser, telegram, research, **providers**, **state**, **roles**, **approvals**, **audit**, **verifier**, **memory-freshness**, **eval**)
 - `src/server/services/*.mjs`: extracted runtime helpers (chat, auth jobs, browser runtime, telegram runtime, research runtime, config service, auth service)
 - `src/core/agent.mjs`: provider chat loop, tool-call execution, trace generation, role-model escalation
 - `src/core/missions.mjs`: autonomous mission runner with proof-aware completion
@@ -51,6 +51,10 @@ This map is implementation-accurate as of 2026-04-09.
 - `src/core/context-compact.mjs`: old-message compaction and artifact extraction
 - `src/memory/store.mjs`: SQLite persistence for sessions/messages/facts/tool runs/strategy outcomes plus mission/task durability **+ state roots**
 - `src/memory/recall.mjs`: **UPDATED** — Hybrid retrieval with BM25 + embeddings + freshness decay (30% weight) via `applyFreshnessAndReturn()`
+- `src/eval/trajectory-memory.mjs`: **NEW** — TrajectoryMemoryStore for case-based reasoning (SQLite CRUD with goal search, compatibility filtering, consolidation-gated writes)
+- `src/eval/trajectory-retriever.mjs`: **NEW** — TrajectoryRetriever for inference-time similar-case retrieval + extractTrajectoryMemory() for consolidation
+- `src/eval/runner.mjs`: **NEW** — EvalRunner with eval_results table, corpus loading, trajectory enrichment, result storage
+- `src/eval/grader.mjs`: **NEW** — Multi-mode grading (exact_sequence, exact_set, ordered_subsequence, required_tools, forbidden_tools, final_state, proof_score) with overall grade computation
 - `src/memory/freshness-decay.mjs`: **UPDATED** — Now wired into `HybridRetriever` (was documented but previously unused)
 - `src/browser/cdp.mjs`: Chrome DevTools Protocol abstraction
 - `src/providers/*`: provider adapters **+ retry policy + health tracking**

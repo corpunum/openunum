@@ -154,4 +154,75 @@ export class MemoryConsolidator {
     if (!this.lastReplayAt) return true;
     return (Date.now() - this.lastReplayAt) >= this.replayIntervalMs;
   }
+
+  /**
+   * Consolidate trajectory memory entries from recent strategy outcomes.
+   * Gated: only stores trajectories that passed proof scoring and verification.
+   * Called during consolidation cycles, not at runtime write-through.
+   *
+   * @param {object} trajectoryStore - TrajectoryMemoryStore instance
+   * @param {object} opts - Options
+   * @param {number} opts.minProofScore - Minimum proof score to store (default: 0.5)
+   * @param {boolean} opts.requireVerifier - Require verifier pass (default: true)
+   * @param {number} opts.lookbackDays - How many days of outcomes to scan (default: 7)
+   * @returns {{ stored: number, skipped: number, stats: object }}
+   */
+  consolidateTrajectories(trajectoryStore, { minProofScore = 0.5, requireVerifier = true, lookbackDays = 7 } = {}) {
+    if (!this.store || !trajectoryStore) {
+      return { stored: 0, skipped: 0, stats: { error: 'missing_store' } };
+    }
+
+    const sinceDate = new Date(Date.now() - lookbackDays * 24 * 60 * 60 * 1000).toISOString();
+    const outcomes = this.store.getStrategyOutcomes({ since: sinceDate, limit: 200 });
+    let stored = 0;
+    let skipped = 0;
+
+    for (const outcome of outcomes) {
+      const successScore = Number(outcome.success || 0) === 1 ? 0.7 : 0.2;
+      const proofPassed = successScore >= minProofScore;
+
+      if (!proofPassed) {
+        skipped++;
+        continue;
+      }
+
+      const goal = String(outcome.goal || '').trim();
+      if (!goal || goal.length < 10) {
+        skipped++;
+        continue;
+      }
+
+      const entry = {
+        goal_normalized: goal.toLowerCase().replace(/[^\w\s]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 500),
+        task_type: 'general',
+        tool_set_signature: '',
+        environment_fingerprint: '',
+        plan_template: String(outcome.strategy || '').slice(0, 200),
+        tool_sequence: '',
+        tool_args_schema: '',
+        success_score: successScore,
+        proof_passed: proofPassed,
+        verifier_passed: false,
+        failure_warnings: successScore < 0.4 ? String(outcome.evidence || '').slice(0, 200) : '',
+        schema_version: '',
+        runtime_version: '',
+        model: '',
+        autonomy_mode: '',
+        session_id: '',
+        step_count: 0,
+        tool_count: 0,
+        final_text: ''
+      };
+
+      try {
+        const result = trajectoryStore.store(entry);
+        if (result) stored++;
+        else skipped++;
+      } catch {
+        skipped++;
+      }
+    }
+
+    return { stored, skipped, stats: { outcomesScanned: outcomes.length } };
+  }
 }

@@ -22,6 +22,7 @@ Canonical docs for current implementation and operations.
 - [OPERATIONS_RUNBOOK.md](OPERATIONS_RUNBOOK.md)
 - [AUTONOMY_OPS.md](AUTONOMY_OPS.md)
 - [SELF_READING_INDEX.md](SELF_READING_INDEX.md)
+- [EVAL_AND_TRAJECTORY.md](EVAL_AND_TRAJECTORY.md)
 
 ## Canonical Architecture Docs
 

@@ -19,11 +19,12 @@ import { logInfo, logError } from '../logger.mjs';
  */
 
 export class ContextCompiler {
-  constructor({ workspaceRoot, maxRecentTurns = 4 }) {
+  constructor({ workspaceRoot, maxRecentTurns = 4, trajectoryRetriever = null } = {}) {
     this.workspaceRoot = workspaceRoot || process.cwd();
     this.maxRecentTurns = maxRecentTurns;
     this.staticCache = null;
     this.staticCachePath = path.join(this.workspaceRoot, 'data', 'static-system-instructions.md');
+    this.trajectoryRetriever = trajectoryRetriever;
   }
 
   /**
@@ -253,7 +254,28 @@ You are OpenUnum, an autonomous AI assistant with tool execution capabilities.
   }
 
   /**
-   * Compile full context payload
+   * Build trajectory retrieval section (Layer 3.5)
+   * Separate bounded packet — NOT injected into the anchor.
+   */
+  buildTrajectoryPacket(trajectoryContext = {}) {
+    if (!this.trajectoryRetriever) return '';
+
+    const { userGoal, taskType, availableTools, model, autonomyMode, schemaVersion, environmentFingerprint } = trajectoryContext;
+
+    const { packet } = this.trajectoryRetriever.retrieve({
+      userGoal,
+      taskType,
+      availableTools,
+      model,
+      autonomyMode,
+      schemaVersion,
+      environmentFingerprint
+    });
+
+    return packet;
+  }
+
+  /**
    * @param {object} options 
    * @returns {string}
    */
@@ -261,6 +283,7 @@ You are OpenUnum, an autonomous AI assistant with tool execution capabilities.
     const {
       executionState,
       workingMemoryAnchor,
+      trajectoryContext,
       recalledMemories,
       recentMessages,
       retrievalConfig  // NEW: from FastAwarenessRouter
@@ -279,6 +302,14 @@ You are OpenUnum, an autonomous AI assistant with tool execution capabilities.
     // 3. Working memory anchor (dynamic)
     if (workingMemoryAnchor) {
       sections.push(this.buildWorkingMemoryAnchor(workingMemoryAnchor));
+    }
+
+    // 3.5. Trajectory retrieval (dynamic — similar prior cases, separate bounded packet)
+    if (trajectoryContext && this.trajectoryRetriever) {
+      const trajectoryPacket = this.buildTrajectoryPacket(trajectoryContext);
+      if (trajectoryPacket) {
+        sections.push(trajectoryPacket);
+      }
     }
 
     // 4. Recalled memories (dynamic) - SKIP if router says so
