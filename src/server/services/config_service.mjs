@@ -20,6 +20,8 @@ export function createConfigService({ config, PROVIDER_ORDER, reloadConfigSecret
   function getProviderConfigPayload() {
     return {
       ollamaBaseUrl: config.model.ollamaBaseUrl,
+      ollamaCloudBaseUrl: config.model.ollamaCloudBaseUrl || config.model.ollamaBaseUrl || 'http://127.0.0.1:11434',
+      ollamaLocalBaseUrl: config.model.ollamaLocalBaseUrl || config.model.ollamaBaseUrl || 'http://127.0.0.1:11434',
       openrouterBaseUrl: config.model.openrouterBaseUrl,
       nvidiaBaseUrl: config.model.nvidiaBaseUrl,
       xiaomimimoBaseUrl: config.model.xiaomimimoBaseUrl,
@@ -219,6 +221,8 @@ export function createConfigService({ config, PROVIDER_ORDER, reloadConfigSecret
 
   function applyProvidersConfigPatch(body = {}) {
     if (typeof body.ollamaBaseUrl === 'string') config.model.ollamaBaseUrl = body.ollamaBaseUrl.trim();
+    if (typeof body.ollamaCloudBaseUrl === 'string') config.model.ollamaCloudBaseUrl = body.ollamaCloudBaseUrl.trim();
+    if (typeof body.ollamaLocalBaseUrl === 'string') config.model.ollamaLocalBaseUrl = body.ollamaLocalBaseUrl.trim();
     if (typeof body.openrouterBaseUrl === 'string') config.model.openrouterBaseUrl = body.openrouterBaseUrl.trim();
     if (typeof body.nvidiaBaseUrl === 'string') config.model.nvidiaBaseUrl = body.nvidiaBaseUrl.trim();
     if (typeof body.xiaomimimoBaseUrl === 'string') config.model.xiaomimimoBaseUrl = body.xiaomimimoBaseUrl.trim();

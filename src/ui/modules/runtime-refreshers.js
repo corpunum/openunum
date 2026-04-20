@@ -105,7 +105,8 @@ export function createRuntimeRefreshers({
 
   async function refreshProviderConfig() {
     const c = await jget('/api/providers/config');
-    setSelectByValueOrFirst('ollamaUrl', c.ollamaBaseUrl || 'http://127.0.0.1:11434');
+    setSelectByValueOrFirst('ollamaCloudUrl', c.ollamaCloudBaseUrl || c.ollamaBaseUrl || 'http://127.0.0.1:11434');
+    setSelectByValueOrFirst('ollamaLocalUrl', c.ollamaLocalBaseUrl || c.ollamaBaseUrl || 'http://127.0.0.1:11434');
     setSelectByValueOrFirst('openrouterUrl', c.openrouterBaseUrl || 'https://openrouter.ai/api/v1');
     setSelectByValueOrFirst('nvidiaUrl', c.nvidiaBaseUrl || 'https://integrate.api.nvidia.com/v1');
     setSelectByValueOrFirst('xiaomimimoUrl', c.xiaomimimoBaseUrl || 'https://api.x.ai/v1');

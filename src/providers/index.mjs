@@ -43,8 +43,13 @@ export function buildProviderForModel(config, { provider, model, timeoutMs } = {
     ? Number(timeoutMs)
     : (config?.runtime?.providerRequestTimeoutMs ?? 120000);
 
-  if (selectedProvider === 'ollama-cloud' || selectedProvider === 'ollama-local') {
-    return new OllamaProvider({ baseUrl: config.model.ollamaBaseUrl, model: selectedModel, timeoutMs: effectiveTimeout });
+  if (selectedProvider === 'ollama-cloud') {
+    const baseUrl = config.model.ollamaCloudBaseUrl || config.model.ollamaBaseUrl || 'http://127.0.0.1:11434';
+    return new OllamaProvider({ baseUrl, model: selectedModel, timeoutMs: effectiveTimeout });
+  }
+  if (selectedProvider === 'ollama-local') {
+    const baseUrl = config.model.ollamaLocalBaseUrl || config.model.ollamaBaseUrl || 'http://127.0.0.1:11434';
+    return new OllamaProvider({ baseUrl, model: selectedModel, timeoutMs: effectiveTimeout });
   }
   if (selectedProvider === 'openrouter') {
     return new OpenAICompatibleProvider({

@@ -90,6 +90,8 @@ export async function handleConfigRoute({ req, res, url, ctx }) {
     if (imported.xiaomimimoBaseUrl) ctx.config.model.xiaomimimoBaseUrl = imported.xiaomimimoBaseUrl;
     if (imported.openaiBaseUrl) ctx.config.model.openaiBaseUrl = imported.openaiBaseUrl;
     if (imported.ollamaBaseUrl) ctx.config.model.ollamaBaseUrl = imported.ollamaBaseUrl;
+    if (imported.ollamaCloudBaseUrl) ctx.config.model.ollamaCloudBaseUrl = imported.ollamaCloudBaseUrl;
+    if (imported.ollamaLocalBaseUrl) ctx.config.model.ollamaLocalBaseUrl = imported.ollamaLocalBaseUrl;
     ctx.normalizeModelSettings();
     ctx.saveConfig(ctx.config);
     ctx.agent.reloadTools();
@@ -108,7 +110,9 @@ export async function handleConfigRoute({ req, res, url, ctx }) {
         nvidiaBaseUrl: imported.nvidiaBaseUrl || ctx.config.model.nvidiaBaseUrl,
         xiaomimimoBaseUrl: imported.xiaomimimoBaseUrl || ctx.config.model.xiaomimimoBaseUrl,
         openaiBaseUrl: imported.openaiBaseUrl || ctx.config.model.openaiBaseUrl,
-        ollamaBaseUrl: imported.ollamaBaseUrl || ctx.config.model.ollamaBaseUrl
+        ollamaBaseUrl: imported.ollamaBaseUrl || ctx.config.model.ollamaBaseUrl,
+        ollamaCloudBaseUrl: imported.ollamaCloudBaseUrl || ctx.config.model.ollamaCloudBaseUrl,
+        ollamaLocalBaseUrl: imported.ollamaLocalBaseUrl || ctx.config.model.ollamaLocalBaseUrl
       }
     });
     return true;

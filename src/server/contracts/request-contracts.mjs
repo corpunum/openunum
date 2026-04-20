@@ -251,13 +251,14 @@ export function validateProvidersConfigPatch(body) {
   if (!root.ok) return root;
   const errors = [];
   const allowed = new Set([
-    'ollamaBaseUrl', 'openrouterBaseUrl', 'nvidiaBaseUrl', 'xiaomimimoBaseUrl', 'openaiBaseUrl', 'genericBaseUrl',
+    'ollamaBaseUrl', 'ollamaCloudBaseUrl', 'ollamaLocalBaseUrl',
+    'openrouterBaseUrl', 'nvidiaBaseUrl', 'xiaomimimoBaseUrl', 'openaiBaseUrl', 'genericBaseUrl',
     'openrouterApiKey', 'nvidiaApiKey', 'xiaomimimoApiKey', 'openaiApiKey', 'genericApiKey'
   ]);
   for (const key of Object.keys(body)) {
     if (!allowed.has(key)) errors.push({ field: key, issue: 'unknown key' });
   }
-  for (const key of ['ollamaBaseUrl', 'openrouterBaseUrl', 'nvidiaBaseUrl', 'xiaomimimoBaseUrl', 'openaiBaseUrl', 'genericBaseUrl']) {
+  for (const key of ['ollamaBaseUrl', 'ollamaCloudBaseUrl', 'ollamaLocalBaseUrl', 'openrouterBaseUrl', 'nvidiaBaseUrl', 'xiaomimimoBaseUrl', 'openaiBaseUrl', 'genericBaseUrl']) {
     if (body[key] !== undefined) validateUrlField(errors, key, body[key]);
   }
   for (const key of ['openrouterApiKey', 'nvidiaApiKey', 'xiaomimimoApiKey', 'openaiApiKey', 'genericApiKey']) {
@@ -353,7 +354,7 @@ export function validateAuthCatalogRequest(body) {
     if (!isPlainObject(body.providerBaseUrls)) {
       addTypeError(errors, 'providerBaseUrls', 'object');
     } else {
-      for (const key of ['ollamaBaseUrl', 'openrouterBaseUrl', 'nvidiaBaseUrl', 'xiaomimimoBaseUrl', 'openaiBaseUrl']) {
+      for (const key of ['ollamaBaseUrl', 'ollamaCloudBaseUrl', 'ollamaLocalBaseUrl', 'openrouterBaseUrl', 'nvidiaBaseUrl', 'xiaomimimoBaseUrl', 'openaiBaseUrl']) {
         if (body.providerBaseUrls[key] !== undefined) validateUrlField(errors, `providerBaseUrls.${key}`, body.providerBaseUrls[key]);
       }
     }

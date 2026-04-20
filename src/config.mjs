@@ -92,7 +92,9 @@ export function normalizeModelConfig(model = {}) {
       disabledProviders
     },
     openaiBaseUrl: model.openaiBaseUrl || model.genericBaseUrl || 'https://api.openai.com/v1',
-    openaiApiKey: model.openaiApiKey || model.genericApiKey || ''
+    openaiApiKey: model.openaiApiKey || model.genericApiKey || '',
+    ollamaCloudBaseUrl: model.ollamaCloudBaseUrl || model.ollamaBaseUrl || 'http://127.0.0.1:11434',
+    ollamaLocalBaseUrl: model.ollamaLocalBaseUrl || model.ollamaBaseUrl || 'http://127.0.0.1:11434'
   };
 }
 
@@ -295,6 +297,8 @@ export function defaultConfig() {
       },
       behaviorOverrides: {},
       ollamaBaseUrl: process.env.OLLAMA_BASE_URL || 'http://127.0.0.1:11434',
+      ollamaCloudBaseUrl: process.env.OLLAMA_CLOUD_BASE_URL || process.env.OLLAMA_BASE_URL || 'http://127.0.0.1:11434',
+      ollamaLocalBaseUrl: process.env.OLLAMA_LOCAL_BASE_URL || process.env.OLLAMA_BASE_URL || 'http://127.0.0.1:11434',
       openrouterBaseUrl: process.env.OPENROUTER_BASE_URL || 'https://openrouter.ai/api/v1',
       nvidiaBaseUrl: process.env.NVIDIA_BASE_URL || 'https://integrate.api.nvidia.com/v1',
       xiaomimimoBaseUrl: process.env.XIAOMIMIMO_BASE_URL || 'https://api.x.ai/v1',

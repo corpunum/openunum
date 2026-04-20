@@ -33,8 +33,8 @@ export const PROVIDER_SECRET_FIELD = {
 };
 
 export const PROVIDER_BASE_FIELD = {
-  'ollama-local': 'ollamaBaseUrl',
-  'ollama-cloud': 'ollamaBaseUrl',
+  'ollama-local': 'ollamaLocalBaseUrl',
+  'ollama-cloud': 'ollamaCloudBaseUrl',
   nvidia: 'nvidiaBaseUrl',
   openrouter: 'openrouterBaseUrl',
   xiaomimimo: 'xiaomimimoBaseUrl',

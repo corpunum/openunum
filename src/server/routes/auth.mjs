@@ -23,6 +23,8 @@ export async function handleAuthRoute({ req, res, url, ctx }) {
     const clear = Array.isArray(validation.value?.clear) ? validation.value.clear : [];
 
     if (typeof providerBaseUrls.ollamaBaseUrl === 'string' && providerBaseUrls.ollamaBaseUrl.trim()) ctx.config.model.ollamaBaseUrl = providerBaseUrls.ollamaBaseUrl.trim();
+    if (typeof providerBaseUrls.ollamaCloudBaseUrl === 'string' && providerBaseUrls.ollamaCloudBaseUrl.trim()) ctx.config.model.ollamaCloudBaseUrl = providerBaseUrls.ollamaCloudBaseUrl.trim();
+    if (typeof providerBaseUrls.ollamaLocalBaseUrl === 'string' && providerBaseUrls.ollamaLocalBaseUrl.trim()) ctx.config.model.ollamaLocalBaseUrl = providerBaseUrls.ollamaLocalBaseUrl.trim();
     if (typeof providerBaseUrls.openrouterBaseUrl === 'string' && providerBaseUrls.openrouterBaseUrl.trim()) ctx.config.model.openrouterBaseUrl = providerBaseUrls.openrouterBaseUrl.trim();
     if (typeof providerBaseUrls.nvidiaBaseUrl === 'string' && providerBaseUrls.nvidiaBaseUrl.trim()) ctx.config.model.nvidiaBaseUrl = providerBaseUrls.nvidiaBaseUrl.trim();
     if (typeof providerBaseUrls.xiaomimimoBaseUrl === 'string' && providerBaseUrls.xiaomimimoBaseUrl.trim()) ctx.config.model.xiaomimimoBaseUrl = providerBaseUrls.xiaomimimoBaseUrl.trim();

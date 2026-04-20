@@ -626,6 +626,16 @@ server = http.createServer(async (req, res) => {
   }
 });
 
+server.on('error', (err) => {
+  if (err.code === 'EADDRINUSE') {
+    logError('port_conflict', { port: config.server.port, msg: 'address already in use — retrying in 10s' });
+    setTimeout(() => server.listen(config.server.port, config.server.host), 10000);
+  } else {
+    logError('server_fatal', { error: String(err.message || err) });
+    process.exit(1);
+  }
+});
+
 server.listen(config.server.port, config.server.host, () => {
   logInfo('openunum_server_started', { host: config.server.host, port: config.server.port });
   if (config.runtime?.autonomyMasterAutoStart) {
