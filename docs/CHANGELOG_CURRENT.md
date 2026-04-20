@@ -1,5 +1,26 @@
 # Changelog (Current Consolidated)
 
+Date: 2026-04-20
+
+## Provider Lane Split + Port Resilience (2026-04-20)
+
+**Status:** Implemented, tested, committed
+
+### 1. ollama-cloud and ollama-local now use separate configurable base URLs
+- **Problem:** Both `ollama-cloud` and `ollama-local` resolved to the same `ollamaBaseUrl` throughout — provider builder, config service, auth route, UI vault constants, runtime refreshers. Provider Vault couldn't distinguish the two lanes; a cloud endpoint couldn't be set independently from local.
+- **Fix:** Added `ollamaCloudBaseUrl` and `ollamaLocalBaseUrl` as distinct fields (both default to `http://127.0.0.1:11434`; overridable via `OLLAMA_CLOUD_BASE_URL` / `OLLAMA_LOCAL_BASE_URL`). Split propagates through all layers: `providers/index.mjs`, `config.mjs` normalization, `config_service` payload/patch, `auth.mjs` catalog save, `request-contracts` validation, import-openclaw handler, `PROVIDER_BASE_FIELD` UI map, and runtime refreshers.
+- **Files:** `src/config.mjs`, `src/providers/index.mjs`, `src/server/services/config_service.mjs`, `src/server/routes/auth.mjs`, `src/server/routes/config.mjs`, `src/server/contracts/request-contracts.mjs`, `src/ui/modules/ui-constants.js`, `src/ui/modules/runtime-refreshers.js`
+
+### 2. Server EADDRINUSE crash-loop fixed
+- **Problem:** No `error` event handler on `server.mjs` HTTP server — port conflict caused unhandled EADDRINUSE crash, systemd burned through `StartLimitBurst=5` in 25s and gave up permanently.
+- **Fix:** `server.on('error', ...)` handler retries port binding after 10s on EADDRINUSE. `StartLimitBurst` 5→10, `StartLimitIntervalSec` 120s→300s in service unit.
+- **Files:** `src/server.mjs`, `~/.config/systemd/user/openunum.service`
+
+### 3. Competing fork services stopped and disabled
+- Stopped/disabled `openunum-qwen` (18881), `openclaude` (18883), `openunumgemini` (18884), `openbat-webui` (18885). `openclaw-gateway` (18789/18791) untouched.
+
+---
+
 Date: 2026-04-17
 
 ## Stability Follow-Up: Decomposition + Council Recursion Guard (2026-04-17)
