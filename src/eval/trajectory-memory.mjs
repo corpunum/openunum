@@ -154,20 +154,19 @@ export class TrajectoryMemoryStore {
     const terms = String(query || '').toLowerCase().split(/\s+/).filter(t => t.length > 2);
     if (!terms.length) return [];
 
-    let sql = `SELECT * FROM trajectory_memory WHERE success_score >= ?`;
-    const params = [minScore];
+    const likeClauses = terms.slice(0, 8).map(() => `goal_normalized LIKE ?`);
+    const likeParams = terms.slice(0, 8).map(t => `%${t}%`);
+
+    let sql;
+    let params;
 
     if (taskType) {
-      sql += ` AND task_type = ?`;
-      params.push(taskType);
+      sql = `SELECT * FROM trajectory_memory WHERE success_score >= ? AND task_type = ? AND (${likeClauses.join(' OR ')}) ORDER BY success_score DESC, created_at DESC LIMIT ?`;
+      params = [minScore, taskType, ...likeParams, limit];
+    } else {
+      sql = `SELECT * FROM trajectory_memory WHERE success_score >= ? AND (${likeClauses.join(' OR ')}) ORDER BY success_score DESC, created_at DESC LIMIT ?`;
+      params = [minScore, ...likeParams, limit];
     }
-
-    const likeClauses = terms.slice(0, 8).map(() => `goal_normalized LIKE ?`);
-    sql += ` AND (${likeClauses.join(' OR ')})`;
-    params.push(...terms.map(t => `%${t}%`));
-
-    sql += ` ORDER BY success_score DESC, created_at DESC LIMIT ?`;
-    params.push(limit);
 
     return db.prepare(sql).all(...params);
   }
@@ -181,8 +180,9 @@ export class TrajectoryMemoryStore {
     if (!terms.length) return [];
 
     const likeClauses = terms.slice(0, 6).map(() => `goal_normalized LIKE ?`);
+    const likeParams = terms.slice(0, 6).map(t => `%${t}%`);
     const sql = `SELECT * FROM trajectory_memory WHERE success_score <= ? AND (${likeClauses.join(' OR ')}) ORDER BY success_score ASC, created_at DESC LIMIT ?`;
-    const params = [maxScore, ...terms.map(t => `%${t}%`), limit];
+    const params = [maxScore, ...likeParams, limit];
 
     return db.prepare(sql).all(...params);
   }
