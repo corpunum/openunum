@@ -161,9 +161,11 @@ function enforceVisibleReplyContract({
   const text = String(finalText || '').trim();
   if (!text) return text;
   const requirements = extractRequirements(userMessage);
-  const leakedInternalFormat =
+  const isModelTestAnswer = /^(Hardware:|Model test results:)/im.test(text);
+  const leakedInternalFormat = !isModelTestAnswer && (
     (/^Status:\s+\w+/im.test(text) && /Findings:/im.test(text)) ||
-    /^Best next steps from current evidence:/im.test(text);
+    /^Best next steps from current evidence:/im.test(text)
+  );
   const statusExplicit =
     Boolean(requirements?.asksStatus) &&
     !Boolean(requirements?.asksWeather) &&
@@ -175,7 +177,14 @@ function enforceVisibleReplyContract({
     executedTools,
     toolRuns
   });
-  if (recovered && !/^Status:\s+\w+/im.test(recovered)) return recovered;
+  if (recovered && !/^Status:\s+\w+/im.test(recovered) && !/^Best next steps from current evidence:/im.test(recovered)) return recovered;
+  // All synthesis paths produced internal formats — surface raw shell output directly before giving up.
+  const shellCandidates = executedTools
+    .filter((r) => r?.name === 'shell_run' && r?.result?.ok !== false && r?.result?.stdout)
+    .map((r) => String(r.result.stdout).trim())
+    .filter((s) => s && s.split('\n').length >= 2);
+  const shellStdout = shellCandidates.reduce((a, b) => (b.length > a.length ? b : a), shellCandidates[0] || '');
+  if (shellStdout) return shellStdout;
   return 'I generated an internal diagnostics summary instead of a direct user answer. Please retry and I will answer directly.';
 }
 

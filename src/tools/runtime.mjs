@@ -354,7 +354,7 @@ export class ToolRuntime {
     const hookFacts = [];
     const hookArtifacts = [];
     const toolMeta = TOOL_CAPABILITY_META[name] || {};
-    const finalityTrackedTools = new Set(['file_write', 'file_patch', 'shell_run', 'session_delete', 'session_clear', 'git_push', 'skill_uninstall']);
+    const finalityTrackedTools = new Set(['file_write', 'file_patch', 'session_delete', 'session_clear', 'git_push', 'skill_uninstall']);
 
     // R1: PRE-FLIGHT - Log intent to execute tool (tamper-evident)
     try {

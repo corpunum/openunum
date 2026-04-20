@@ -166,6 +166,65 @@ function buildWeatherAnswer({ userMessage = '', executedTools = [] }) {
   return lines.join('\n');
 }
 
+function extractModelTestResults(executedTools = []) {
+  const results = [];
+  for (const run of executedTools) {
+    if (run?.name !== 'http_request') continue;
+    const args = run?.args || {};
+    const body = args?.bodyJson || {};
+    const model = String(body?.model || '').trim();
+    if (!model) continue;
+    const url = String(args?.url || '').trim();
+    if (!/\/api\/(generate|chat)\b/.test(url)) continue;
+    const ok = run?.result?.ok !== false && !run?.result?.error;
+    const err = String(run?.result?.error || '').trim();
+    results.push({ model, ok, error: err });
+  }
+  return results;
+}
+
+function buildModelTestAnswer({ executedTools = [] }) {
+  const tests = extractModelTestResults(executedTools);
+  if (!tests.length) return '';
+
+  const passing = tests.filter((t) => t.ok);
+  const failing = tests.filter((t) => !t.ok);
+  if (!passing.length && !failing.length) return '';
+
+  const hardware = extractHardwareProfile(executedTools);
+  const lines = [];
+
+  if (hardware.cpu || hardware.ramGiB) {
+    const hwParts = [];
+    if (hardware.cpu) hwParts.push(hardware.cpu);
+    if (hardware.ramGiB) hwParts.push(`${hardware.ramGiB.toFixed(0)}GB RAM`);
+    if (hardware.threads) hwParts.push(`${hardware.threads} threads`);
+    lines.push(`Hardware: ${hwParts.join(', ')}`);
+    lines.push('');
+  }
+
+  lines.push('Model test results:');
+  lines.push('');
+
+  const allTests = [...passing, ...failing];
+  for (const t of allTests) {
+    const icon = t.ok ? '✅' : '❌';
+    const suffix = t.ok ? 'responding' : (t.error ? clipText(t.error, 60) : 'failed');
+    lines.push(`${icon} ${t.model} — ${suffix}`);
+  }
+
+  lines.push('');
+  if (passing.length && failing.length) {
+    lines.push(`${passing.length} model(s) working, ${failing.length} failed or timed out.`);
+  } else if (passing.length) {
+    lines.push(`All ${passing.length} tested model(s) are working.`);
+  } else {
+    lines.push(`All ${failing.length} tested model(s) failed.`);
+  }
+
+  return lines.join('\n');
+}
+
 function extractHardwareProfile(executedTools = []) {
   const shell = executedTools
     .filter((run) => run?.name === 'shell_run' && run?.result?.ok)
@@ -406,10 +465,16 @@ function overallStatusFromTools(executedTools = []) {
 function collectMeaningfulFailures(executedTools = []) {
   const successes = executedTools.filter((run) => toolResultState(run) === 'success');
   const hasSuccesses = successes.length > 0;
-  return executedTools.filter((run) => {
+  return executedTools.filter((run, index) => {
     if (toolResultState(run) !== 'failure') return false;
     const err = String(run?.result?.error || '').toLowerCase();
     if (hasSuccesses && err === 'tool_circuit_open') return false;
+    // Suppress failures that are superseded by a later success of the same tool —
+    // the agent retried and succeeded, so the earlier failure is not actionable.
+    const toolName = run?.name;
+    if (toolName && executedTools.slice(index + 1).some(
+      (later) => later?.name === toolName && toolResultState(later) === 'success'
+    )) return false;
     return true;
   });
 }
@@ -592,6 +657,19 @@ function uniquePaths(items = []) {
 
 function humanizePath(path = '') {
   return `\`${clipText(String(path || ''), 100)}\``;
+}
+
+function buildShellOutputAnswer(executedTools = []) {
+  // Pick the most informative shell_run stdout — longest one with multiple lines,
+  // not a trivial one-liner like a count or a single path.
+  const candidates = executedTools
+    .filter((run) => run?.name === 'shell_run' && toolResultState(run) === 'success')
+    .map((run) => String(run?.result?.stdout || '').trim())
+    .filter(Boolean);
+  if (!candidates.length) return '';
+  const best = candidates.reduce((a, b) => (b.length > a.length ? b : a), candidates[0]);
+  if (!best || best.split('\n').length < 2) return '';
+  return best;
 }
 
 function collectShellStdout(executedTools = []) {
@@ -978,8 +1056,15 @@ function hasRepeatedIdenticalToolCalls(executedTools = []) {
 function buildGenericToolSummary({ executedTools = [], toolRuns = 0, requirements = null }) {
   const uniqueSurfaceCount = countUniqueToolSurfaces(executedTools);
 
+  // Model inference test results take priority regardless of repetition
+  const modelTestAnswer = buildModelTestAnswer({ executedTools });
+  if (modelTestAnswer) return modelTestAnswer;
+
   // When the same tool is called repeatedly with identical results, use deduplication-aware answers
   if (hasRepeatedIdenticalToolCalls(executedTools)) {
+    // Prefer meaningful shell output over internal step/status formats
+    const shellOut = buildShellOutputAnswer(executedTools);
+    if (shellOut) return shellOut;
     // Status queries should use buildStatusAnswer for status deduplication
     if (requirements?.asksStatus || /\bstatus\b/i.test(requirements?.originalUserMessage || '')) {
       return buildStatusAnswer({ executedTools, toolRuns, uniqueSurfaceCount });
@@ -1016,10 +1101,14 @@ function buildGenericToolSummary({ executedTools = [], toolRuns = 0, requirement
   if (requirements?.asksReview || requirements?.asksExplanation) {
     const review = buildCodebaseReviewAnswer({ userMessage: requirements.originalUserMessage || '', executedTools });
     if (review) return review;
+    // No file-based review evidence — fall back to direct shell output if present
+    const shellOut = buildShellOutputAnswer(executedTools);
+    if (shellOut) return shellOut;
   }
   if (requirements?.asksSteps) return buildStepAnswer({ executedTools, toolRuns, uniqueSurfaceCount });
   if (requirements?.asksStatus) return buildStatusAnswer({ executedTools, toolRuns, uniqueSurfaceCount });
   return buildCodebaseReviewAnswer({ userMessage: requirements?.originalUserMessage || '', executedTools }) ||
+    buildShellOutputAnswer(executedTools) ||
     buildStatusAnswer({ executedTools, toolRuns, uniqueSurfaceCount });
 }
 
@@ -1032,7 +1121,8 @@ function buildProvenanceFooter({ executedTools = [], synthesized = false }) {
 
 export function synthesizeToolOnlyAnswer({ userMessage = '', executedTools = [], toolRuns = 0 }) {
   const requirements = { ...extractRequirements(userMessage), originalUserMessage: userMessage };
-  const body = buildModelRankingAnswer({ userMessage, executedTools }) ||
+  const body = buildModelTestAnswer({ executedTools }) ||
+    buildModelRankingAnswer({ userMessage, executedTools }) ||
     buildGenericToolSummary({ executedTools, toolRuns, requirements }) ||
     '';
   const cappedBody = capSynthesisBody(body, countUniqueToolSurfaces(executedTools));
@@ -1124,6 +1214,9 @@ function shouldReplaceWeakFinalText({ finalText = '', userMessage = '', executed
   const text = String(finalText || '').trim();
   if (!text) return true;
   if (text.length > 12000) return true;
+  // Model test results are always valid — never replace them
+  if (/^Model test results:/im.test(text)) return false;
+  if (/^Hardware:.*\n.*Model test results:/ims.test(text)) return false;
   if (/Tool actions executed \(\d+\) but model returned no final message\./.test(text)) return true;
   if (/<\s*(tool_call|function_call|minimax:tool_call)\b/i.test(text)) return true;
   if (toolRuns > 0) {
