@@ -305,7 +305,7 @@ async function evalRun() {
   // Load config and create agent
   const config = loadConfig();
   const memory = new MemoryStore();
-  const agent = new OpenUnumAgent({ config, memory });
+  const agent = new OpenUnumAgent({ config, memoryStore: memory });
 
   const evalRunId = `eval_${Date.now()}`;
   console.log(`Running ${trajectories.length} trajectories (run: ${evalRunId})`);
@@ -318,8 +318,7 @@ async function evalRun() {
     try {
       const result = await agent.chat({
         sessionId: `eval_${evalRunId}_${i}`,
-        message: traj.goal || traj.plan || 'Complete this task',
-        maxSteps: traj.max_steps || 5
+        message: String(traj.goal || traj.plan || 'Complete this task').slice(0, 2000)
       });
 
       const latencyMs = Date.now() - startTime;

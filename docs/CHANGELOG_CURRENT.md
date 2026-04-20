@@ -2,6 +2,45 @@
 
 Date: 2026-04-20
 
+## Synthesis Fallback + Finality Scope Fixes (2026-04-20)
+
+**Status:** Implemented, tested, deployed
+
+### 1. FinalityGadget scope reduced — read-only shell commands no longer finality-tracked
+- **Problem:** `shell_run` was unconditionally in `finalityTrackedTools`, requiring 3 consecutive successes for ANY shell command — including read-only queries like `ollama list`. This caused the agent to re-run the same command multiple times seeking confirmations it didn't need, burning turn budget and generating redundant tool calls.
+- **Fix:** Removed `shell_run` from `finalityTrackedTools`. Finality tracking for shell now only applies when `hasUnsafeShellMetacharacters` is true (commands containing `;`, `&`, `|`, `` ` ``). Destructive write operations (`file_write`, `file_patch`, `session_delete`, `session_clear`, `git_push`, `skill_uninstall`) retain full 3-of-3 tracking.
+- **Files:** `src/tools/runtime.mjs`
+
+### 2. `collectMeaningfulFailures` — superseded failures suppressed
+- **Problem:** When the agent tried a variant command (e.g. `ollama list --no-trunc`) that failed, then successfully retried with a different form (`ollama list 2>&1`), the earlier failure was still counted as a "meaningful failure." The synthesis layer then reported "Resolve the blocked/failed tool path" even though the same data was successfully retrieved.
+- **Fix:** `collectMeaningfulFailures` now filters out any failure where the same tool name has a later success in the same turn. A failed variant followed by a successful retry is not actionable.
+- **Files:** `src/core/turn-recovery-summary.mjs`
+
+### 3. `buildShellOutputAnswer` — new synthesis function for shell output
+- **Problem:** The synthesis layer had no direct path to surface shell stdout as a final answer. When `buildCodebaseReviewAnswer` returned empty (no file paths in output), synthesis fell through to `buildStatusAnswer` → internal "Status:" format → apology chain.
+- **Fix:** Added `buildShellOutputAnswer` that selects the most informative shell stdout (longest candidate with ≥2 lines — filters out trivial one-liners like counts). Wired into `buildGenericToolSummary` as a fallback after `buildCodebaseReviewAnswer`, and into the final default chain. Also added to the `hasRepeatedIdenticalToolCalls` branch before `buildStepAnswer`.
+- **Files:** `src/core/turn-recovery-summary.mjs`
+
+### 4. `buildModelTestAnswer` — new synthesis function for model inference test results
+- **Problem:** When the agent ran a "test all models" mission and one model timed out, the turn ended without a `finalText`. The synthesis layer had no path for interpreting `http_request` inference ping results, so it produced the apology instead of reporting the 4 models that did pass.
+- **Fix:** Added `buildModelTestAnswer` that detects `http_request` calls to `/api/generate` or `/api/chat`, extracts model name + pass/fail + error per test, cross-references hardware profile from shell stdout, and formats a clean ✅/❌ table. Hoisted to the top of both `synthesizeToolOnlyAnswer` and `buildGenericToolSummary` — model test results always take priority.
+- **Files:** `src/core/turn-recovery-summary.mjs`
+
+### 5. `enforceVisibleReplyContract` — shell stdout fallback + model test guard
+- **Problem:** When all synthesis paths produced internal formats ("Status:" or "Best next steps from current evidence:"), `enforceVisibleReplyContract` immediately returned the apology with no further fallback.
+- **Fix:** Before giving up: (a) also checks for "Best next steps" as a leaked internal format, (b) tries to extract the most informative shell stdout directly as a last resort. Model test answers (`"Hardware:" / "Model test results:"` prefix) are explicitly excluded from internal-format detection and never replaced.
+- **Files:** `src/core/agent.mjs`, `src/core/turn-recovery-summary.mjs`
+
+### 6. `shouldReplaceWeakFinalText` — model test answers never discarded
+- **Fix:** Added early-return guard: any text starting with `"Model test results:"` or `"Hardware:"` is considered valid and never replaced by a re-synthesis pass.
+- **Files:** `src/core/turn-recovery-summary.mjs`
+
+### 7. Ollama 0.20.2 cloud routing confirmed
+- **Discovery:** Investigated why `qwen3.5:397b-cloud` timed out on a direct 30-second test but works in openclaw. Binary analysis of `/usr/local/bin/ollama` v0.20.2 revealed built-in cloud routing: the `:cloud` suffix in a model name triggers Ollama to proxy the request to `https://ollama.com`. `OLLAMA_CLOUD_BASE_URL` env var overrides the upstream. `http://127.0.0.1:11434` is therefore the correct `ollamaCloudBaseUrl` — the model name carries the routing signal. Earlier 30s timeout test failed because it was a cold-start (cloud stub pull); OpenUnum's `providerRequestTimeoutMs: 240000` handles warm requests correctly.
+- **No code change required** — existing configuration was already correct.
+
+---
+
 ## Provider Lane Split + Port Resilience (2026-04-20)
 
 **Status:** Implemented, tested, committed

@@ -34,7 +34,7 @@ This map is implementation-accurate as of 2026-04-20.
 - `src/core/sleep-cycle.mjs`: **NEW** — Idle-triggered aggressive compaction
 - `src/core/finality.mjs`: **UPDATED** — Stable, persisted finality confirmations after N verified tool runs
 - `src/core/role-model-registry.mjs`: **UPDATED** — Task-type to model-tier mapping with real tier enforcement in `agent.mjs`
-- `src/core/turn-recovery-summary.mjs`: bounded evidence-based summaries on tool failures
+- `src/core/turn-recovery-summary.mjs`: **UPDATED** — Synthesis fallback layer: `buildShellOutputAnswer` (picks most informative shell stdout ≥2 lines), `buildModelTestAnswer` (detects `/api/generate|chat` http_request calls, formats ✅/❌ model test table), `collectMeaningfulFailures` (suppresses failures superseded by later success of same tool), hoisted before `hasRepeatedIdenticalToolCalls` branch so shell/model-test outputs are never skipped by repetition detection
 - `src/tools/runtime.mjs`: unified tool schema + execution routing + tool-result verification + finality tracking
 - `src/tools/tool-contracts.mjs`: canonical tool schema/validation contract source
 - `src/tools/backends/registry.mjs`: model-backed logical tool backend resolution/execution

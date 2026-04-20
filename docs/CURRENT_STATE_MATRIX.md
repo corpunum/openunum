@@ -1,4 +1,4 @@
-# Current State Matrix (2026-04-17)
+# Current State Matrix (2026-04-20)
 
 This is the quick trust checkpoint for code, runtime, tests, docs, and remaining debt.
 
@@ -27,12 +27,13 @@ This is the quick trust checkpoint for code, runtime, tests, docs, and remaining
 | Independent verifier | `src/core/verifier.mjs` → tool runtime + agent post-flight | Active |
 | Role-model escalation | `src/core/role-model-registry.mjs` → `agent.mjs` | Active (tier-enforced, no permissive fallback) |
 | Freshness in retrieval | `src/memory/recall.mjs` → `applyFreshnessAndReturn()` | Active (30% weight) |
-| FinalityGadget | `src/core/finality.mjs` → `tools/runtime.mjs` | Active (stable persisted confirmation history for tracked operations) |
+| FinalityGadget | `src/core/finality.mjs` → `tools/runtime.mjs` | Active (destructive/write ops only: `file_write`, `file_patch`, `session_delete`, `session_clear`, `git_push`, `skill_uninstall`, unsafe-metachar `shell_run`; plain `shell_run` removed) |
 | Audit HMAC secret | `src/core/audit-log.mjs` → 3-tier resolution | Active (env > file > fallback with warning) |
 | Config parity/provider truth | `src/core/config-parity-check.mjs` | Active (errors on disabled active primary / forced invalid routing) |
 | Health/self-heal surface | `src/core/self-heal.mjs` + `src/server/routes/health.mjs` | Active (bounded checks, non-recursive `/api/health`, strict `/api/health/check`) |
 
 | Model-aware controller bug fixes | `src/core/model-behavior-registry.mjs`, `src/core/context-pack-builder.mjs`, `src/core/agent.mjs`, `src/core/agent-helpers.mjs` | Fixed (6 bugs: behavior description leak, ollama-cloud default miss, council revision overwrite, turn budget, planner misclassification, hard timeout) |
+| Synthesis fallback layer | `src/core/turn-recovery-summary.mjs` + `src/core/agent.mjs` | Fixed (5 synthesis failure modes: superseded failures, asksExplanation→apology, one-liner stdout, model inference test results, repetition-detection bypass) |
 | Cloud-model turn budget | `src/core/agent-helpers.mjs` → `strict-shell-cloud` profile | Fixed (180s/4 iters, was 60s/3) |
 | Chat hard timeout | `src/server/services/chat_runtime.mjs` → `chatHardTimeoutMs` | Fixed (300s, was 90s default) |
 | Task decomposition quality | `src/core/task-decomposer.mjs`, `src/core/completion-checklist.mjs` | Fixed (task-specific mapping + generic verb fallback guard) |

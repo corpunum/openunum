@@ -126,7 +126,7 @@ The following systems are now active and wired into the agent runtime:
 - **Role-model escalation** (`src/core/role-model-registry.mjs` → `agent.mjs`): tier checks now use inferred model tier instead of permissive allow-by-default behavior.
 - **Role-model escalation availability filter**: recommended routes are now skipped when the provider is disabled, missing required auth/base URL, or otherwise not routable in the current runtime config.
 - **Freshness decay** wired into `HybridRetriever` at 30% weight (`src/memory/recall.mjs` → `applyFreshnessAndReturn()`).
-- **FinalityGadget** (`src/core/finality.mjs` → `tools/runtime.mjs`): stable operation keys, persisted state, and default `3` verified successes for tracked destructive/high-risk operations.
+- **FinalityGadget** (`src/core/finality.mjs` → `tools/runtime.mjs`): stable operation keys, persisted state, and default `3` verified successes for tracked destructive/write operations. Tracked set: `file_write`, `file_patch`, `session_delete`, `session_clear`, `git_push`, `skill_uninstall`, plus `shell_run` with unsafe metacharacters (`;`, `&`, `|`, backtick). Plain `shell_run` is NOT tracked — it was removed to prevent read-only inspection commands from triggering finality gates.
 - **Audit log** now lives at `OPENUNUM_HOME/audit/audit-log.jsonl`. HMAC secret resolution remains: `AUDIT_HMAC_SECRET` env > `~/.openunum/audit-hmac-secret` file > insecure fallback with CRITICAL warning.
 - **Self-awareness** returns `insufficient_evidence` instead of a false healthy score when there are no assistant turns to evaluate.
 - **Health surface is bounded**: `/api/health` no longer re-enters self-heal via HTTP, and strict health status lives on `/api/health/check`.
@@ -152,3 +152,19 @@ Six bugs fixed that caused the `ollama-cloud/qwen3.5:397b-cloud` model to return
 
 - **Task decomposition quality guard**: spot-the-difference HTML/game prompts now decompose into concrete implementation steps instead of generic `Execute: <verb>` fallback steps; broad weak-signal verb lists no longer trigger decomposition.
 - **Council revision anti-loop guard**: when proof deficit is mild (`<= 0.08`) and evidence already exists (tool runs and/or independent verifier), the post-flight council records a skip note instead of forcing another recursive revision turn.
+
+## Synthesis Fallback + Finality Scope Fixes (2026-04-20)
+
+Five synthesis failure modes fixed in `src/core/turn-recovery-summary.mjs` and `src/core/agent.mjs`:
+
+1. **`collectMeaningfulFailures` supersession**: failures for a tool that later succeeds in the same turn were counted as actionable. They now suppress by index — only failures with no later success for the same tool name are surfaced.
+
+2. **`buildShellOutputAnswer`** (new): picks the most informative `shell_run` stdout across a turn. Uses longest-wins selection (not `.pop()`) and filters trivial one-liners (< 2 lines) so a trailing `wc -l` count can't be the answer.
+
+3. **`buildModelTestAnswer`** (new): detects `http_request` calls to `/api/generate` or `/api/chat`, extracts model name + pass/fail + error, cross-references hardware from shell stdout, and formats a ✅/❌ results table. Covers model inference test missions that previously returned an apology.
+
+4. **`buildGenericToolSummary` restructuring**: `buildModelTestAnswer` and `buildShellOutputAnswer` are now evaluated *before* `hasRepeatedIdenticalToolCalls`. Previously the repetition-detection branch intercepted these and fell to `buildStepAnswer`.
+
+5. **`enforceVisibleReplyContract` extension** (`agent.mjs`): the leaked-internal-format guard now also catches `Best next steps from current evidence:` patterns. The last-resort recovery chain tries: re-synthesize via recovery model → shell stdout → generic retry message.
+
+**Finality scope fix**: plain `shell_run` removed from `finalityTrackedTools` in `src/tools/runtime.mjs`. Read-only inspection commands (`ollama list`, `df -h`, etc.) no longer trigger the 3-success finality gate. Unsafe-metacharacter shell (`;`, `&`, `|`, backtick) is still tracked.

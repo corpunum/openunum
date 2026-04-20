@@ -115,7 +115,8 @@ Response (With trace metadata + verification + finality info)
 - Features: Argument generation, fallback handling, result compaction
 - Compact envelopes are read-only by default
 - Tool results receive independent verifier metadata before trace/log emission
-- Finality uses stable operation keys plus persisted confirmation history; tracked operations require `3` verified successes before `_finality.finalized=true`
+- Finality uses stable operation keys plus persisted confirmation history; tracked destructive/write operations require `3` verified successes before `_finality.finalized=true`
+- Tracked set: `file_write`, `file_patch`, `session_delete`, `session_clear`, `git_push`, `skill_uninstall`, plus `shell_run` calls containing unsafe metacharacters (`;`, `&`, `|`, backtick). Plain `shell_run` is NOT finality-tracked.
 - Backend substrate: `src/tools/backends/*` (registry/contracts/profiles/governor/adapters)
 
 ---
