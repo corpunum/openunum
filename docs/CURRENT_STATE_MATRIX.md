@@ -1,4 +1,4 @@
-# Current State Matrix (2026-04-20)
+# Current State Matrix (2026-04-21)
 
 This is the quick trust checkpoint for code, runtime, tests, docs, and remaining debt.
 
@@ -38,6 +38,7 @@ This is the quick trust checkpoint for code, runtime, tests, docs, and remaining
 | Chat hard timeout | `src/server/services/chat_runtime.mjs` → `chatHardTimeoutMs` | Fixed (300s, was 90s default) |
 | Task decomposition quality | `src/core/task-decomposer.mjs`, `src/core/completion-checklist.mjs` | Fixed (task-specific mapping + generic verb fallback guard) |
 | Council postflight recursion control | `src/core/agent.mjs` (`shouldSkipCouncilRevisionForMildProofDeficit`) | Fixed (skip mild proof-deficit revisions when evidence already exists) |
+| Fast-path context preservation | `src/core/agent.mjs`, `src/core/agent-helpers.mjs`, `src/core/fast-path-router.mjs` | Fixed (wrap stores real user message; follow-up imperatives score 0; hasActiveTaskContext guard; lowIntentScore > 0 gate) |
 
 ## Current Open Debt
 

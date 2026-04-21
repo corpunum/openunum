@@ -67,7 +67,7 @@ This map is implementation-accurate as of 2026-04-20.
 
 - Audit, verifier, and memory freshness APIs are handled through active route modules (`src/server/routes/audit.mjs`, `src/server/routes/verifier.mjs`, `src/server/routes/memory-freshness.mjs`) wired by `src/server.mjs`.
 - Web UI now prefers SSE pending stream updates via `GET /api/chat/stream` with adaptive activity polling fallback in `src/ui/index.html`.
-- Agent runtime includes a feature-based short-turn fast path (length + intent signals) for low-intent conversational turns to avoid unnecessary provider/tool cycles.
+- Agent runtime includes a feature-based short-turn fast path (length + intent signals) for low-intent conversational turns to avoid unnecessary provider/tool cycles. Context-loss safeguards: `wrap()` preserves real user messages (not redacted placeholders), `scoreDeterministicFastTurn` returns 0 for follow-up imperatives, `hasActiveTaskContext` prevents fast-path during active tasks, and `lowIntentScore > 0` gate blocks classifier override.
 
 ## Request Flow (Chat)
 

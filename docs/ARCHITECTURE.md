@@ -1,6 +1,6 @@
 # OpenUnum Architecture
 
-**Version:** 2.5.2  
+**Version:** 2.6.0
 **Last Updated:** 2026-04-17
 
 ---
@@ -22,6 +22,9 @@ OpenUnum is an autonomous AI assistant with production-grade context engineering
 - Orchestrates deterministic and short-circuit replies
 - Handles slash commands, support queries, status checks, and social/identity queries (e.g., "how smart are you?") without LLM calls
 - Reduces latency and token waste for routine conversational turns
+- **Context preservation:** `wrap()` stores the real user message in session memory (not a redacted placeholder), so conversational context survives fast-path turns
+- **Follow-up imperative guard:** `scoreDeterministicFastTurn()` returns 0 for "ok go", "continue", "yes", etc. so they always reach the LLM
+- **Active-task guard:** `hasActiveTaskContext` regex checks last assistant message for task signals, preventing fast-path during active multi-turn work
 
 ### 3. Context Compiler (`src/core/context-compiler.mjs`)
 Ordered pipeline for context assembly:
@@ -169,6 +172,7 @@ Run: `npm test`
 
 | Version | Date | Changes |
 |---------|------|---------|
+| 2.6.0 | 2026-04-21 | Fast-path context preservation: wrap() stores real user messages, follow-up imperative 0-scoring, hasActiveTaskContext guard, lowIntentScore > 0 gate; eval pipeline memoryStore fix |
 | 2.5.0 | 2026-04-16 | Phase 4 hardening: autonomy auto-start, ODD enforcement, full verifier, freshness in retrieval, role-model escalation, finality gadget, death-spiral detection, audit HMAC 3-tier, consolidation triggers |
 | 2.4.0 | 2026-04-15 | Council validation, session sweep, UI decomposition |
 | 2.1.0 | 2026-04-05 | Hybrid retrieval, context compiler, enriched compaction, proof scorer v2 |

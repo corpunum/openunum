@@ -61,8 +61,13 @@ Interpretation:
 
 The agent uses a two-tier routing system to offload non-cognitive turns:
 
-- **FastPathRouter (`src/core/fast-path-router.mjs`)**: Orchestrates deterministic and short-circuit replies for slash commands, support queries, status checks, and social/identity queries (e.g., "how smart are you?", "are you alive?").
+- **FastPathRouter (`src/core/fast-path-router.mjs`)**: Orchestrates deterministic and short-circuit replies for slash commands, support queries, status checks, and social/identity queries (e.g., "how smart are you?", "are you alive?"). `wrap()` stores the real user message in session memory (not a redacted placeholder), preserving context across fast-path turns.
 - **FastAwarenessRouter (`src/core/fast-awareness-router.mjs`)**: Classifies messages to determine retrieval strategy and identifies "light-chat" or "greeting" turns that can be short-circuited before triggering expensive LLM calls.
+
+Context-loss safeguards:
+- `scoreDeterministicFastTurn()` returns 0 for follow-up imperatives ("ok go", "continue", "yes", "proceed", etc.) so they always reach the LLM with full context.
+- `hasActiveTaskContext` checks the last assistant message for task signals (tool results, step lists, errors, proposals) and prevents fast-pathing during active multi-turn work.
+- `lowIntentScore > 0` gate blocks classifier confidence from overriding an explicit zero score.
 
 Intent:
 - Keep the main cognitive loop clean.

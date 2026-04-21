@@ -1,5 +1,26 @@
 # Changelog (Current Consolidated)
 
+Date: 2026-04-21
+
+## Fast-Path Context Loss Fix (2026-04-21)
+
+**Status:** Implemented, tested, deployed
+
+### 1. FastPathRouter.wrap() stored REDACTED_FAST_PATH_TRIGGER instead of real user message
+- **Problem:** When the fast path handled a message, `wrap()` stored `'REDACTED_FAST_PATH_TRIGGER'` as the user message in session history. Subsequent turns saw this placeholder instead of what was actually asked, destroying all conversation context. Agents would say "this turn has no prior review context attached" and then lose track of the entire task.
+- **Fix:** `wrap()` now accepts the original message as a 5th parameter and stores the actual user text in session memory. All call sites in `route()` pass the message through.
+- **Files:** `src/core/fast-path-router.mjs`
+
+### 2. scoreDeterministicFastTurn scored follow-up imperatives as 1.0 (max low-intent)
+- **Problem:** Short follow-ups like "ok go" scored 1.0 in `scoreDeterministicFastTurn` (2 words → +0.45, ≤24 chars → +0.25, no task signal → +0.20, no code → +0.15 = 1.05 clamped to 1.0). This caused the LLM to be bypassed entirely, returning "Ready. Tell me what you want to do next." instead of continuing the active task.
+- **Fix:** Added explicit pattern for known follow-up imperatives (ok go, go ahead, go on, keep going, proceed, continue, yes, ok, okay, got it, understood, right, sure, yeah, yep) that returns 0 immediately. Also reduced base scoring weights to be less aggressive: word-count +0.30/0.20/0.10/0.05, length +0.15/0.08/0.03, no-task +0.15, no-code +0.10.
+- **Files:** `src/core/agent-helpers.mjs`
+
+### 3. canFastReturn OR logic let classifier override zero scoreDeterministicFastTurn
+- **Problem:** Even with `lowIntentScore = 0` (explicitly "not a fast turn"), the condition `(rawHistoryUserTurns <= 4 && classifierConf >= 0.78) || lowIntentScore >= 0.88` could still pass via the classifier branch, fast-pathing messages that should reach the LLM.
+- **Fix:** Added `lowIntentScore > 0 &&` guard so a zero score blocks the fast path regardless of classifier confidence. Added `hasActiveTaskContext` check that scans the last assistant message for task signals (step, task, result, tool, run, test, check, error, fix, complete, working, responding, failed, etc.) and prevents fast-pathing during active multi-turn conversations.
+- **Files:** `src/core/agent.mjs`
+
 Date: 2026-04-20
 
 ## Synthesis Fallback + Finality Scope Fixes (2026-04-20)
