@@ -1877,6 +1877,12 @@ export class OpenUnumAgent {
     const fastAwarenessResult = fastAwarenessRouter.classify(message);
     latency.awarenessMs = Date.now() - awarenessStartedAt;
 
+    // Check if recent conversation indicates an active multi-turn task.
+    // Short follow-ups like "ok go" or "continue" should not be fast-path'd
+    // when the last assistant message contains tool results, step lists, or proposals.
+    const lastAssistantContent = rawHistory.filter((m) => m.role === 'assistant').slice(-1)[0]?.content || '';
+    const hasActiveTaskContext = /\b(step|task|result|tool|run|test|check|error|fix|complete|working|responding|failed|✅|❌|Proposed|Execution plan|Priority order|remediation|review)\b/i.test(lastAssistantContent);
+
     // Deterministic ultra-fast greeting path: skip provider call entirely.
     if (fastAwarenessResult?.category === 'greeting' || fastAwarenessResult?.category === 'light-chat') {
       const rawHistoryUserTurns = rawHistory.filter((m) => m.role === 'user').length;
@@ -1884,7 +1890,7 @@ export class OpenUnumAgent {
       const classifierConf = Number(fastAwarenessResult?.confidence || 0);
       const canFastReturn = fastAwarenessResult.category === 'greeting'
         ? true
-        : (rawHistoryUserTurns <= 4 && classifierConf >= 0.78) || lowIntentScore >= 0.88;
+        : lowIntentScore > 0 && ((rawHistoryUserTurns <= 4 && classifierConf >= 0.78) || lowIntentScore >= 0.88) && !hasActiveTaskContext;
       const quick = !canFastReturn
         ? ''
         : (fastAwarenessResult.category === 'greeting'

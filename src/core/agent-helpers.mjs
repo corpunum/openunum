@@ -1183,10 +1183,16 @@ export function deterministicLightChatReply() {
 export function scoreDeterministicFastTurn(text) {
   const raw = String(text || '').toLowerCase().trim();
   if (!raw) return 0;
-  
+
   // High-confidence patterns for self-assessment and identity
   if (isSelfAssessmentQuestion(raw) || isConversationalAliveQuestion(raw)) {
     return 0.95;
+  }
+
+  // Short follow-up imperatives like "ok go", "ok", "yes", "continue", "go ahead"
+  // should not be scored as low-intent — they are continuation signals in multi-turn tasks
+  if (/^(ok\s+go|go\s+ahead|go on|keep going|proceed|continue|yes|ok|okay|got it|understood|right|sure|yeah|yep)\s*$/i.test(raw)) {
+    return 0;
   }
 
   const normalized = raw.replace(/[^\w\s]/g, ' ').replace(/\s+/g, ' ').trim();
@@ -1196,18 +1202,18 @@ export function scoreDeterministicFastTurn(text) {
   const hasTaskSignal = TASK_SIGNAL_RE.test(normalized);
   const hasCodeLike = /[\\/`$={}[\]<>]/.test(raw) || /\d{2,}/.test(raw);
   let score = 0;
-  if (words.length <= 3) score += 0.45;
-  else if (words.length <= 5) score += 0.3;
-  else if (words.length <= 8) score += 0.15;
+  if (words.length <= 3) score += 0.30;
+  else if (words.length <= 5) score += 0.20;
+  else if (words.length <= 8) score += 0.10;
   else if (words.length <= 12) score += 0.05;
-  
-  if (normalized.length <= 24) score += 0.25;
-  else if (normalized.length <= 40) score += 0.12;
-  else if (normalized.length <= 80) score += 0.05;
-  
-  if (!hasTaskSignal) score += 0.2;
-  if (!hasCodeLike) score += 0.15;
-  
+
+  if (normalized.length <= 24) score += 0.15;
+  else if (normalized.length <= 40) score += 0.08;
+  else if (normalized.length <= 80) score += 0.03;
+
+  if (!hasTaskSignal) score += 0.15;
+  if (!hasCodeLike) score += 0.10;
+
   // Specific boost for "scale from 1-10" if it's not a complex task
   if (raw.includes('scale from 1') && raw.includes('10') && !hasTaskSignal) {
     score += 0.4;
@@ -1215,7 +1221,7 @@ export function scoreDeterministicFastTurn(text) {
 
   if (hasTaskSignal) score -= 0.9;
   if (hasCodeLike && !raw.includes('1-10')) score -= 0.7;
-  
+
   return Math.max(0, Math.min(1, score));
 }
 

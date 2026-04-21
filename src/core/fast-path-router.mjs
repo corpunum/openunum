@@ -87,7 +87,7 @@ export class FastPathRouter {
     if (slash) {
       const slashReply = await this.handleSlashCommand(message, sessionId, slash);
       if (slashReply) {
-        const result = this.wrap(sessionId, slashReply, `slash_command:${slash.name}`);
+        const result = this.wrap(sessionId, slashReply, `slash_command:${slash.name}`, null, message);
         logInfo('fast_path_routed', { sessionId, category: 'slash_command', note: slash.name });
         return result;
       }
@@ -96,7 +96,7 @@ export class FastPathRouter {
     // 2. Session Support
     const supportReply = buildSessionSupportReply({ message, sessionId, recentMessages });
     if (supportReply) {
-      const result = this.wrap(sessionId, supportReply, 'session_support_reply');
+      const result = this.wrap(sessionId, supportReply, 'session_support_reply', null, message);
       logInfo('fast_path_routed', { sessionId, category: 'session_support' });
       return result;
     }
@@ -104,7 +104,7 @@ export class FastPathRouter {
     // 3. History Review
     const historyReply = buildDeterministicSessionHistoryReviewReply({ message, sessionId, recentMessages });
     if (historyReply) {
-      const result = this.wrap(sessionId, historyReply, 'deterministic_session_history_review', 'session-history-review');
+      const result = this.wrap(sessionId, historyReply, 'deterministic_session_history_review', 'session-history-review', message);
       logInfo('fast_path_routed', { sessionId, category: 'session-history-review' });
       return result;
     }
@@ -112,7 +112,7 @@ export class FastPathRouter {
     // 4. Action Confirmation
     const actionReply = buildDeterministicActionConfirmationReply({ message, recentMessages });
     if (actionReply) {
-      const result = this.wrap(sessionId, actionReply, 'deterministic_action_confirmation', 'action-confirmation');
+      const result = this.wrap(sessionId, actionReply, 'deterministic_action_confirmation', 'action-confirmation', message);
       logInfo('fast_path_routed', { sessionId, category: 'action-confirmation' });
       return result;
     }
@@ -120,7 +120,7 @@ export class FastPathRouter {
     // 5. Review Follow-up
     const followUpReply = buildDeterministicReviewFollowUpReply({ message, recentMessages });
     if (followUpReply) {
-      const result = this.wrap(sessionId, followUpReply, 'deterministic_review_follow_up', 'review-follow-up');
+      const result = this.wrap(sessionId, followUpReply, 'deterministic_review_follow_up', 'review-follow-up', message);
       logInfo('fast_path_routed', { sessionId, category: 'review-follow-up' });
       return result;
     }
@@ -128,7 +128,7 @@ export class FastPathRouter {
     // 6. Improvement Proposal
     const improvementReply = buildDeterministicImprovementProposalReply({ message, recentMessages });
     if (improvementReply) {
-      const result = this.wrap(sessionId, improvementReply, 'deterministic_product_improvement', 'product-improvement-proposal');
+      const result = this.wrap(sessionId, improvementReply, 'deterministic_product_improvement', 'product-improvement-proposal', message);
       logInfo('fast_path_routed', { sessionId, category: 'product-improvement-proposal' });
       return result;
     }
@@ -136,7 +136,7 @@ export class FastPathRouter {
     // 7. Standalone Support
     const standaloneReply = buildDeterministicStandaloneFastReply({ message, recentMessages });
     if (standaloneReply) {
-      const result = this.wrap(sessionId, standaloneReply, 'deterministic_standalone_support', 'standalone-support');
+      const result = this.wrap(sessionId, standaloneReply, 'deterministic_standalone_support', 'standalone-support', message);
       logInfo('fast_path_routed', { sessionId, category: 'standalone-support' });
       return result;
     }
@@ -144,7 +144,7 @@ export class FastPathRouter {
     // 8. Model Info
     if (isModelInfoQuestion(message)) {
       const infoReply = this.buildModelInfoReply(modelForBudget);
-      const result = this.wrap(sessionId, infoReply, 'model_info_response');
+      const result = this.wrap(sessionId, infoReply, 'model_info_response', null, message);
       logInfo('fast_path_routed', { sessionId, category: 'model_info' });
       return result;
     }
@@ -152,7 +152,7 @@ export class FastPathRouter {
     // 9. Alive/Dead Question
     if (isConversationalAliveQuestion(message)) {
       const aliveReply = "I'm here and ready to help! I'm fully operational and waiting for your next task. What would you like us to work on together?";
-      const result = this.wrap(sessionId, aliveReply, 'conversational_alive_handled', 'conversational_alive');
+      const result = this.wrap(sessionId, aliveReply, 'conversational_alive_handled', 'conversational_alive', message);
       logInfo('fast_path_routed', { sessionId, category: 'conversational_alive' });
       return result;
     }
@@ -160,7 +160,7 @@ export class FastPathRouter {
     // 10. Self Assessment
     if (isSelfAssessmentQuestion(message)) {
       const assessmentReply = "I am a highly capable autonomous AI agent powered by OpenUnum. I can help you with a wide range of tasks, including file operations, web research, shell execution, and more. My 'intelligence' is a combination of the underlying LLM's reasoning and my framework's autonomous capabilities. How can I assist you today?";
-      const result = this.wrap(sessionId, assessmentReply, 'self_assessment_handled', 'self_assessment');
+      const result = this.wrap(sessionId, assessmentReply, 'self_assessment_handled', 'self_assessment', message);
       logInfo('fast_path_routed', { sessionId, category: 'self_assessment' });
       return result;
     }
@@ -210,8 +210,9 @@ export class FastPathRouter {
     ].join('\n');
   }
 
-  wrap(sessionId, reply, note, category = null) {
-    this.memoryStore.addMessage(sessionId, 'user', 'REDACTED_FAST_PATH_TRIGGER'); // Avoid recursion/bloat
+  wrap(sessionId, reply, note, category = null, originalMessage = '') {
+    const storedMessage = String(originalMessage || '').trim() || '(fast path handled)';
+    this.memoryStore.addMessage(sessionId, 'user', storedMessage);
     this.memoryStore.addMessage(sessionId, 'assistant', reply);
     
     return {
