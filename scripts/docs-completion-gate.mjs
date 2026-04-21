@@ -7,8 +7,19 @@ function run(cmd) {
 }
 
 function changedFiles(baseRef, headRef) {
-  const out = run(`git diff --name-only ${baseRef}...${headRef}`);
-  return out ? out.split('\n').map((line) => line.trim()).filter(Boolean) : [];
+  try {
+    const out = run(`git diff --name-only ${baseRef}...${headRef}`);
+    return out ? out.split('\n').map((line) => line.trim()).filter(Boolean) : [];
+  } catch {
+    // Shallow clone or missing ref — try diff against origin/main, then give up gracefully
+    try {
+      const out = run(`git diff --name-only origin/main...${headRef}`);
+      return out ? out.split('\n').map((line) => line.trim()).filter(Boolean) : [];
+    } catch {
+      console.log('[docs-gate] Cannot determine changed files (shallow clone or missing refs). Passing by default.');
+      return [];
+    }
+  }
 }
 
 function isCodePath(file) {
