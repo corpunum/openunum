@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
@@ -6,31 +7,43 @@ import { startServer, stopServer, jget, jpost } from './_helpers.mjs';
 
 function loadDistinctLatestUserPrompts() {
   const dbPath = path.join(os.homedir(), '.openunum', 'openunum.db');
-  const db = new DatabaseSync(dbPath);
-  const rows = db.prepare(`
-    WITH candidate_sessions AS (
-      SELECT id
-      FROM sessions
-      WHERE id NOT LIKE 'health-check-%'
-        AND id NOT LIKE 'autotest-%'
-        AND id NOT LIKE 'mission:%'
-    ),
-    last_user AS (
-      SELECT
-        m.session_id,
-        m.content,
-        m.created_at,
-        ROW_NUMBER() OVER (PARTITION BY m.session_id ORDER BY m.id DESC) AS rn
-      FROM messages m
-      JOIN candidate_sessions s ON s.id = m.session_id
-      WHERE m.role = 'user'
-    )
-    SELECT session_id, content, created_at
-    FROM last_user
-    WHERE rn = 1
-    ORDER BY created_at DESC
-  `).all();
-  db.close();
+  if (!fs.existsSync(dbPath)) return [];
+  let db;
+  try {
+    db = new DatabaseSync(dbPath);
+  } catch {
+    return [];
+  }
+  let rows;
+  try {
+    rows = db.prepare(`
+      WITH candidate_sessions AS (
+        SELECT id
+        FROM sessions
+        WHERE id NOT LIKE 'health-check-%'
+          AND id NOT LIKE 'autotest-%'
+          AND id NOT LIKE 'mission:%'
+      ),
+      last_user AS (
+        SELECT
+          m.session_id,
+          m.content,
+          m.created_at,
+          ROW_NUMBER() OVER (PARTITION BY m.session_id ORDER BY m.id DESC) AS rn
+        FROM messages m
+        JOIN candidate_sessions s ON s.id = m.session_id
+        WHERE m.role = 'user'
+      )
+      SELECT session_id, content, created_at
+      FROM last_user
+      WHERE rn = 1
+      ORDER BY created_at DESC
+    `).all();
+  } catch {
+    rows = [];
+  } finally {
+    db.close();
+  }
 
   const dedup = new Map();
   for (const row of rows) {
@@ -79,6 +92,10 @@ try {
   const prompts = loadDistinctLatestUserPrompts();
   const caseLimit = Number(process.env.OPENUNUM_PHASE56_LIMIT || 0);
   const targetPrompts = caseLimit > 0 ? prompts.slice(0, caseLimit) : prompts;
+  if (targetPrompts.length === 0) {
+    console.log('phase56.user-session-imitation-sweep.e2e: skip (no prompts from existing sessions)');
+    process.exit(0);
+  }
   proc = await startServer();
 
   const failures = [];
