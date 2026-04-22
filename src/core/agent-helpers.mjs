@@ -136,12 +136,14 @@ export function isChannelSupportQuestion({ message = '', sessionId = '', recentM
   const directPatterns = [
     /\btelegram\b.*\b(session|chat|bot|command|commands|start|clear|status|new)\b/,
     /\b(start|new|clear|reset|fresh)\b.*\btelegram\b.*\b(session|chat)\b/,
-    /\b(is there|what is|which is|can we create|do we have)\b.*\b(command|commands|order|start|status|session)\b/,
+    /\b(is there|what is|which is|can we create|do we have)\b.*\b(openunum |unum )?\b(commands?|slash commands?|sessions?)\b/,
     /\bthrough telegram\b/,
-    /\/status\b|\/new\b|\/start\b|\/session\b/
+    /\/status\b|\/new\b|\/start\b|\/session\b/,
+    /\bwhat (commands?|sessions?|slash commands?)\b/,
+    /\bhow to (use|start|clear|reset) (the )?(telegram |unum |openunum )?(commands?|sessions?|chat)\b/,
+    /\b(start|new|clear|fresh) (a |the )?(sessions?|chats?)\b/
   ];
   if (directPatterns.some((pattern) => pattern.test(t))) return true;
-  if (isTelegramSession && /\b(session|chat|command|commands|status|start|clear|fresh)\b/.test(t)) return true;
   return isTelegramSession && isLooseSupportFollowUp(t) && recentChannelSupportTopic(recentMessages);
 }
 
@@ -874,7 +876,7 @@ const TOOL_ROUTING_HINTS = [
   { tool: 'session_delete', terms: ['delete session', 'remove session'] },
   { tool: 'session_list', terms: ['list sessions', 'show sessions'] },
   { tool: 'file_patch', terms: ['fix ui', 'runtime ui', 'scrollbar', 'overflow', 'fit in container', 'layout fix', 'css fix'] },
-  { tool: 'browser_search', terms: ['search', 'google', 'find online', 'web research', 'browse'] },
+  { tool: 'browser_search', terms: ['search', 'google', 'find online', 'web research', 'browse', 'check online', 'look up online', 'search online'] },
   { tool: 'browser_navigate', terms: ['open website', 'navigate', 'visit', 'go to', 'browser'] },
   { tool: 'browser_extract', terms: ['extract', 'scrape', 'read page', 'page text'] },
   { tool: 'file_read', terms: ['read file', 'inspect file', 'open file', 'show file'] },
