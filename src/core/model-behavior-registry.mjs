@@ -43,8 +43,9 @@ function defaultBehaviorFor(provider, model) {
 
   if (p === 'openai') return 'tool_native_strict';
   if (p === 'nvidia' || p === 'openrouter') return 'timeout_prone_deep_thinker';
+  if (p === 'llama-cpp-local') return 'local_runtime_fragile';
   if ((p === 'ollama' || p === 'ollama-cloud') && /cloud|kimi|minimax|qwen3\.5:397b|glm-5/.test(m)) return 'timeout_prone_deep_thinker';
-  if ((p === 'ollama' || p === 'ollama-cloud') && /8b|9b|14b|qwen|llama|uncensored/.test(m)) return 'local_runtime_fragile';
+  if ((p === 'ollama' || p === 'ollama-cloud') && /8b|9b|14b|qwen|llama|supergemma|uncensored/.test(m)) return 'local_runtime_fragile';
   return 'planner_heavy_no_exec';
 }
 

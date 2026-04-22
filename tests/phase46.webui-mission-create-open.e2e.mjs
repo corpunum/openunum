@@ -154,7 +154,10 @@ try {
   }, 10000);
 
   await page.click('.menu-btn[data-view="missions"]');
-  await page.waitForSelector('#view-missions.active', { timeout: 15000 });
+  await page.waitForSelector('#settingsHub[open]', { timeout: 15000 });
+  // Navigate to developer category which contains missions
+  await page.click('.settings-rail-item[data-category="developer"]');
+  await page.waitForSelector('#settings-developer.active', { timeout: 5000 });
   await page.waitForSelector('#stopMission', { state: 'visible', timeout: 15000 });
   await page.click('#stopMission');
   await waitForCondition(async () => missionStopCalls > 0, 8000);

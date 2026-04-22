@@ -1,4 +1,4 @@
-# Current State Matrix (2026-04-21)
+# Current State Matrix (2026-04-22)
 
 This is the quick trust checkpoint for code, runtime, tests, docs, and remaining debt.
 
@@ -6,7 +6,9 @@ This is the quick trust checkpoint for code, runtime, tests, docs, and remaining
 |---|---|---|
 | Runtime server/API behavior | `src/server.mjs` + `src/server/routes/*` | Active |
 | Runtime route inventory | `docs/ROUTE_REGISTRY.json` | Generated + freshness-gated |
-| Web UI behavior | `src/ui/index.html`, `src/ui/styles.css`, `src/ui/app.js`, `src/ui/modules/*` | Active |
+| Web UI behavior | `src/ui/index.html`, `src/ui/styles.css`, `src/ui/app.js`, `src/ui/modules/*`, `src/ui/assets/openunum/*` | Active (chat-first shell, collapsible sidebar, settings hub modal, lazy bootstrap) |
+| Streaming/reasoning UI | `src/core/agent-events.mjs`, `src/ui/index.html`, provider `chatStream()` | Active (token-by-token streaming, reasoning panel, raw-response panel, tool-call cards) |
+| Messages schema v3 | `src/memory/store.mjs` → `reasoning`, `raw_reply` columns | Active (DB persistence for reasoning + raw model output) |
 | Pending chat delivery | `/api/chat`, `/api/chat/stream`, `/api/chat/pending` | Active, turn-aware |
 | Pending queue watchdog | `/api/chat/diagnostics`, `AutonomyMaster.pendingQueue` | Active |
 | Autonomy remediation queue | `/api/autonomy/remediations*` + `src/core/autonomy-remediation-queue.mjs` | Active |
@@ -39,6 +41,8 @@ This is the quick trust checkpoint for code, runtime, tests, docs, and remaining
 | Task decomposition quality | `src/core/task-decomposer.mjs`, `src/core/completion-checklist.mjs` | Fixed (task-specific mapping + generic verb fallback guard) |
 | Council postflight recursion control | `src/core/agent.mjs` (`shouldSkipCouncilRevisionForMildProofDeficit`) | Fixed (skip mild proof-deficit revisions when evidence already exists) |
 | Fast-path context preservation | `src/core/agent.mjs`, `src/core/agent-helpers.mjs`, `src/core/fast-path-router.mjs` | Fixed (wrap stores real user message; follow-up imperatives score 0; hasActiveTaskContext guard; lowIntentScore > 0 gate) |
+| Streaming/chat TDZ + scope fixes | `src/core/agent.mjs`, provider `chatStream()` | Fixed (reasoning TDZ, rawContentParts/generatedImages/provider scope, streaming timeout finally-block cleanup, reasoning append-not-overwrite) |
+| Settings hub + sidebar restructure | `src/ui/index.html`, `src/ui/modules/navigation.js`, `src/ui/modules/ui-bootstrap.js` | Active (dialog modal, 8 categories, collapsible sidebar, lazy bootstrap) |
 
 ## Current Open Debt
 

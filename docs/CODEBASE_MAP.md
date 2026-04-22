@@ -1,6 +1,6 @@
 # Codebase Map
 
-This map is implementation-accurate as of 2026-04-20.
+This map is implementation-accurate as of 2026-04-22.
 
 ## Top-Level Structure
 
@@ -49,7 +49,7 @@ This map is implementation-accurate as of 2026-04-20.
 - `src/core/autonomy-master.mjs`: continuous autonomy coordinator (self-heal, self-test, self-improve, skill learning, death-spiral detection, memory consolidation triggers)
 - `src/core/context-budget.mjs`: model-aware context window estimation + token usage checks
 - `src/core/context-compact.mjs`: old-message compaction and artifact extraction
-- `src/memory/store.mjs`: SQLite persistence for sessions/messages/facts/tool runs/strategy outcomes plus mission/task durability **+ state roots**
+- `src/memory/store.mjs`: SQLite persistence for sessions/messages/facts/tool runs/strategy outcomes plus mission/task durability **+ state roots**; schema v3 adds `reasoning` and `raw_reply` columns to `messages`
 - `src/memory/recall.mjs`: **UPDATED** — Hybrid retrieval with BM25 + embeddings + freshness decay (30% weight) via `applyFreshnessAndReturn()`
 - `src/eval/trajectory-memory.mjs`: **NEW** — TrajectoryMemoryStore for case-based reasoning (SQLite CRUD with goal search, compatibility filtering, consolidation-gated writes)
 - `src/eval/trajectory-retriever.mjs`: **NEW** — TrajectoryRetriever for inference-time similar-case retrieval + extractTrajectoryMemory() for consolidation
@@ -59,14 +59,33 @@ This map is implementation-accurate as of 2026-04-20.
 - `src/browser/cdp.mjs`: Chrome DevTools Protocol abstraction
 - `src/providers/*`: provider adapters **+ retry policy + health tracking**
 - `src/models/catalog.mjs`: provider model discovery/ranking + OpenClaw key import
-- `src/ui/index.html`: menu-driven Web UI and chat trace renderer
+- `src/ui/index.html`: menu-driven Web UI and chat trace renderer (chat-first shell, collapsible sidebar, settings hub modal)
+- `src/ui/app.js`: app composition, delegates bootstrap to `ui-bootstrap.js`
+- `src/ui/modules/navigation.js`: sidebar navigation, view switching, settings hub category rail
+- `src/ui/modules/ui-bootstrap.js`: lazy bootstrap (5 essential steps on load, 10 deferred steps on first settings category open)
+- `src/ui/modules/ui-constants.js`: static view metadata, provider/service field maps
+- `src/ui/modules/ui-state-init.js`: initial session/toggle/state hydration
+- `src/ui/modules/ui-state-helpers.js`: pending/detail/view helper logic
+- `src/ui/modules/ui-lifecycle.js`: controller bind/schedule/bootstrap wiring
+- `src/ui/modules/app-composition.js`: controller composition and cross-controller wiring
+- `src/ui/modules/chat-pending-controller.js`: pending chat rehydration and completion handoff
+- `src/ui/modules/autonomy-dashboard-panel.js`: autonomy dashboard logic
+- `src/ui/modules/mission-timeline-panel.js`: mission timeline fetch/render
+- `src/ui/modules/runtime-panels.js`: runtime panel delegation
+- `src/ui/modules/runtime-refreshers.js`: runtime state refresh functions
+- `src/ui/modules/settings-actions-model-routing.js`: model routing settings binder
+- `src/ui/modules/settings-actions-provider-vault.js`: provider vault settings binder
+- `src/ui/modules/settings-actions-runtime-session.js`: runtime/session settings binder
+- `src/ui/assets/openunum/`: brand assets (icon.png, loading.gif, processing.gif, downloading.gif, working.gif)
+- `src/core/agent-events.mjs`: agent event bus for real-time SSE events (streaming, reasoning, tool calls)
 - `src/channels/telegram.mjs`: Telegram poll/send loop
 - `src/cli.mjs`: command-line entry
 
 ## Runtime Notes
 
 - Audit, verifier, and memory freshness APIs are handled through active route modules (`src/server/routes/audit.mjs`, `src/server/routes/verifier.mjs`, `src/server/routes/memory-freshness.mjs`) wired by `src/server.mjs`.
-- Web UI now prefers SSE pending stream updates via `GET /api/chat/stream` with adaptive activity polling fallback in `src/ui/index.html`.
+- Web UI now prefers SSE pending stream updates via `GET /api/chat/stream` with adaptive activity polling fallback in `src/ui/index.html`. Streaming delivers token-by-token rendering, reasoning/thinking panels, raw-response panels, and tool-call cards via the agent event bus (`src/core/agent-events.mjs`).
+- Static asset serving in `src/server/routes/ui.mjs` extended to: `.png`, `.gif`, `.webp`, `.svg`, `.ico`, `.woff2`, `.woff`, `.ttf`. Brand assets served from `src/ui/assets/openunum/`.
 - Agent runtime includes a feature-based short-turn fast path (length + intent signals) for low-intent conversational turns to avoid unnecessary provider/tool cycles. Context-loss safeguards: `wrap()` preserves real user messages (not redacted placeholders), `scoreDeterministicFastTurn` returns 0 for follow-up imperatives, `hasActiveTaskContext` prevents fast-path during active tasks, and `lowIntentScore > 0` gate blocks classifier override.
 
 ## Request Flow (Chat)

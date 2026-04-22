@@ -788,6 +788,11 @@ export function compactToolResult(result) {
       note: truncateText(item.note || '', 120)
     }));
   }
+  // Image results: summarize instead of including raw base64
+  if (Array.isArray(r.images)) {
+    compact.images = `[${r.images.length} image(s) generated, ${r.images.reduce((s, img) => s + (typeof img === 'string' ? img.length : 0), 0)} bytes base64 total]`;
+  }
+  if (r.parameters) compact.parameters = r.parameters;
   return compact;
 }
 

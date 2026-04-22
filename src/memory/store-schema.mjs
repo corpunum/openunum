@@ -1,4 +1,4 @@
-const MEMORY_STORE_SCHEMA_VERSION = 2;
+const MEMORY_STORE_SCHEMA_VERSION = 3;
 
 function getSchemaVersion(db) {
   try {
@@ -239,6 +239,15 @@ CREATE INDEX IF NOT EXISTS idx_messages_session_id_id ON messages(session_id, id
 CREATE INDEX IF NOT EXISTS idx_messages_session_role_id ON messages(session_id, role, id ASC);
 CREATE INDEX IF NOT EXISTS idx_session_compactions_session_id_id ON session_compactions(session_id, id DESC);
 `);
+
+  // Always ensure columns exist (safe to run multiple times, handles version clobbering)
+  const messageColumns = db.prepare("PRAGMA table_info(messages)").all().map(c => c.name);
+  if (!messageColumns.includes('reasoning')) {
+    db.exec('ALTER TABLE messages ADD COLUMN reasoning TEXT DEFAULT NULL');
+  }
+  if (!messageColumns.includes('raw_reply')) {
+    db.exec('ALTER TABLE messages ADD COLUMN raw_reply TEXT DEFAULT NULL');
+  }
 
   if (currentVersion < MEMORY_STORE_SCHEMA_VERSION) {
     db.exec(`PRAGMA user_version = ${MEMORY_STORE_SCHEMA_VERSION};`);

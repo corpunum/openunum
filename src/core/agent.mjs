@@ -96,6 +96,7 @@ import { logEvent } from './audit-log.mjs';
 import { logInfo, logError } from '../logger.mjs';
 import { saveConfig } from '../config.mjs';
 import { buildConfigParityReport } from './config-parity-check.mjs';
+import { emitAgentEvent, AGENT_EVENTS } from './agent-events.mjs';
 
 export { isConversationalAliveQuestion };
 
@@ -770,13 +771,21 @@ export class OpenUnumAgent {
     ];
     
     // Initialize trace early so memory recall can use it
+    const controllerContent = messages[0]?.content || '';
+    const stableEndIdx = controllerContent.lastIndexOf('\n');
+    const stablePrefix = stableEndIdx > 0 ? controllerContent.slice(0, stableEndIdx) : controllerContent;
+    let stablePrefixHash = 0;
+    for (let ci = 0; ci < stablePrefix.length; ci += 1) {
+      stablePrefixHash = ((stablePrefixHash << 5) - stablePrefixHash + stablePrefix.charCodeAt(ci)) | 0;
+    }
     const trace = {
       provider,
       model,
       executionProfile: executionProfile.name,
       behaviorClass: behavior.classId,
       behaviorConfidence: behavior.confidence,
-      behaviorSource: behavior.source
+      behaviorSource: behavior.source,
+      promptCache: { intentEnabled: true, stablePrefixHash: String(stablePrefixHash) }
     };
     
     // R2: Hybrid Memory Retrieval (BM25 + embeddings + reranking)
@@ -829,6 +838,8 @@ export class OpenUnumAgent {
     let finalText = '';
     let toolRuns = 0;
     const executedTools = [];
+    const generatedImages = [];
+    const rawContentParts = [];
     let breakAfterToolLoop = false;
     // PHASE 3: Intervention trace array
     trace.intervention_trace = [];
@@ -868,7 +879,9 @@ export class OpenUnumAgent {
         const injectionResult = workingMemory.buildInjection(recentMessages, Math.floor(messages.length / 2));
         
         // Use fullInjection for backward compatibility (can optimize to staticPrefix + dynamicState later)
-        const injectionPayload = injectionResult.fullInjection || injectionResult;
+        const injectionPayload = injectionResult.staticPrefix
+          ? `${injectionResult.staticPrefix}\n${injectionResult.dynamicState?.turnContinuation || ''}${injectionResult.dynamicState?.lastStepResult || ''}`
+          : (injectionResult.fullInjection || injectionResult);
         
         // Inject as system message (replaces any previous working memory injection)
         const existingWmIndex = messages.findIndex(m => m.role === 'system' && m.content.includes('WORKING MEMORY ANCHOR'));
@@ -878,15 +891,44 @@ export class OpenUnumAgent {
           // Insert after the initial system message
           messages.splice(1, 0, { role: 'system', content: injectionPayload });
         }
+
+        if (injectionResult.cacheHints) {
+          trace.promptCache = trace.promptCache || {};
+          trace.promptCache.cacheHints = injectionResult.cacheHints;
+        }
       }
       
       let out;
       try {
-        out = await runtimeProvider.chat({
-          messages,
-          tools: this.toolRuntime.toolSchemas({ allowedTools: turnToolAllowlist }),
-          timeoutMs: remainingMs
-        });
+        const toolDefs = this.toolRuntime.toolSchemas({ allowedTools: turnToolAllowlist });
+        if (typeof runtimeProvider.chatStream === 'function') {
+          out = await runtimeProvider.chatStream({
+            messages,
+            tools: toolDefs,
+            timeoutMs: remainingMs,
+            onContentDelta: (token) => {
+              emitAgentEvent(AGENT_EVENTS.CONTENT_DELTA, { sessionId, token, provider, model: this.getCurrentModel() });
+            },
+            onReasoningDelta: (token) => {
+              if (!out?._reasoningStarted) {
+                out = out || {};
+                out._reasoningStarted = true;
+                emitAgentEvent(AGENT_EVENTS.REASONING_START, { sessionId, provider, model: this.getCurrentModel() });
+              }
+              emitAgentEvent(AGENT_EVENTS.REASONING_DELTA, { sessionId, token, provider, model: this.getCurrentModel() });
+            }
+          });
+          if (out._reasoningStarted) {
+            emitAgentEvent(AGENT_EVENTS.REASONING_END, { sessionId, provider, model: this.getCurrentModel() });
+          }
+          delete out._reasoningStarted;
+        } else {
+          out = await runtimeProvider.chat({
+            messages,
+            tools: toolDefs,
+            timeoutMs: remainingMs
+          });
+        }
       } catch (err) {
         if (err.status === 429 || String(err.message).includes('429')) {
           logError('provider_quota_hit', { provider, model, error: err.message });
@@ -901,6 +943,12 @@ export class OpenUnumAgent {
         throw err;
       }
       const normalizedContent = normalizeAssistantContent(out.content);
+      if (out.reasoning) {
+        trace.reasoning = trace.reasoning ? `${trace.reasoning}\n\n---\n${out.reasoning}` : out.reasoning;
+      }
+      if (out.content) {
+        rawContentParts.push(out.content);
+      }
 
       // DRIFT DETECTION (after model responds)
       if (workingMemory && normalizedContent) {
@@ -931,7 +979,8 @@ export class OpenUnumAgent {
       const iter = {
         step: i + 1,
         toolCalls: [],
-        assistantText: normalizedContent || ''
+        assistantText: normalizedContent || '',
+        rawContent: out.content || ''
       };
       if (normalizedContent || (out.toolCalls && out.toolCalls.length > 0)) {
         finalText = normalizedContent;
@@ -1067,6 +1116,7 @@ export class OpenUnumAgent {
       }
 
       for (const tc of out.toolCalls) {
+        emitAgentEvent(AGENT_EVENTS.TOOL_CALL_STARTED, { sessionId, tool: tc.name, args: parseToolArgs(tc.arguments), step: i + 1 });
         trace.toolStateTransitions.push({
           at: new Date().toISOString(),
           tool: tc.name,
@@ -1107,6 +1157,11 @@ export class OpenUnumAgent {
           step: i + 1,
           reason: result?.error || ''
         });
+        if (result?.ok) {
+          emitAgentEvent(AGENT_EVENTS.TOOL_CALL_COMPLETED, { sessionId, tool: tc.name, resultOk: true, step: i + 1 });
+        } else {
+          emitAgentEvent(AGENT_EVENTS.TOOL_CALL_FAILED, { sessionId, tool: tc.name, error: result?.error || 'unknown', step: i + 1 });
+        }
 
         // PHASE 2: Spawn repair side-quest after repeated failures (throttled, never recursive).
         if (
@@ -1191,6 +1246,15 @@ export class OpenUnumAgent {
           args,
           result
         });
+
+        // Collect generated images for channel delivery
+        if (tc.name === 'image_generate' && result?.ok && Array.isArray(result.images)) {
+          for (const img of result.images) {
+            if (typeof img === 'string' && img.length > 100) {
+              generatedImages.push(img);
+            }
+          }
+        }
 
         // Mark step as complete if tool succeeded
         if (result?.ok && this.completionChecklist.initialized) {
@@ -1500,7 +1564,9 @@ export class OpenUnumAgent {
       }
     }
 
-    return { finalText, trace };
+    const rawReply = rawContentParts.join('\n') || undefined;
+    if (generatedImages.length > 0) trace.images = generatedImages;
+    return { finalText, trace, rawReply };
   }
 
   async chat({
@@ -1798,6 +1864,7 @@ export class OpenUnumAgent {
     });
 
     let finalText = '';
+    let rawReply = '';
     let trace = null;
     const attempts = this.buildProviderAttempts();
     let effectiveAttempts = attempts;
@@ -1992,6 +2059,7 @@ export class OpenUnumAgent {
 
         if (shortcutRun.finalText) {
           finalText = shortcutRun.finalText;
+          rawReply = shortcutRun.rawReply || '';
           trace = {
             ...(shortcutRun.trace || {}),
             ...routeTelemetry,
@@ -2038,6 +2106,7 @@ export class OpenUnumAgent {
             latency.providerMs += (Date.now() - providerStartedAt);
             this.clearProviderFailure(attempt.provider);
             finalText = run.finalText;
+            rawReply = run.rawReply || '';
             trace = {
               ...(run.trace || {}),
               ...routeTelemetry,
@@ -2162,6 +2231,7 @@ export class OpenUnumAgent {
         latency.providerMs += continuationElapsedMs;
         if (retryRun.finalText) {
           finalText = retryRun.finalText;
+          rawReply = retryRun.rawReply || rawReply;
           trace = retryRun.trace;
           logInfo('auto_continued', { success: true });
         }
@@ -2190,7 +2260,8 @@ export class OpenUnumAgent {
     });
     
     const persistenceStartedAt = Date.now();
-    this.memoryStore.addMessage(sessionId, 'assistant', finalText);
+    const reasoning = trace.reasoning || undefined;
+    this.memoryStore.addMessage(sessionId, 'assistant', finalText, { reasoning, rawReply: rawReply || undefined });
     for (const fact of extractAutomaticFacts({
       message,
       reply: finalText,
@@ -2238,6 +2309,8 @@ export class OpenUnumAgent {
       }, sessionId);
     } catch (e) { console.error('[audit_log_failed]', e); }
 
-    return { sessionId, reply: finalText, model: this.getCurrentModel(), trace, context: { budget: triggerInfo, compaction: compactionMeta } };
+    const effectiveProvider = effectiveAttempts[0]?.provider || this.config.model.provider;
+    emitAgentEvent(AGENT_EVENTS.TURN_END, { sessionId, provider: effectiveProvider, model: this.getCurrentModel() });
+    return { sessionId, reply: finalText, rawReply: rawReply || undefined, reasoning, model: this.getCurrentModel(), trace, images: trace?.images || undefined, context: { budget: triggerInfo, compaction: compactionMeta } };
   }
 }

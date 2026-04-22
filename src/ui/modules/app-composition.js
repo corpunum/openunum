@@ -234,6 +234,7 @@ export function composeAppControllers(ctx) {
     isStatusCheckMessage,
     shouldEscalateToAuto,
     isPlanningReply,
+    escapeHtml: ctx.escapeHtml,
     isCurrentSessionPending: ctx.isCurrentSessionPending,
     updateComposerPendingState: ctx.updateComposerPendingState,
     getSessionId,

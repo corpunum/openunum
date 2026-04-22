@@ -202,7 +202,7 @@ export function validateConfigPatch(body, ctx = {}) {
       if (model.model !== undefined && typeof model.model !== 'string') addTypeError(errors, 'model.model', 'string');
       if (model.provider !== undefined) {
         const normalized = normalizeProviderId(model.provider);
-        const allowedProviders = new Set(['ollama-local', 'ollama-cloud', 'nvidia', 'openrouter', 'xiaomimimo', 'openai']);
+        const allowedProviders = new Set(['ollama-local', 'llama-cpp-local', 'ollama-cloud', 'nvidia', 'openrouter', 'xiaomimimo', 'openai']);
         if (!allowedProviders.has(normalized)) errors.push({ field: 'model.provider', issue: 'unknown provider' });
       }
       if (model.providerModels !== undefined) {
@@ -252,13 +252,14 @@ export function validateProvidersConfigPatch(body) {
   const errors = [];
   const allowed = new Set([
     'ollamaBaseUrl', 'ollamaCloudBaseUrl', 'ollamaLocalBaseUrl',
+    'llamaCppLocalBaseUrl', 'imageGenBaseUrl',
     'openrouterBaseUrl', 'nvidiaBaseUrl', 'xiaomimimoBaseUrl', 'openaiBaseUrl', 'genericBaseUrl',
     'openrouterApiKey', 'nvidiaApiKey', 'xiaomimimoApiKey', 'openaiApiKey', 'genericApiKey'
   ]);
   for (const key of Object.keys(body)) {
     if (!allowed.has(key)) errors.push({ field: key, issue: 'unknown key' });
   }
-  for (const key of ['ollamaBaseUrl', 'ollamaCloudBaseUrl', 'ollamaLocalBaseUrl', 'openrouterBaseUrl', 'nvidiaBaseUrl', 'xiaomimimoBaseUrl', 'openaiBaseUrl', 'genericBaseUrl']) {
+  for (const key of ['ollamaBaseUrl', 'ollamaCloudBaseUrl', 'ollamaLocalBaseUrl', 'llamaCppLocalBaseUrl', 'imageGenBaseUrl', 'openrouterBaseUrl', 'nvidiaBaseUrl', 'xiaomimimoBaseUrl', 'openaiBaseUrl', 'genericBaseUrl']) {
     if (body[key] !== undefined) validateUrlField(errors, key, body[key]);
   }
   for (const key of ['openrouterApiKey', 'nvidiaApiKey', 'xiaomimimoApiKey', 'openaiApiKey', 'genericApiKey']) {
@@ -354,7 +355,7 @@ export function validateAuthCatalogRequest(body) {
     if (!isPlainObject(body.providerBaseUrls)) {
       addTypeError(errors, 'providerBaseUrls', 'object');
     } else {
-      for (const key of ['ollamaBaseUrl', 'ollamaCloudBaseUrl', 'ollamaLocalBaseUrl', 'openrouterBaseUrl', 'nvidiaBaseUrl', 'xiaomimimoBaseUrl', 'openaiBaseUrl']) {
+      for (const key of ['ollamaBaseUrl', 'ollamaCloudBaseUrl', 'ollamaLocalBaseUrl', 'llamaCppLocalBaseUrl', 'imageGenBaseUrl', 'openrouterBaseUrl', 'nvidiaBaseUrl', 'xiaomimimoBaseUrl', 'openaiBaseUrl']) {
         if (body.providerBaseUrls[key] !== undefined) validateUrlField(errors, `providerBaseUrls.${key}`, body.providerBaseUrls[key]);
       }
     }

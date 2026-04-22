@@ -11,6 +11,7 @@ export function createChatComposerController({
   isStatusCheckMessage,
   shouldEscalateToAuto,
   isPlanningReply,
+  escapeHtml,
   isCurrentSessionPending,
   updateComposerPendingState,
   getSessionId,
@@ -75,7 +76,10 @@ export function createChatComposerController({
       }
 
       const traceHtml = renderTrace(out?.trace);
-      const assistantHtml = `${out?.replyHtml || out?.reply || '(no reply)'}${traceHtml}`;
+      const reasoningHtml = out?.reasoningHtml ? `<details class="reasoning" data-persist-key="reasoning"><summary>Thinking</summary><div class="reasoning-content">${out.reasoningHtml}</div></details>` : '';
+      const rawModelOutput = out?.rawReply || out?.reply || '';
+      const rawSection = rawModelOutput ? `<details class="raw-response" data-persist-key="raw-response"><summary>Raw Response</summary><div class="raw-response-content">${escapeHtml(rawModelOutput)}</div></details>` : '';
+      const assistantHtml = `${reasoningHtml}${rawSection}${out?.replyHtml || out?.reply || '(no reply)'}${traceHtml}`;
       typing.bubble.innerHTML = assistantHtml;
       void typing.bubble.offsetHeight;
 

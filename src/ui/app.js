@@ -1,7 +1,7 @@
 import { q, qa, escapeHtml, sleep } from './modules/dom.js';
 import { jget, jpost, jrequest } from './modules/http.js';
 import { setStatus } from './modules/feedback.js';
-import { showView as showViewWithMeta } from './modules/navigation.js';
+import { showView as showViewWithMeta, initSettingsHub, initSidebar } from './modules/navigation.js';
 import { normalizeServiceCapabilityIds } from './modules/capabilities.js';
 import {
   renderStatusBadge,
@@ -34,7 +34,7 @@ import { createModelCatalogController } from './modules/model-catalog-controller
 import { createSessionController } from './modules/session-controller.js';
 import { createChatPendingController } from './modules/chat-pending-controller.js';
 import { createAutoMissionRunner } from './modules/chat-auto-mission.js';
-import { runUiBootstrap } from './modules/ui-bootstrap.js';
+import { runUiBootstrap, runDeferredStepsForCategory } from './modules/ui-bootstrap.js';
 import { initializeUiState } from './modules/ui-state-init.js';
 import { createUiStateHelpers } from './modules/ui-state-helpers.js';
 import { wireUiLifecycle } from './modules/ui-lifecycle.js';
@@ -154,7 +154,11 @@ const {
   appendTypingBubble,
   addLiveEvent,
   renderLiveBubble,
-  renderTrace
+  renderTrace,
+  appendTokenToBubble,
+  appendReasoningToken,
+  addToolCallToBubble,
+  finalizeStreamingBubble
 } = chatRenderer;
 const providerVaultHelpers = createProviderVaultHelpers({
   q,
@@ -366,6 +370,7 @@ const chatPendingController = createChatPendingController({
   newestAssistantSince,
   buildPendingStatus,
   escapeHtml,
+  detailPanelKey,
   appendTypingBubble,
   addLiveEvent,
   renderLiveBubble,
@@ -539,3 +544,9 @@ wireUiLifecycle({
   refreshMissionTimeline
   }
 });
+
+initSettingsHub();
+initSidebar();
+
+// Expose deferred loading for settings hub category clicks
+window.__openunum_runDeferredStepsForCategory = runDeferredStepsForCategory;

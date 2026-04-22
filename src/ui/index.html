@@ -5,54 +5,41 @@
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>OpenUnum Console</title>
   <link rel="stylesheet" href="/ui/styles.css" />
+  <link rel="icon" href="/ui/assets/openunum/icon.png" type="image/png" />
 </head>
 <body>
-  <div class="layout">
-    <aside class="menu">
-      <div class="brand">OpenUnum Next</div>
+  <div class="layout" id="layoutRoot">
+    <!-- Sidebar toggle button (visible when sidebar collapsed) -->
+    <button class="sidebar-toggle" id="sidebarToggle" title="Toggle sidebar">
+      <span class="toggle-icon">&#9776;</span>
+    </button>
+
+    <aside class="menu" id="sidebarMenu">
+      <div class="brand-row">
+        <div class="brand">OpenUnum</div>
+        <button class="sidebar-collapse-btn" id="sidebarCollapse" title="Collapse sidebar">&#x2715;</button>
+      </div>
       <div class="status" id="topStatus" data-testid="status-bar">booting...</div>
       <div class="menu-scroll">
         <details open>
-          <summary>Chat</summary>
+          <summary>Sessions</summary>
           <div class="submenu">
-            <button class="menu-btn active" data-view="chat">Chat Terminal</button>
-            <button class="menu-btn" data-view="operator">Execution Trace</button>
+            <button id="newChatInMenu">New</button>
+            <button id="deleteAllSessions" title="Delete all stored sessions">Delete All</button>
           </div>
           <div class="submenu">
             <input id="sessionSearch" placeholder="Search sessions" data-testid="session-search" />
           </div>
-          <div class="session-actions">
-            <button id="newChatInMenu">New</button>
-            <button id="deleteAllSessions" title="Delete all stored sessions">Delete All</button>
-          </div>
           <div class="sessions-list" id="sessionList"></div>
         </details>
 
-        <details open>
+        <details>
           <summary>Missions</summary>
           <div class="submenu">
             <button class="menu-btn" data-view="missions">Mission Runner</button>
           </div>
         </details>
-
-        <details>
-          <summary>Runtime</summary>
-          <div class="submenu">
-            <button class="menu-btn" data-view="browser">Browser Ops</button>
-            <button class="menu-btn" data-view="telegram">Telegram Bridge</button>
-            <button class="menu-btn" data-view="control-plane">Control Plane API</button>
-          </div>
-        </details>
-
-        <details>
-          <summary>Settings</summary>
-          <div class="submenu">
-            <button class="menu-btn" data-view="model-routing">Model Routing</button>
-            <button class="menu-btn" data-view="provider-config">Provider Vault</button>
-            <button class="menu-btn" data-view="settings-tooling">Tooling and Skills</button>
-          </div>
-        </details>
-        </div>
+      </div>
     </aside>
 
     <main class="main">
@@ -63,16 +50,17 @@
         </div>
         <div class="row">
           <button id="newChat">New Chat</button>
-          <button id="exportSessionBtn">Export Session</button>
-          <button id="importSessionBtn">Import Session</button>
+          <button id="exportSessionBtn">Export</button>
+          <button id="importSessionBtn">Import</button>
           <input id="importSessionFile" type="file" accept="application/json" style="display:none;" />
           <button id="autoEscalateToggle">Auto: On</button>
           <button id="liveActivityToggle">Live: On</button>
-          <span class="pill" id="chatMeta">session</span>
+          <button class="settings-gear" id="settingsGearBtn" title="Settings">&#9881;</button>
         </div>
       </header>
 
       <section class="center">
+        <!-- Chat view (always visible in main area) -->
         <div class="view active" id="view-chat">
           <div class="chat-wrap">
             <div class="quick-prompts" id="quickPrompts">
@@ -91,661 +79,733 @@
             </div>
           </div>
         </div>
-
-        <div class="view" id="view-model-routing">
-          <h3 class="section-title">Model Routing</h3>
-          <div class="grid two" style="align-items:end;">
-            <div class="field">
-              <label>Primary Provider</label>
-              <select id="provider" data-testid="provider-select">
-                <option value="ollama-local">ollama-local</option>
-                <option value="ollama-cloud">ollama-cloud</option>
-                <option value="nvidia">nvidia</option>
-                <option value="openrouter">openrouter</option>
-                <option value="xiaomimimo">xiaomimimo</option>
-                <option value="openai">openai</option>
-              </select>
-            </div>
-            <div class="field">
-              <label>Primary Model</label>
-              <select id="modelList" data-testid="model-select"></select>
-            </div>
-            <div class="field">
-              <label>Fallback Enabled</label>
-              <select id="fallbackEnabled">
-                <option value="true">Enabled</option>
-                <option value="false">Disabled</option>
-              </select>
-            </div>
-            <div class="field">
-              <label>Add Fallback Provider</label>
-              <select id="fallbackProviderPicker" data-testid="fallback-model-select">
-                <option value="">Select provider</option>
-                <option value="ollama-local">ollama-local</option>
-                <option value="ollama-cloud">ollama-cloud</option>
-                <option value="nvidia">nvidia</option>
-                <option value="openrouter">openrouter</option>
-                <option value="xiaomimimo">xiaomimimo</option>
-                <option value="openai">openai</option>
-              </select>
-            </div>
-          </div>
-          <div class="row" style="margin-top:10px;">
-            <button id="loadModels">Refresh Primary Models</button>
-            <button id="addFallbackRow">Add Fallback</button>
-            <button id="autoFillFallbacks">Auto Fill Best Sequence</button>
-            <button class="primary" id="saveRouting">Save Routing</button>
-            <button id="switchModel">Use Primary Now</button>
-          </div>
-          <div class="hint" id="modelCatalogStatus"></div>
-          <div class="table-wrap" style="margin-top:12px;">
-            <table>
-              <thead>
-                <tr>
-                  <th>Order</th>
-                  <th>Provider</th>
-                  <th>Model</th>
-                  <th>Action</th>
-                </tr>
-              </thead>
-              <tbody id="fallbackSequenceBody"></tbody>
-            </table>
-          </div>
-          <div class="provider-cards" id="providerCards"></div>
-        </div>
-
-        <div class="view" id="view-provider-config">
-          <h3 class="section-title">Providers</h3>
-          <div class="hint">Use compact rows by default. Expand advanced only when you need endpoint details, discovery sources, or deeper diagnostics.</div>
-          <div class="row" style="margin-top:10px;">
-            <button id="prefillLocalAuth">Scan Local Sources</button>
-            <button id="refreshAuthCatalog">Refresh Tables</button>
-            <button id="showAllProviderRows">Show All Providers</button>
-            <select id="providerAddSelect">
-              <option value="">Add model provider...</option>
-            </select>
-            <button id="addProviderRow">Add Provider</button>
-            <button id="showAllServiceRows">Show All Services</button>
-            <select id="serviceAddSelect">
-              <option value="">Add service...</option>
-            </select>
-            <button id="addServiceRow">Add Service</button>
-          </div>
-          <h4 class="section-title" style="margin-top:14px;">Model Providers</h4>
-          <div class="table-wrap" data-testid="provider-matrix">
-            <table>
-              <thead>
-                <tr>
-                  <th>Provider</th>
-                  <th>Status</th>
-                  <th>Auth</th>
-                  <th>Summary</th>
-                  <th>Action</th>
-                </tr>
-              </thead>
-              <tbody id="providerMatrixBody"></tbody>
-            </table>
-          </div>
-          <h4 class="section-title" style="margin-top:14px;">Service Providers</h4>
-          <div class="table-wrap" data-testid="auth-vault">
-            <table>
-              <thead>
-                <tr>
-                  <th>Service</th>
-                  <th>Status</th>
-                  <th>Auth</th>
-                  <th>Action</th>
-                </tr>
-              </thead>
-              <tbody id="authMethodBody"></tbody>
-            </table>
-          </div>
-          <div class="hint" id="providerStatus" data-testid="provider-health"></div>
-        </div>
-
-        <div class="view" id="view-settings-tooling">
-          <h3 class="section-title">Tooling and Skills</h3>
-          <div class="soft-panel">
-            <div class="grid two">
-              <div class="field">
-                <label>Model-backed tools enabled</label>
-                <select id="mbtEnabled">
-                  <option value="true">Enabled</option>
-                  <option value="false">Disabled</option>
-                </select>
-              </div>
-              <div class="field">
-                <label>Expose model-backed tools to controller</label>
-                <select id="mbtExpose">
-                  <option value="true">Enabled</option>
-                  <option value="false">Disabled</option>
-                </select>
-              </div>
-              <div class="field">
-                <label>Local max concurrency</label>
-                <input id="mbtConcurrency" type="number" min="1" max="8" value="1" />
-              </div>
-              <div class="field">
-                <label>Queue depth</label>
-                <input id="mbtQueueDepth" type="number" min="1" max="128" value="8" />
-              </div>
-              <div class="field">
-                <label>Auto profile tuning</label>
-                <select id="mbtAutoTune">
-                  <option value="true">Enabled</option>
-                  <option value="false">Disabled</option>
-                </select>
-              </div>
-              <div class="field">
-                <label>Profile switch min samples</label>
-                <input id="mbtMinSamples" type="number" min="1" max="1000" value="6" />
-              </div>
-              <div class="field">
-                <label>Latency weight</label>
-                <input id="mbtLatencyWeight" type="number" min="0" max="1" step="0.05" value="0.35" />
-              </div>
-              <div class="field">
-                <label>Cost weight</label>
-                <input id="mbtCostWeight" type="number" min="0" max="1" step="0.05" value="0.25" />
-              </div>
-              <div class="field">
-                <label>Failure penalty</label>
-                <input id="mbtFailurePenalty" type="number" min="0" max="4" step="0.1" value="0.8" />
-              </div>
-            </div>
-            <div class="row" style="margin-top:10px;">
-              <button class="primary" id="saveToolingRuntime">Save Tooling Runtime</button>
-              <button id="applyToolingCoreDefaults">Apply Core Defaults</button>
-              <button id="refreshToolingInventory">Refresh Inventory</button>
-              <button id="refreshToolingDownloads">Refresh Downloads</button>
-            </div>
-            <div class="hint" id="toolingStatus"></div>
-          </div>
-
-          <h4 class="section-title" style="margin-top:14px;">Tools</h4>
-          <div class="table-wrap">
-            <table>
-              <thead>
-                <tr>
-                  <th>Tool</th>
-                  <th>Status</th>
-                  <th>Class</th>
-                  <th>Backend Profiles</th>
-                  <th>Local Model</th>
-                  <th>Action</th>
-                </tr>
-              </thead>
-              <tbody id="toolingToolsBody"></tbody>
-            </table>
-          </div>
-
-          <h4 class="section-title" style="margin-top:14px;">Skills</h4>
-          <div class="table-wrap">
-            <table>
-              <thead>
-                <tr>
-                  <th>Skill</th>
-                  <th>Status</th>
-                  <th>Verdict</th>
-                  <th>Usage</th>
-                  <th>Last Used</th>
-                </tr>
-              </thead>
-              <tbody id="toolingSkillsBody"></tbody>
-            </table>
-          </div>
-
-          <h4 class="section-title" style="margin-top:14px;">Local Model Rollout</h4>
-          <div class="table-wrap">
-            <table>
-              <thead>
-                <tr>
-                  <th>Model</th>
-                  <th>Installed</th>
-                  <th>Allowlist</th>
-                  <th>Action</th>
-                </tr>
-              </thead>
-              <tbody id="toolingModelsBody"></tbody>
-            </table>
-          </div>
-
-          <h4 class="section-title" style="margin-top:14px;">Download Jobs</h4>
-          <div class="table-wrap">
-            <table>
-              <thead>
-                <tr>
-                  <th>Job ID</th>
-                  <th>Model</th>
-                  <th>Status</th>
-                  <th>Created</th>
-                  <th>Error</th>
-                  <th>Action</th>
-                </tr>
-              </thead>
-              <tbody id="toolingDownloadsBody"></tbody>
-            </table>
-          </div>
-        </div>
-
-        <div class="view" id="view-browser">
-          <h3 class="section-title">Browser Control</h3>
-          <div class="card-grid">
-            <div class="card">
-              <h4>Browser Health</h4>
-              <div class="value" id="browserHealthValue">Checking...</div>
-              <div class="meta" id="browserHealthMeta">CDP telemetry</div>
-            </div>
-            <div class="card">
-              <h4>CDP Endpoint</h4>
-              <div class="value" id="browserCdpValue">-</div>
-              <div class="meta" id="browserTabMeta">Awaiting status</div>
-            </div>
-          </div>
-          <div class="grid two">
-            <div class="field">
-              <label>CDP Endpoint Preset</label>
-              <select id="cdpPreset">
-                <option value="http://127.0.0.1:9222">Chrome Debug 9222</option>
-                <option value="http://127.0.0.1:9333">OpenUnum Debug 9333</option>
-              </select>
-            </div>
-          </div>
-          <div class="row" style="margin-top:10px;">
-            <button id="saveCdp">Save CDP</button>
-            <button id="launchBrowser">Launch Debug Browser</button>
-          </div>
-          <div class="hint" id="browserStatusLine"></div>
-
-          <hr style="border:none;border-top:1px solid var(--line);margin:14px 0;" />
-
-          <div class="grid two">
-            <div class="field">
-              <label>Navigate URL</label>
-              <input id="navUrl" placeholder="https://example.com" />
-            </div>
-            <div class="field">
-              <label>Search Query</label>
-              <input id="searchQ" placeholder="what to search" />
-            </div>
-          </div>
-          <div class="row" style="margin-top:10px;">
-            <button id="navBtn">Navigate</button>
-            <button id="searchBtn">Search</button>
-            <button id="extractBtn">Extract Page Text</button>
-          </div>
-        </div>
-
-        <div class="view" id="view-telegram">
-          <h3 class="section-title">Telegram Channel</h3>
-          <div class="grid two">
-            <div class="field">
-              <label>Bot Token (user value)</label>
-              <input id="tgToken" placeholder="123456:ABC..." />
-            </div>
-            <div class="field">
-              <label>Channel State</label>
-              <select id="telegramEnabled">
-                <option value="true">Enabled</option>
-                <option value="false">Disabled</option>
-              </select>
-            </div>
-          </div>
-          <div class="row" style="margin-top:10px;">
-            <button id="saveToken">Save Telegram Config</button>
-            <button id="startTg">Start Polling</button>
-            <button id="stopTg">Stop Polling</button>
-            <button id="tgRefresh">Refresh</button>
-          </div>
-          <div class="hint" id="tgStatus"></div>
-        </div>
-
-        <div class="view" id="view-missions">
-          <h3 class="section-title">Mission Runner</h3>
-          <div class="grid two" style="margin-bottom:10px;">
-            <div class="field">
-              <label>Existing Missions</label>
-              <select id="missionPicker">
-                <option value="">Select mission...</option>
-              </select>
-            </div>
-            <div class="field">
-              <label>Mission Action</label>
-              <div class="row">
-                <button id="loadMissionBtn">Load</button>
-                <button id="clearMissionSelectionBtn">Clear</button>
-              </div>
-            </div>
-          </div>
-          <div class="grid two">
-            <div class="field">
-              <label>Mission Goal</label>
-              <input id="missionGoal" placeholder="goal for autonomous execution" />
-            </div>
-            <div class="field">
-              <label>Max Steps</label>
-              <select id="missionSteps">
-                <option>3</option>
-                <option selected>6</option>
-                <option>10</option>
-                <option>15</option>
-                <option>20</option>
-              </select>
-            </div>
-            <div class="field">
-              <label>Step Interval (ms)</label>
-              <select id="missionInterval">
-                <option value="0">0 (no delay)</option>
-                <option value="200">200</option>
-                <option value="400" selected>400</option>
-                <option value="1000">1000</option>
-                <option value="2000">2000</option>
-              </select>
-            </div>
-          </div>
-          <div class="row" style="margin-top:10px;">
-            <button class="primary" id="startMission">Start Mission</button>
-            <button id="stopMission">Stop Mission</button>
-            <button id="refreshMission">Refresh Status</button>
-          </div>
-          <div class="hint" id="missionStatus">idle</div>
-        <div class="ledger" id="missionTimeline">
-          <h4>Mission Timeline</h4>
-          <div class="row" style="margin-bottom:8px;">
-            <button id="openMissionSessionBtn">Open Mission Session</button>
-            <button id="cloneMissionSessionBtn">Clone Mission Session</button>
-            <select id="missionTimelineFilter">
-              <option value="all">All</option>
-              <option value="log">Mission Log</option>
-              <option value="tools">Tool Runs</option>
-              <option value="strategies">Strategies</option>
-              <option value="artifacts">Artifacts</option>
-              <option value="compactions">Compactions</option>
-            </select>
-            <input id="missionTimelineSearch" placeholder="Filter timeline text" />
-          </div>
-          <div class="ledger-section" id="missionTimelineSummary">No active mission.</div>
-          <div class="ledger-section" id="missionTimelineLog"></div>
-          <div class="ledger-section" id="missionTimelineTools"></div>
-          <div class="ledger-section" id="missionTimelineArtifacts"></div>
-        </div>
-        <div class="ledger" id="scheduledMissions" style="margin-top: 20px;">
-          <h4>Scheduled Missions</h4>
-          <div class="ledger-section" id="scheduledMissionsList">No scheduled missions.</div>
-        </div>
-        </div>
-
-        <div class="view" id="view-operator">
-          <h3 class="section-title">Operator Runtime & Tools</h3>
-          <div class="card-grid" id="runtimeCards">
-            <div class="card">
-              <h4>Autonomy</h4>
-              <div class="value" id="runtimeAutonomyValue">-</div>
-              <div class="meta" id="runtimeWorkspaceMeta">workspace</div>
-            </div>
-            <div class="card">
-              <h4>Git Branch</h4>
-              <div class="value" id="gitBranchValue">-</div>
-              <div class="meta" id="gitBranchMeta">No git data</div>
-            </div>
-            <div class="card">
-              <h4>Provider Health</h4>
-              <div class="value" id="runtimeProviderValue">-</div>
-              <div class="meta" id="runtimeProviderMeta">No provider telemetry</div>
-            </div>
-            <div class="card">
-              <h4>Context Budget</h4>
-              <div class="value" id="contextBudgetValue">-</div>
-              <div class="meta" id="contextBudgetMeta">No context telemetry</div>
-            </div>
-            <div class="card">
-              <h4>Phase 0 Diagnostics</h4>
-              <div class="value" id="phase0ContractValue">-</div>
-              <div class="meta" id="phase0ContractMeta">Runtime state contract not loaded</div>
-              <div class="meta" id="phase0ParityMeta">Config parity not loaded</div>
-            </div>
-            <div class="card">
-              <h4>Autonomy Cycle</h4>
-              <div class="value" id="autonomyCycleValue">-</div>
-              <div class="meta" id="autonomyCycleMeta">No cycle snapshot</div>
-            </div>
-          </div>
-          <div class="grid three">
-            <div class="field">
-              <label>Autonomy Mode</label>
-              <select id="autonomyMode" data-testid="autonomy-mode-select">
-                <option value="autonomy-first">Autonomy First</option>
-                <option value="compact-local">Compact Local</option>
-                <option value="relentless">Relentless</option>
-              </select>
-            </div>
-            <div class="field">
-              <label>Shell Access</label>
-              <select id="shellEnabled">
-                <option value="true">Enabled</option>
-                <option value="false">Disabled</option>
-              </select>
-            </div>
-            <div class="field">
-              <label>Max Tool Iterations</label>
-              <select id="maxIters">
-                <option>4</option>
-                <option>6</option>
-                <option selected>8</option>
-                <option>10</option>
-                <option>12</option>
-                <option>16</option>
-                <option>20</option>
-              </select>
-            </div>
-          </div>
-          <div class="row" style="margin-top:10px;">
-            <button class="primary" id="applyAutonomyMode">Apply Mode</button>
-            <button id="saveRuntime">Save Runtime</button>
-            <button id="compactContextBtn">Compact Context</button>
-            <button id="refreshLedgerBtn">Refresh Ledger</button>
-            <button id="refreshPhase0Diag">Refresh Phase 0</button>
-            <button id="refreshAutonomyDashboardBtn">Refresh Autonomy Dashboard</button>
-            <button id="syncAutonomyRemediationBtn">Sync Remediation</button>
-          </div>
-
-          <div class="card-grid" style="margin-top:12px;">
-            <div class="card">
-              <h4>Self Awareness</h4>
-              <div class="value" id="autonomySelfAwarenessValue">-</div>
-              <div class="meta" id="autonomySelfAwarenessMeta">No self-awareness snapshot</div>
-            </div>
-            <div class="card">
-              <h4>Pending Queue Watchdog</h4>
-              <div class="value" id="autonomyQueueValue">-</div>
-              <div class="meta" id="autonomyQueueMeta">No queue diagnostics</div>
-            </div>
-            <div class="card">
-              <h4>Remediation Queue</h4>
-              <div class="value" id="autonomyRemediationValue">-</div>
-              <div class="meta" id="autonomyRemediationMeta">No remediation data</div>
-            </div>
-          </div>
-
-          <div class="grid two" style="margin-top:10px;">
-            <div class="field">
-              <label>Remediation ID</label>
-              <input id="autonomyRemediationId" placeholder="rem-..." />
-            </div>
-            <div class="field">
-              <label>Resolution / Failure Note</label>
-              <input id="autonomyRemediationNote" placeholder="note for resolve/fail/cancel" />
-            </div>
-          </div>
-          <div class="row" style="margin-top:8px;">
-            <button id="startAutonomyRemediationBtn">Start Remediation</button>
-            <button id="resolveAutonomyRemediationBtn">Resolve Remediation</button>
-            <button id="failAutonomyRemediationBtn">Fail Remediation</button>
-            <button id="cancelAutonomyRemediationBtn">Cancel Remediation</button>
-          </div>
-
-          <div class="ledger" id="autonomyDashboardLedger">
-            <h4>Autonomy Dashboard</h4>
-            <div class="ledger-section" id="autonomyDashboardSummary">Loading autonomy dashboard...</div>
-            <div class="ledger-section" id="autonomyRemediationList"></div>
-            <div class="ledger-section" id="autonomyQueueList"></div>
-          </div>
-
-          <hr style="border:none;border-top:1px solid var(--line);margin:14px 0;" />
-
-          <div class="grid two">
-            <div class="field">
-              <label>Shell Command</label>
-              <input id="shellCmd" placeholder="ls -la" />
-            </div>
-            <div class="field">
-              <label>Open Target</label>
-              <input id="openTarget" placeholder="$HOME" />
-            </div>
-            <div class="field">
-              <label>xdotool Command</label>
-              <input id="xdotoolCmd" placeholder="getactivewindow" />
-            </div>
-          </div>
-          <div class="row" style="margin-top:10px;">
-            <button id="runShell">Run Shell</button>
-            <button id="openTargetBtn">Open Target</button>
-            <button id="runXdotool">Run xdotool</button>
-          </div>
-          <textarea id="pcOutput" data-testid="trace-panel" placeholder="tool output..." readonly style="margin-top:10px; min-height:220px;"></textarea>
-          <div class="ledger" id="tacticalLedger">
-            <h4>Tactical Ledger</h4>
-            <div class="ledger-section" id="ledgerSummary">Loading tactical insights...</div>
-            <div class="ledger-section" id="ledgerStrategies"></div>
-            <div class="ledger-section" id="ledgerTools"></div>
-          </div>
-          <div class="hint" id="runtimeStatus"></div>
-        </div>
-
-        <div class="view" id="view-control-plane">
-          <h3 class="section-title">Control Plane</h3>
-          <div class="hint">Backend coverage panel for self-heal, autonomy master, research, operations, and direct API execution.</div>
-
-          <div class="card-grid">
-            <div class="card">
-              <h4>Self Heal</h4>
-              <div class="row">
-                <button id="cpSelfHealDry">Dry Run</button>
-                <button id="cpSelfHealFix">Apply Fix</button>
-                <button id="cpSelfHealStatus">Status</button>
-              </div>
-            </div>
-            <div class="card">
-              <h4>Autonomy Master</h4>
-              <div class="row">
-                <button id="cpMasterStatus">Status</button>
-                <button id="cpMasterStart">Start</button>
-                <button id="cpMasterStop">Stop</button>
-                <button id="cpMasterCycle">Cycle</button>
-                <button id="cpMasterImprove">Self Improve</button>
-                <button id="cpMasterLearnSkills">Learn Skills</button>
-                <button id="cpMasterSelfTest">Self Test</button>
-              </div>
-            </div>
-            <div class="card">
-              <h4>Research</h4>
-              <div class="row">
-                <button id="cpResearchRun">Run Daily</button>
-                <button id="cpResearchRecent">Recent</button>
-                <button id="cpResearchQueue">Queue</button>
-              </div>
-              <div class="grid" style="margin-top:8px;">
-                <input id="cpResearchUrl" placeholder="proposal URL for approve" />
-                <input id="cpResearchNote" placeholder="approval note (optional)" />
-                <button id="cpResearchApprove">Approve Proposal</button>
-              </div>
-            </div>
-            <div class="card">
-              <h4>Workers & Self-Edit</h4>
-              <div class="row">
-                <button id="cpWorkersList">Workers</button>
-                <button id="cpWorkerStatus">Worker Status</button>
-                <button id="cpSelfEditRuns">Self-Edit Runs</button>
-                <button id="cpSelfEditStatus">Self-Edit Status</button>
-              </div>
-              <div class="grid" style="margin-top:8px;">
-                <input id="cpWorkerId" placeholder="worker id" />
-                <input id="cpSelfEditId" placeholder="self-edit run id" />
-              </div>
-            </div>
-            <div class="card">
-              <h4>Model Scout</h4>
-              <div class="row">
-                <button id="cpModelScoutRun">Run Scout</button>
-                <button id="cpModelScoutList">Scout Runs</button>
-                <button id="cpModelScoutStatus">Scout Status</button>
-              </div>
-              <div class="grid" style="margin-top:8px;">
-                <input id="cpModelScoutQuery" placeholder="Qwen3.5 / DeepSeek R1 Distill" />
-                <input id="cpModelScoutId" placeholder="model-scout run id" />
-              </div>
-            </div>
-            <div class="card">
-              <h4>Generic Tasks</h4>
-              <div class="row">
-                <button id="cpTaskRun">Run Task</button>
-                <button id="cpTaskList">Task Runs</button>
-                <button id="cpTaskStatus">Task Status</button>
-              </div>
-              <div class="grid" style="margin-top:8px;">
-                <input id="cpTaskGoal" placeholder="inspect, execute, verify, monitor" />
-                <input id="cpTaskId" placeholder="task run id" />
-              </div>
-            </div>
-          </div>
-
-          <div class="grid two">
-            <div class="field">
-              <label>Delete Session By ID</label>
-              <input id="cpSessionDeleteId" placeholder="session uuid" />
-            </div>
-            <div class="field">
-              <label>Clear Sessions (Keep ID)</label>
-              <input id="cpSessionClearKeep" placeholder="session uuid to keep" />
-            </div>
-          </div>
-          <div class="row" style="margin-top:8px;">
-            <button id="cpSessionDelete">Delete Session</button>
-            <button id="cpSessionClearKeepBtn">Clear Others</button>
-            <button id="cpSessionClearAllBtn">Clear All</button>
-            <button id="cpOpsRecent">Recent Operations</button>
-          </div>
-
-          <hr style="border:none;border-top:1px solid var(--line);margin:14px 0;" />
-          <h4 class="section-title">API Console</h4>
-          <div class="grid two">
-            <div class="field">
-              <label>Method</label>
-              <select id="cpMethod">
-                <option value="GET">GET</option>
-                <option value="POST">POST</option>
-                <option value="DELETE">DELETE</option>
-              </select>
-            </div>
-            <div class="field">
-              <label>Path</label>
-              <input id="cpPath" placeholder="/api/skills" />
-            </div>
-          </div>
-          <div class="field" style="margin-top:8px;">
-            <label>JSON Body (POST/DELETE)</label>
-            <textarea id="cpBody" rows="6" placeholder='{"dryRun": true}'></textarea>
-          </div>
-          <div class="row" style="margin-top:8px;">
-            <button class="primary" id="cpRun">Run Request</button>
-            <span class="hint" id="cpStatus">idle</span>
-          </div>
-          <textarea id="cpOutput" readonly style="margin-top:10px; min-height:220px;" placeholder="response..."></textarea>
-        </div>
       </section>
     </main>
   </div>
+
   <div id="toastStack" class="toast-stack" aria-live="polite" aria-atomic="false"></div>
+
+  <!-- Settings Hub Modal -->
+  <dialog id="settingsHub" class="settings-hub">
+    <div class="settings-hub-inner">
+      <div class="settings-rail">
+        <div class="settings-rail-title">Settings</div>
+        <button class="settings-rail-item active" data-category="general">&#9881; General</button>
+        <button class="settings-rail-item" data-category="model-routing">&#127919; Model Routing</button>
+        <button class="settings-rail-item" data-category="provider-vault">&#128274; Providers &amp; Vault</button>
+        <button class="settings-rail-item" data-category="runtime">&#9889; Runtime &amp; Autonomy</button>
+        <button class="settings-rail-item" data-category="tooling">&#128295; Tools &amp; Skills</button>
+        <button class="settings-rail-item" data-category="browser">&#127760; Browser / CDP</button>
+        <button class="settings-rail-item" data-category="channels">&#128232; Channels</button>
+        <button class="settings-rail-item" data-category="developer">&#128187; Developer</button>
+      </div>
+      <div class="settings-content">
+        <div class="settings-content-header">
+          <div class="settings-content-title" id="settingsContentTitle">General</div>
+          <button class="settings-close-btn" id="settingsHubClose">&#10005;</button>
+        </div>
+        <div class="settings-content-body" id="settingsContentBody">
+
+          <!-- General -->
+          <div class="settings-category active" id="settings-general">
+            <div class="soft-panel">
+              <div class="grid two">
+                <div class="field">
+                  <label>Session Import</label>
+                  <div class="hint">Use the Import button in the chat header to import a session JSON file.</div>
+                </div>
+                <div class="field">
+                  <label>Session Export</label>
+                  <div class="hint">Use the Export button in the chat header to export the current session.</div>
+                </div>
+              </div>
+              <div class="grid two" style="margin-top:10px;">
+                <div class="field">
+                  <label>Auto Escalation</label>
+                  <div id="generalAutoEscLabel">On</div>
+                </div>
+                <div class="field">
+                  <label>Live Activity</label>
+                  <div id="generalLiveLabel">On</div>
+                </div>
+              </div>
+              <div class="grid two" style="margin-top:10px;">
+                <div class="field">
+                  <label>Execution Trace</label>
+                  <button id="openTraceView">Open Trace View</button>
+                </div>
+                <div class="field">
+                  <label>Mission Runner</label>
+                  <button id="openMissionView">Open Missions</button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Model Routing -->
+          <div class="settings-category" id="settings-model-routing">
+            <div class="grid two" style="align-items:end;">
+              <div class="field">
+                <label>Primary Provider</label>
+                <select id="provider" data-testid="provider-select">
+                  <option value="ollama-local">ollama-local</option>
+                  <option value="llama-cpp-local">llama-cpp-local</option>
+                  <option value="ollama-cloud">ollama-cloud</option>
+                  <option value="nvidia">nvidia</option>
+                  <option value="openrouter">openrouter</option>
+                  <option value="xiaomimimo">xiaomimimo</option>
+                  <option value="openai">openai</option>
+                </select>
+              </div>
+              <div class="field">
+                <label>Primary Model</label>
+                <select id="modelList" data-testid="model-select"></select>
+              </div>
+              <div class="field">
+                <label>Fallback Enabled</label>
+                <select id="fallbackEnabled">
+                  <option value="true">Enabled</option>
+                  <option value="false">Disabled</option>
+                </select>
+              </div>
+              <div class="field">
+                <label>Add Fallback Provider</label>
+                <select id="fallbackProviderPicker" data-testid="fallback-model-select">
+                  <option value="">Select provider</option>
+                  <option value="ollama-local">ollama-local</option>
+                  <option value="llama-cpp-local">llama-cpp-local</option>
+                  <option value="ollama-cloud">ollama-cloud</option>
+                  <option value="nvidia">nvidia</option>
+                  <option value="openrouter">openrouter</option>
+                  <option value="xiaomimimo">xiaomimimo</option>
+                  <option value="openai">openai</option>
+                </select>
+              </div>
+            </div>
+            <div class="row" style="margin-top:10px;">
+              <button id="loadModels">Refresh Primary Models</button>
+              <button id="addFallbackRow">Add Fallback</button>
+              <button id="autoFillFallbacks">Auto Fill Best Sequence</button>
+              <button class="primary" id="saveRouting">Save Routing</button>
+              <button id="switchModel">Use Primary Now</button>
+            </div>
+            <div class="hint" id="modelCatalogStatus"></div>
+            <div class="table-wrap" style="margin-top:12px;">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Order</th>
+                    <th>Provider</th>
+                    <th>Model</th>
+                    <th>Action</th>
+                  </tr>
+                </thead>
+                <tbody id="fallbackSequenceBody"></tbody>
+              </table>
+            </div>
+            <div class="provider-cards" id="providerCards"></div>
+          </div>
+
+          <!-- Provider Vault -->
+          <div class="settings-category" id="settings-provider-vault">
+            <h3 class="section-title">Providers</h3>
+            <div class="hint">Use compact rows by default. Expand advanced only when you need endpoint details, discovery sources, or deeper diagnostics.</div>
+            <div class="row" style="margin-top:10px;">
+              <button id="prefillLocalAuth">Scan Local Sources</button>
+              <button id="refreshAuthCatalog">Refresh Tables</button>
+              <button id="showAllProviderRows">Show All Providers</button>
+              <select id="providerAddSelect">
+                <option value="">Add model provider...</option>
+              </select>
+              <button id="addProviderRow">Add Provider</button>
+              <button id="showAllServiceRows">Show All Services</button>
+              <select id="serviceAddSelect">
+                <option value="">Add service...</option>
+              </select>
+              <button id="addServiceRow">Add Service</button>
+            </div>
+            <h4 class="section-title" style="margin-top:14px;">Model Providers</h4>
+            <div class="table-wrap" data-testid="provider-matrix">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Provider</th>
+                    <th>Status</th>
+                    <th>Auth</th>
+                    <th>Summary</th>
+                    <th>Action</th>
+                  </tr>
+                </thead>
+                <tbody id="providerMatrixBody"></tbody>
+              </table>
+            </div>
+            <h4 class="section-title" style="margin-top:14px;">Service Providers</h4>
+            <div class="table-wrap" data-testid="auth-vault">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Service</th>
+                    <th>Status</th>
+                    <th>Auth</th>
+                    <th>Action</th>
+                  </tr>
+                </thead>
+                <tbody id="authMethodBody"></tbody>
+              </table>
+            </div>
+            <div class="hint" id="providerStatus" data-testid="provider-health"></div>
+          </div>
+
+          <!-- Runtime & Autonomy -->
+          <div class="settings-category" id="settings-runtime">
+            <h3 class="section-title">Operator Runtime &amp; Tools</h3>
+            <div class="card-grid" id="runtimeCards">
+              <div class="card">
+                <h4>Autonomy</h4>
+                <div class="value" id="runtimeAutonomyValue">-</div>
+                <div class="meta" id="runtimeWorkspaceMeta">workspace</div>
+              </div>
+              <div class="card">
+                <h4>Git Branch</h4>
+                <div class="value" id="gitBranchValue">-</div>
+                <div class="meta" id="gitBranchMeta">No git data</div>
+              </div>
+              <div class="card">
+                <h4>Provider Health</h4>
+                <div class="value" id="runtimeProviderValue">-</div>
+                <div class="meta" id="runtimeProviderMeta">No provider telemetry</div>
+              </div>
+              <div class="card">
+                <h4>Context Budget</h4>
+                <div class="value" id="contextBudgetValue">-</div>
+                <div class="meta" id="contextBudgetMeta">No context telemetry</div>
+              </div>
+              <div class="card">
+                <h4>Phase 0 Diagnostics</h4>
+                <div class="value" id="phase0ContractValue">-</div>
+                <div class="meta" id="phase0ContractMeta">Runtime state contract not loaded</div>
+                <div class="meta" id="phase0ParityMeta">Config parity not loaded</div>
+              </div>
+              <div class="card">
+                <h4>Autonomy Cycle</h4>
+                <div class="value" id="autonomyCycleValue">-</div>
+                <div class="meta" id="autonomyCycleMeta">No cycle snapshot</div>
+              </div>
+            </div>
+            <div class="grid three">
+              <div class="field">
+                <label>Autonomy Mode</label>
+                <select id="autonomyMode" data-testid="autonomy-mode-select">
+                  <option value="autonomy-first">Autonomy First</option>
+                  <option value="compact-local">Compact Local</option>
+                  <option value="relentless">Relentless</option>
+                </select>
+              </div>
+              <div class="field">
+                <label>Shell Access</label>
+                <select id="shellEnabled">
+                  <option value="true">Enabled</option>
+                  <option value="false">Disabled</option>
+                </select>
+              </div>
+              <div class="field">
+                <label>Max Tool Iterations</label>
+                <select id="maxIters">
+                  <option>4</option>
+                  <option>6</option>
+                  <option selected>8</option>
+                  <option>10</option>
+                  <option>12</option>
+                  <option>16</option>
+                  <option>20</option>
+                </select>
+              </div>
+            </div>
+            <div class="row" style="margin-top:10px;">
+              <button class="primary" id="applyAutonomyMode">Apply Mode</button>
+              <button id="saveRuntime">Save Runtime</button>
+              <button id="compactContextBtn">Compact Context</button>
+              <button id="refreshLedgerBtn">Refresh Ledger</button>
+              <button id="refreshPhase0Diag">Refresh Phase 0</button>
+              <button id="refreshAutonomyDashboardBtn">Refresh Autonomy Dashboard</button>
+              <button id="syncAutonomyRemediationBtn">Sync Remediation</button>
+            </div>
+
+            <div class="card-grid" style="margin-top:12px;">
+              <div class="card">
+                <h4>Self Awareness</h4>
+                <div class="value" id="autonomySelfAwarenessValue">-</div>
+                <div class="meta" id="autonomySelfAwarenessMeta">No self-awareness snapshot</div>
+              </div>
+              <div class="card">
+                <h4>Pending Queue Watchdog</h4>
+                <div class="value" id="autonomyQueueValue">-</div>
+                <div class="meta" id="autonomyQueueMeta">No queue diagnostics</div>
+              </div>
+              <div class="card">
+                <h4>Remediation Queue</h4>
+                <div class="value" id="autonomyRemediationValue">-</div>
+                <div class="meta" id="autonomyRemediationMeta">No remediation data</div>
+              </div>
+            </div>
+
+            <div class="grid two" style="margin-top:10px;">
+              <div class="field">
+                <label>Remediation ID</label>
+                <input id="autonomyRemediationId" placeholder="rem-..." />
+              </div>
+              <div class="field">
+                <label>Resolution / Failure Note</label>
+                <input id="autonomyRemediationNote" placeholder="note for resolve/fail/cancel" />
+              </div>
+            </div>
+            <div class="row" style="margin-top:8px;">
+              <button id="startAutonomyRemediationBtn">Start Remediation</button>
+              <button id="resolveAutonomyRemediationBtn">Resolve Remediation</button>
+              <button id="failAutonomyRemediationBtn">Fail Remediation</button>
+              <button id="cancelAutonomyRemediationBtn">Cancel Remediation</button>
+            </div>
+
+            <div class="ledger" id="autonomyDashboardLedger">
+              <h4>Autonomy Dashboard</h4>
+              <div class="ledger-section" id="autonomyDashboardSummary">Loading autonomy dashboard...</div>
+              <div class="ledger-section" id="autonomyRemediationList"></div>
+              <div class="ledger-section" id="autonomyQueueList"></div>
+            </div>
+
+            <hr style="border:none;border-top:1px solid var(--line);margin:14px 0;" />
+
+            <div class="grid two">
+              <div class="field">
+                <label>Shell Command</label>
+                <input id="shellCmd" placeholder="ls -la" />
+              </div>
+              <div class="field">
+                <label>Open Target</label>
+                <input id="openTarget" placeholder="$HOME" />
+              </div>
+              <div class="field">
+                <label>xdotool Command</label>
+                <input id="xdotoolCmd" placeholder="getactivewindow" />
+              </div>
+            </div>
+            <div class="row" style="margin-top:10px;">
+              <button id="runShell">Run Shell</button>
+              <button id="openTargetBtn">Open Target</button>
+              <button id="runXdotool">Run xdotool</button>
+            </div>
+            <textarea id="pcOutput" data-testid="trace-panel" placeholder="tool output..." readonly style="margin-top:10px; min-height:220px;"></textarea>
+            <div class="ledger" id="tacticalLedger">
+              <h4>Tactical Ledger</h4>
+              <div class="ledger-section" id="ledgerSummary">Loading tactical insights...</div>
+              <div class="ledger-section" id="ledgerStrategies"></div>
+              <div class="ledger-section" id="ledgerTools"></div>
+            </div>
+            <div class="hint" id="runtimeStatus"></div>
+          </div>
+
+          <!-- Tools & Skills -->
+          <div class="settings-category" id="settings-tooling">
+            <h3 class="section-title">Tooling and Skills</h3>
+            <div class="soft-panel">
+              <div class="grid two">
+                <div class="field">
+                  <label>Model-backed tools enabled</label>
+                  <select id="mbtEnabled">
+                    <option value="true">Enabled</option>
+                    <option value="false">Disabled</option>
+                  </select>
+                </div>
+                <div class="field">
+                  <label>Expose model-backed tools to controller</label>
+                  <select id="mbtExpose">
+                    <option value="true">Enabled</option>
+                    <option value="false">Disabled</option>
+                  </select>
+                </div>
+                <div class="field">
+                  <label>Local max concurrency</label>
+                  <input id="mbtConcurrency" type="number" min="1" max="8" value="1" />
+                </div>
+                <div class="field">
+                  <label>Queue depth</label>
+                  <input id="mbtQueueDepth" type="number" min="1" max="128" value="8" />
+                </div>
+                <div class="field">
+                  <label>Auto profile tuning</label>
+                  <select id="mbtAutoTune">
+                    <option value="true">Enabled</option>
+                    <option value="false">Disabled</option>
+                  </select>
+                </div>
+                <div class="field">
+                  <label>Profile switch min samples</label>
+                  <input id="mbtMinSamples" type="number" min="1" max="1000" value="6" />
+                </div>
+                <div class="field">
+                  <label>Latency weight</label>
+                  <input id="mbtLatencyWeight" type="number" min="0" max="1" step="0.05" value="0.35" />
+                </div>
+                <div class="field">
+                  <label>Cost weight</label>
+                  <input id="mbtCostWeight" type="number" min="0" max="1" step="0.05" value="0.25" />
+                </div>
+                <div class="field">
+                  <label>Failure penalty</label>
+                  <input id="mbtFailurePenalty" type="number" min="0" max="4" step="0.1" value="0.8" />
+                </div>
+              </div>
+              <div class="row" style="margin-top:10px;">
+                <button class="primary" id="saveToolingRuntime">Save Tooling Runtime</button>
+                <button id="applyToolingCoreDefaults">Apply Core Defaults</button>
+                <button id="refreshToolingInventory">Refresh Inventory</button>
+                <button id="refreshToolingDownloads">Refresh Downloads</button>
+              </div>
+              <div class="hint" id="toolingStatus"></div>
+            </div>
+
+            <h4 class="section-title" style="margin-top:14px;">Tools</h4>
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Tool</th>
+                    <th>Status</th>
+                    <th>Class</th>
+                    <th>Backend Profiles</th>
+                    <th>Local Model</th>
+                    <th>Action</th>
+                  </tr>
+                </thead>
+                <tbody id="toolingToolsBody"></tbody>
+              </table>
+            </div>
+
+            <h4 class="section-title" style="margin-top:14px;">Skills</h4>
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Skill</th>
+                    <th>Status</th>
+                    <th>Verdict</th>
+                    <th>Usage</th>
+                    <th>Last Used</th>
+                  </tr>
+                </thead>
+                <tbody id="toolingSkillsBody"></tbody>
+              </table>
+            </div>
+
+            <h4 class="section-title" style="margin-top:14px;">Local Model Rollout</h4>
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Model</th>
+                    <th>Installed</th>
+                    <th>Allowlist</th>
+                    <th>Action</th>
+                  </tr>
+                </thead>
+                <tbody id="toolingModelsBody"></tbody>
+              </table>
+            </div>
+
+            <h4 class="section-title" style="margin-top:14px;">Download Jobs</h4>
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Job ID</th>
+                    <th>Model</th>
+                    <th>Status</th>
+                    <th>Created</th>
+                    <th>Error</th>
+                    <th>Action</th>
+                  </tr>
+                </thead>
+                <tbody id="toolingDownloadsBody"></tbody>
+              </table>
+            </div>
+          </div>
+
+          <!-- Browser / CDP -->
+          <div class="settings-category" id="settings-browser">
+            <h3 class="section-title">Browser Control</h3>
+            <div class="card-grid">
+              <div class="card">
+                <h4>Browser Health</h4>
+                <div class="value" id="browserHealthValue">Checking...</div>
+                <div class="meta" id="browserHealthMeta">CDP telemetry</div>
+              </div>
+              <div class="card">
+                <h4>CDP Endpoint</h4>
+                <div class="value" id="browserCdpValue">-</div>
+                <div class="meta" id="browserTabMeta">Awaiting status</div>
+              </div>
+            </div>
+            <div class="grid two">
+              <div class="field">
+                <label>CDP Endpoint Preset</label>
+                <select id="cdpPreset">
+                  <option value="http://127.0.0.1:9222">Chrome Debug 9222</option>
+                  <option value="http://127.0.0.1:9333">OpenUnum Debug 9333</option>
+                </select>
+              </div>
+            </div>
+            <div class="row" style="margin-top:10px;">
+              <button id="saveCdp">Save CDP</button>
+              <button id="launchBrowser">Launch Debug Browser</button>
+            </div>
+            <div class="hint" id="browserStatusLine"></div>
+
+            <hr style="border:none;border-top:1px solid var(--line);margin:14px 0;" />
+
+            <div class="grid two">
+              <div class="field">
+                <label>Navigate URL</label>
+                <input id="navUrl" placeholder="https://example.com" />
+              </div>
+              <div class="field">
+                <label>Search Query</label>
+                <input id="searchQ" placeholder="what to search" />
+              </div>
+            </div>
+            <div class="row" style="margin-top:10px;">
+              <button id="navBtn">Navigate</button>
+              <button id="searchBtn">Search</button>
+              <button id="extractBtn">Extract Page Text</button>
+            </div>
+          </div>
+
+          <!-- Channels (Telegram) -->
+          <div class="settings-category" id="settings-channels">
+            <h3 class="section-title">Telegram Channel</h3>
+            <div class="grid two">
+              <div class="field">
+                <label>Bot Token (user value)</label>
+                <input id="tgToken" placeholder="123456:ABC..." />
+              </div>
+              <div class="field">
+                <label>Channel State</label>
+                <select id="telegramEnabled">
+                  <option value="true">Enabled</option>
+                  <option value="false">Disabled</option>
+                </select>
+              </div>
+            </div>
+            <div class="row" style="margin-top:10px;">
+              <button id="saveToken">Save Telegram Config</button>
+              <button id="startTg">Start Polling</button>
+              <button id="stopTg">Stop Polling</button>
+              <button id="tgRefresh">Refresh</button>
+            </div>
+            <div class="hint" id="tgStatus"></div>
+          </div>
+
+          <!-- Developer (Control Plane + Missions) -->
+          <div class="settings-category" id="settings-developer">
+            <h3 class="section-title">Mission Runner</h3>
+            <div class="grid two" style="margin-bottom:10px;">
+              <div class="field">
+                <label>Existing Missions</label>
+                <select id="missionPicker">
+                  <option value="">Select mission...</option>
+                </select>
+              </div>
+              <div class="field">
+                <label>Mission Action</label>
+                <div class="row">
+                  <button id="loadMissionBtn">Load</button>
+                  <button id="clearMissionSelectionBtn">Clear</button>
+                </div>
+              </div>
+            </div>
+            <div class="grid two">
+              <div class="field">
+                <label>Mission Goal</label>
+                <input id="missionGoal" placeholder="goal for autonomous execution" />
+              </div>
+              <div class="field">
+                <label>Max Steps</label>
+                <select id="missionSteps">
+                  <option>3</option>
+                  <option selected>6</option>
+                  <option>10</option>
+                  <option>15</option>
+                  <option>20</option>
+                </select>
+              </div>
+              <div class="field">
+                <label>Step Interval (ms)</label>
+                <select id="missionInterval">
+                  <option value="0">0 (no delay)</option>
+                  <option value="200">200</option>
+                  <option value="400" selected>400</option>
+                  <option value="1000">1000</option>
+                  <option value="2000">2000</option>
+                </select>
+              </div>
+            </div>
+            <div class="row" style="margin-top:10px;">
+              <button class="primary" id="startMission">Start Mission</button>
+              <button id="stopMission">Stop Mission</button>
+              <button id="refreshMission">Refresh Status</button>
+            </div>
+            <div class="hint" id="missionStatus">idle</div>
+            <div class="ledger" id="missionTimeline">
+              <h4>Mission Timeline</h4>
+              <div class="row" style="margin-bottom:8px;">
+                <button id="openMissionSessionBtn">Open Mission Session</button>
+                <button id="cloneMissionSessionBtn">Clone Mission Session</button>
+                <select id="missionTimelineFilter">
+                  <option value="all">All</option>
+                  <option value="log">Mission Log</option>
+                  <option value="tools">Tool Runs</option>
+                  <option value="strategies">Strategies</option>
+                  <option value="artifacts">Artifacts</option>
+                  <option value="compactions">Compactions</option>
+                </select>
+                <input id="missionTimelineSearch" placeholder="Filter timeline text" />
+              </div>
+              <div class="ledger-section" id="missionTimelineSummary">No active mission.</div>
+              <div class="ledger-section" id="missionTimelineLog"></div>
+              <div class="ledger-section" id="missionTimelineArtifacts"></div>
+            </div>
+            <div class="ledger" id="scheduledMissions" style="margin-top: 20px;">
+              <h4>Scheduled Missions</h4>
+              <div class="ledger-section" id="scheduledMissionsList">No scheduled missions.</div>
+            </div>
+
+            <hr style="border:none;border-top:1px solid var(--line);margin:14px 0;" />
+
+            <h3 class="section-title">Control Plane</h3>
+            <div class="hint">Backend coverage panel for self-heal, autonomy master, research, operations, and direct API execution.</div>
+
+            <div class="card-grid">
+              <div class="card">
+                <h4>Self Heal</h4>
+                <div class="row">
+                  <button id="cpSelfHealDry">Dry Run</button>
+                  <button id="cpSelfHealFix">Apply Fix</button>
+                  <button id="cpSelfHealStatus">Status</button>
+                </div>
+              </div>
+              <div class="card">
+                <h4>Autonomy Master</h4>
+                <div class="row">
+                  <button id="cpMasterStatus">Status</button>
+                  <button id="cpMasterStart">Start</button>
+                  <button id="cpMasterStop">Stop</button>
+                  <button id="cpMasterCycle">Cycle</button>
+                  <button id="cpMasterImprove">Self Improve</button>
+                  <button id="cpMasterLearnSkills">Learn Skills</button>
+                  <button id="cpMasterSelfTest">Self Test</button>
+                </div>
+              </div>
+              <div class="card">
+                <h4>Research</h4>
+                <div class="row">
+                  <button id="cpResearchRun">Run Daily</button>
+                  <button id="cpResearchRecent">Recent</button>
+                  <button id="cpResearchQueue">Queue</button>
+                </div>
+                <div class="grid" style="margin-top:8px;">
+                  <input id="cpResearchUrl" placeholder="proposal URL for approve" />
+                  <input id="cpResearchNote" placeholder="approval note (optional)" />
+                  <button id="cpResearchApprove">Approve Proposal</button>
+                </div>
+              </div>
+              <div class="card">
+                <h4>Workers &amp; Self-Edit</h4>
+                <div class="row">
+                  <button id="cpWorkersList">Workers</button>
+                  <button id="cpWorkerStatus">Worker Status</button>
+                  <button id="cpSelfEditRuns">Self-Edit Runs</button>
+                  <button id="cpSelfEditStatus">Self-Edit Status</button>
+                </div>
+                <div class="grid" style="margin-top:8px;">
+                  <input id="cpWorkerId" placeholder="worker id" />
+                  <input id="cpSelfEditId" placeholder="self-edit run id" />
+                </div>
+              </div>
+              <div class="card">
+                <h4>Model Scout</h4>
+                <div class="row">
+                  <button id="cpModelScoutRun">Run Scout</button>
+                  <button id="cpModelScoutList">Scout Runs</button>
+                  <button id="cpModelScoutStatus">Scout Status</button>
+                </div>
+                <div class="grid" style="margin-top:8px;">
+                  <input id="cpModelScoutQuery" placeholder="Qwen3.5 / DeepSeek R1 Distill" />
+                  <input id="cpModelScoutId" placeholder="model-scout run id" />
+                </div>
+              </div>
+              <div class="card">
+                <h4>Generic Tasks</h4>
+                <div class="row">
+                  <button id="cpTaskRun">Run Task</button>
+                  <button id="cpTaskList">Task Runs</button>
+                  <button id="cpTaskStatus">Task Status</button>
+                </div>
+                <div class="grid" style="margin-top:8px;">
+                  <input id="cpTaskGoal" placeholder="inspect, execute, verify, monitor" />
+                  <input id="cpTaskId" placeholder="task run id" />
+                </div>
+              </div>
+            </div>
+
+            <div class="grid two">
+              <div class="field">
+                <label>Delete Session By ID</label>
+                <input id="cpSessionDeleteId" placeholder="session uuid" />
+              </div>
+              <div class="field">
+                <label>Clear Sessions (Keep ID)</label>
+                <input id="cpSessionClearKeep" placeholder="session uuid to keep" />
+              </div>
+            </div>
+            <div class="row" style="margin-top:8px;">
+              <button id="cpSessionDelete">Delete Session</button>
+              <button id="cpSessionClearKeepBtn">Clear Others</button>
+              <button id="cpSessionClearAllBtn">Clear All</button>
+              <button id="cpOpsRecent">Recent Operations</button>
+            </div>
+
+            <hr style="border:none;border-top:1px solid var(--line);margin:14px 0;" />
+            <h4 class="section-title">API Console</h4>
+            <div class="grid two">
+              <div class="field">
+                <label>Method</label>
+                <select id="cpMethod">
+                  <option value="GET">GET</option>
+                  <option value="POST">POST</option>
+                  <option value="DELETE">DELETE</option>
+                </select>
+              </div>
+              <div class="field">
+                <label>Path</label>
+                <input id="cpPath" placeholder="/api/skills" />
+              </div>
+            </div>
+            <div class="field" style="margin-top:8px;">
+              <label>JSON Body (POST/DELETE)</label>
+              <textarea id="cpBody" rows="6" placeholder='{"dryRun": true}'></textarea>
+            </div>
+            <div class="row" style="margin-top:8px;">
+              <button class="primary" id="cpRun">Run Request</button>
+              <span class="hint" id="cpStatus">idle</span>
+            </div>
+            <textarea id="cpOutput" readonly style="margin-top:10px; min-height:220px;" placeholder="response..."></textarea>
+          </div>
+
+        </div>
+      </div>
+    </div>
+  </dialog>
+
+  <!-- Vault Edit Modal -->
   <dialog id="vaultEditModal" class="modal">
     <div class="modal-head">
       <div class="modal-title" id="vaultEditTitle">Edit Vault Entry</div>
@@ -758,6 +818,8 @@
       <button id="vaultEditClose">Cancel</button>
     </div>
   </dialog>
+
+  <!-- Tooling Edit Modal -->
   <dialog id="toolingEditModal" class="modal">
     <div class="modal-head">
       <div class="modal-title" id="toolingEditTitle">Edit Tool Backend Profiles</div>
@@ -770,6 +832,7 @@
       <button id="toolingEditClose">Cancel</button>
     </div>
   </dialog>
+
   <script type="module" src="/ui/app.js"></script>
 </body>
 </html>

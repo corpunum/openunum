@@ -26,10 +26,17 @@ export async function runUiBootstrap(ctx) {
     if (q('cpPath')) q('cpPath').value = '/api/health';
     if (q('cpBody')) q('cpBody').value = '{\n  "dryRun": true\n}';
 
-    const initSteps = [
+    // Essential init steps — must run before UI is usable
+    const essentialSteps = [
       { name: 'session', fn: () => ensureSessionExists(sessionId) },
       { name: 'capabilities', fn: refreshCapabilities },
       { name: 'model', fn: refreshModel },
+      { name: 'sessions', fn: refreshSessionList },
+      { name: 'load', fn: loadSession }
+    ];
+
+    // Deferred init steps — fetched on demand when settings category is opened
+    const deferredSteps = [
       { name: 'runtime', fn: refreshRuntime },
       { name: 'providers', fn: refreshProviderConfig },
       { name: 'tooling', fn: refreshToolingInventory },
@@ -37,14 +44,16 @@ export async function runUiBootstrap(ctx) {
       { name: 'phase0-diag', fn: refreshPhase0Diagnostics },
       { name: 'autonomy-dashboard', fn: refreshAutonomyDashboard },
       { name: 'telegram', fn: refreshTelegram },
-      { name: 'sessions', fn: refreshSessionList },
-      { name: 'load', fn: loadSession },
       { name: 'mission', fn: refreshMission },
       { name: 'context', fn: refreshContextStatus },
       { name: 'timeline', fn: refreshMissionTimeline }
     ];
 
-    for (const step of initSteps) {
+    // Store deferred steps globally so settings hub can trigger them
+    window.__openunum_deferred_steps = deferredSteps;
+    window.__openunum_deferred_loaded = new Set();
+
+    for (const step of essentialSteps) {
       try {
         console.log(`Starting init step: ${step.name}`);
         const timeoutPromise = new Promise((_, reject) => {
@@ -72,3 +81,32 @@ export async function runUiBootstrap(ctx) {
   }
 }
 
+export async function runDeferredStep(name) {
+  const steps = window.__openunum_deferred_steps || [];
+  const loaded = window.__openunum_deferred_loaded || new Set();
+  const step = steps.find((s) => s.name === name);
+  if (!step || loaded.has(name)) return;
+  loaded.add(name);
+  try {
+    await step.fn();
+  } catch (e) {
+    console.warn(`Deferred step failed: ${name}`, e);
+  }
+}
+
+export async function runDeferredStepsForCategory(category) {
+  const categoryToSteps = {
+    'general': [],
+    'model-routing': ['runtime', 'model'],
+    'provider-vault': ['providers', 'capabilities'],
+    'runtime': ['runtime', 'overview', 'phase0-diag', 'autonomy-dashboard', 'context'],
+    'tooling': ['tooling'],
+    'browser': ['runtime'],
+    'channels': ['telegram'],
+    'developer': ['mission', 'timeline', 'context']
+  };
+  const stepNames = categoryToSteps[category] || [];
+  for (const name of stepNames) {
+    await runDeferredStep(name);
+  }
+}

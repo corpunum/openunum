@@ -82,7 +82,13 @@ export class TelegramChannel {
    */
   cleanForChat(text) {
     let cleaned = String(text || '');
-    
+
+    // Remove base64 image data (from image_generate tool results that leak into text)
+    cleaned = cleaned.replace(/data:image\/[a-z]+;base64,[A-Za-z0-9+/=\n]+/g, '[image attached]');
+    cleaned = cleaned.replace(/\b[A-Za-z0-9+/]{200,}={0,2}\b/g, (match) => {
+      return match.length > 500 ? '[base64 data removed]' : match;
+    });
+
     // Remove provenance footers
     cleaned = cleaned.replace(/\nProvenance:.*$/gm, '');
     
@@ -118,6 +124,27 @@ export class TelegramChannel {
       throw new Error(`Telegram deleteWebhook failed: ${res.status} ${res.statusText} ${body}`.trim());
     }
     return res.json().catch(() => ({ ok: true }));
+  }
+
+  async sendPhoto(chatId, base64Data, caption = '') {
+    const buffer = Buffer.from(base64Data, 'base64');
+    const formData = new FormData();
+    formData.append('chat_id', String(chatId));
+    formData.append('photo', new Blob([buffer], { type: 'image/png' }), 'image.png');
+    if (caption) {
+      formData.append('caption', caption.length > 1024 ? caption.slice(0, 1021) + '...' : caption);
+    }
+
+    const res = await fetch(this.api('/sendPhoto'), {
+      method: 'POST',
+      body: formData
+    });
+
+    if (!res.ok) {
+      const errorText = await res.text().catch(() => 'unknown');
+      throw new Error(`Telegram sendPhoto failed: ${res.status} - ${errorText}`);
+    }
+    return res.json();
   }
 
   async send(chatId, text) {
@@ -213,7 +240,24 @@ export class TelegramChannel {
         if (!collapsed) continue;
         try {
           const reply = await this.onMessage(collapsed, `telegram:${chatId}`);
-          await this.send(chatId, reply);
+          // Support both string replies (legacy) and object replies with images
+          if (typeof reply === 'object' && reply !== null) {
+            const text = String(reply.reply || '').trim();
+            const images = Array.isArray(reply.images) ? reply.images : [];
+            // Send images first, then text
+            for (const img of images) {
+              try {
+                await this.sendPhoto(chatId, img, text.length > 1024 ? text.slice(0, 1021) + '...' : '');
+              } catch (photoErr) {
+                // Photo send failed, will still send text below
+              }
+            }
+            if (text) {
+              await this.send(chatId, text);
+            }
+          } else {
+            await this.send(chatId, String(reply || ''));
+          }
         } catch (chatError) {
           const fallback = 'I hit an internal processing error for your message. Please retry.';
           try {

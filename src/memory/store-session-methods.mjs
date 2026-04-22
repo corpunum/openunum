@@ -12,11 +12,11 @@ export class SessionStoreMethods {
     return this.getSessionSummary(sessionId);
   }
 
-  addMessage(sessionId, role, content) {
+  addMessage(sessionId, role, content, { reasoning, rawReply } = {}) {
     this.ensureSession(sessionId);
     this.db
-      .prepare('INSERT INTO messages (session_id, role, content, created_at) VALUES (?, ?, ?, ?)')
-      .run(sessionId, role, content, new Date().toISOString());
+      .prepare('INSERT INTO messages (session_id, role, content, reasoning, raw_reply, created_at) VALUES (?, ?, ?, ?, ?, ?)')
+      .run(sessionId, role, content, reasoning || null, rawReply || null, new Date().toISOString());
   }
 
   importSession({ sessionId, messages = [] }) {
@@ -341,7 +341,7 @@ export class SessionStoreMethods {
 
   getMessages(sessionId, limit = 50) {
     return this.db
-      .prepare('SELECT id, role, content, created_at FROM messages WHERE session_id = ? ORDER BY id DESC LIMIT ?')
+      .prepare('SELECT id, role, content, reasoning, raw_reply, created_at FROM messages WHERE session_id = ? ORDER BY id DESC LIMIT ?')
       .all(sessionId, limit)
       .reverse();
   }

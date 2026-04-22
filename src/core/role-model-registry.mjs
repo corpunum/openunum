@@ -26,7 +26,7 @@ export const roleModelRegistry = {
   },
   file_ops: {
     minTier: 'compact',
-    recommended: ['ollama-local/gemma4:cpu'],
+    recommended: ['ollama-local/gemma4:cpu', 'llama-cpp-local/supergemma4-Q5_K_M.gguf'],
     blocked: [],
     description: 'Simple file operations'
   },
@@ -38,7 +38,7 @@ export const roleModelRegistry = {
   },
   chat: {
     minTier: 'compact',
-    recommended: ['ollama-local/gemma4:cpu', 'ollama-cloud/qwen3.5:397b-cloud'],
+    recommended: ['ollama-local/gemma4:cpu', 'llama-cpp-local/supergemma4-Q5_K_M.gguf', 'ollama-cloud/qwen3.5:397b-cloud'],
     blocked: [],
     description: 'General conversation'
   }

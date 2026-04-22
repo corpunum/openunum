@@ -26,7 +26,15 @@ export function createChatRenderer({
     node.pollCount = 0;
     node.lastToolCount = 0;
     node.lastStep = '';
+    node.streamingTokens = '';
+    node.streamingReasoning = '';
+    node.reasoningOpen = false;
+    node.toolCalls = [];
     node.persistScope = `session:${getSessionId()}:live`;
+    // Attach streaming methods to the node so the pending controller can call them
+    node.appendTokenToBubble = (token) => appendTokenToBubble(node, token);
+    node.appendReasoningToken = (token) => appendReasoningToken(node, token);
+    node.addToolCallEvent = (event) => addToolCallToBubble(node, event);
     node.bubble.innerHTML = `<div class="typing" aria-label="Agent is working">
       <div class="typing-head">
         <span class="typing-label">Agent Running</span>
@@ -36,6 +44,136 @@ export function createChatRenderer({
       <div class="typing-dots"><span class="dot"></span><span class="dot"></span><span class="dot"></span></div>
     </div>`;
     return node;
+  }
+
+  function appendTokenToBubble(typing, token) {
+    if (!typing || !typing.bubble) return;
+    typing.streamingTokens = (typing.streamingTokens || '') + token;
+    const content = typing.streamingTokens;
+
+    const container = typing.bubble.querySelector('.stream-content');
+    if (container) {
+      container.textContent = content;
+      // Auto-scroll the chat
+      chat.scrollTop = chat.scrollHeight;
+      return;
+    }
+
+    // First token: transition from typing indicator to streaming view
+    renderStreamingBubble(typing, content);
+  }
+
+  function appendReasoningToken(typing, token) {
+    if (!typing || !typing.bubble) return;
+    typing.streamingReasoning = (typing.streamingReasoning || '') + token;
+
+    const reasoningEl = typing.bubble.querySelector('.reasoning-content');
+    if (reasoningEl) {
+      reasoningEl.textContent = typing.streamingReasoning;
+      return;
+    }
+
+    // First reasoning token: show reasoning section
+    renderStreamingBubble(typing, typing.streamingTokens || '', typing.streamingReasoning);
+  }
+
+  function renderStreamingBubble(typing, content, reasoning) {
+    const sessionId = getSessionId();
+    const scope = typing.persistScope || sessionId || 'pending';
+    const toolDetails = buildToolDetailsHTML(typing);
+
+    let reasoningHTML = '';
+    if (reasoning) {
+      reasoningHTML = `<details class="reasoning${typing.reasoningOpen ? ' open' : ''}" data-persist-key="${escapeHtml(detailPanelKey(scope, 'reasoning'))}">
+        <summary>Thinking&hellip;</summary>
+        <div class="reasoning-content">${escapeHtml(reasoning)}</div>
+      </details>`;
+    }
+
+    typing.bubble.innerHTML = `<div class="streaming-bubble">
+      ${reasoningHTML}
+      <div class="stream-content">${escapeHtml(content || '')}</div>
+      <span class="cursor-blink" aria-hidden="true">&#x2588;</span>
+    </div>
+    ${toolDetails}`;
+
+    // Restore reasoning open state from persistence
+    bindPersistentDetailPanels(typing.bubble, getDetailPanelState(), rememberDetailPanelState);
+    chat.scrollTop = chat.scrollHeight;
+  }
+
+  function buildToolDetailsHTML(typing) {
+    const toolCalls = typing.toolCalls || [];
+    if (toolCalls.length === 0) return '';
+
+    const sessionId = getSessionId();
+    const scope = typing.persistScope || sessionId || 'pending';
+    const items = toolCalls.map((tc, idx) => {
+      const statusClass = tc.status === 'completed' ? 'tool-ok' : tc.status === 'failed' ? 'tool-err' : 'tool-running';
+      const statusIcon = tc.status === 'completed' ? '&#x2713;' : tc.status === 'failed' ? '&#x2717;' : '&#x25B6;';
+      const argsSummary = summarizeToolArgs(tc.args, tc.name);
+      const resultSummary = tc.status === 'completed' ? summarizeResult(tc.result) : tc.status === 'failed' ? escapeHtml(tc.error || 'failed') : '';
+      return `<div class="tool-call-item ${statusClass}">
+        <div class="tool-call-header"><span class="tool-status-icon">${statusIcon}</span> <span class="tool-name">${escapeHtml(tc.name)}</span> <span class="tool-args-summary">${escapeHtml(argsSummary)}</span></div>
+        ${resultSummary ? `<div class="tool-result-summary">${resultSummary}</div>` : ''}
+        <details class="tool-call-raw" data-persist-key="${escapeHtml(detailPanelKey(scope, `tool-${idx}-${tc.name}`))}">
+          <summary>Show details</summary>
+          <div class="tool-call-detail"><div class="trace-line">args: ${escapeHtml(JSON.stringify(tc.args || {}, null, 2))}</div>${tc.result ? `<div class="trace-line">result: ${escapeHtml(JSON.stringify(tc.result, null, 2).slice(0, 2000))}</div>` : ''}${tc.error ? `<div class="trace-line">error: ${escapeHtml(tc.error)}</div>` : ''}</div>
+        </details>
+      </div>`;
+    }).join('');
+
+    return `<details class="trace tool-calls-trace" data-persist-key="${escapeHtml(detailPanelKey(scope, 'streaming-tools'))}">
+      <summary>Tool Calls (${toolCalls.length})</summary>
+      <div class="trace-body">${items}</div>
+    </details>`;
+  }
+
+  function summarizeToolArgs(args, name) {
+    if (!args || typeof args !== 'object') return '';
+    const keys = Object.keys(args);
+    if (keys.length === 0) return '{}';
+    if (keys.length <= 3) {
+      const preview = keys.map((k) => {
+        const v = String(args[k]);
+        return `${k}=${v.length > 40 ? v.slice(0, 37) + '...' : v}`;
+      }).join(', ');
+      return preview.length > 120 ? preview.slice(0, 117) + '...' : preview;
+    }
+    return `${keys.length} params`;
+  }
+
+  function summarizeResult(result) {
+    if (!result) return '';
+    if (result.ok === false) return `<span class="tool-err">${escapeHtml(result.error || 'failed')}</span>`;
+    if (typeof result.content === 'string') return escapeHtml(result.content.slice(0, 200));
+    const json = JSON.stringify(result);
+    return escapeHtml(json.slice(0, 200));
+  }
+
+  function addToolCallToBubble(typing, event) {
+    if (!typing || !typing.bubble) return;
+    typing.toolCalls = typing.toolCalls || [];
+    if (event.type === 'started') {
+      typing.toolCalls.push({ name: event.tool, args: event.args, status: 'running', step: event.step });
+    } else if (event.type === 'completed') {
+      const existing = typing.toolCalls.find((tc) => tc.name === event.tool && tc.status === 'running');
+      if (existing) { existing.status = 'completed'; existing.result = event.result; }
+      else { typing.toolCalls.push({ name: event.tool, status: 'completed', step: event.step }); }
+    } else if (event.type === 'failed') {
+      const existing = typing.toolCalls.find((tc) => tc.name === event.tool && tc.status === 'running');
+      if (existing) { existing.status = 'failed'; existing.error = event.error; }
+      else { typing.toolCalls.push({ name: event.tool, status: 'failed', error: event.error, step: event.step }); }
+    }
+    // Re-render the bubble with tool details
+    const hasContent = (typing.streamingTokens || '').length > 0;
+    if (hasContent) {
+      renderStreamingBubble(typing, typing.streamingTokens, typing.streamingReasoning);
+    } else {
+      // Still in pre-stream phase: update live activity
+      const statusText = `Running ${event.tool}...`;
+      renderLiveBubble(typing, statusText, []);
+    }
   }
 
   function addLiveEvent(typing, text) {
@@ -78,6 +216,24 @@ export function createChatRenderer({
         <div class="trace-body">${events || '<div class="trace-line">No events yet.</div>'}</div>
       </details>`;
     bindPersistentDetailPanels(typing.bubble, getDetailPanelState(), rememberDetailPanelState);
+  }
+
+  function finalizeStreamingBubble(typing, html, reasoningHtml) {
+    if (!typing || !typing.bubble) return;
+    const sessionId = getSessionId();
+    const scope = typing.persistScope || sessionId || 'pending';
+
+    let reasoningSection = '';
+    if (reasoningHtml) {
+      reasoningSection = `<details class="reasoning" data-persist-key="${escapeHtml(detailPanelKey(scope, 'reasoning'))}">
+        <summary>Thinking</summary>
+        <div class="reasoning-content">${reasoningHtml}</div>
+      </details>`;
+    }
+
+    typing.bubble.innerHTML = `${reasoningSection}${html}`;
+    bindPersistentDetailPanels(typing.bubble, getDetailPanelState(), rememberDetailPanelState);
+    chat.scrollTop = chat.scrollHeight;
   }
 
   function renderTrace(trace) {
@@ -205,6 +361,10 @@ export function createChatRenderer({
     appendTypingBubble,
     addLiveEvent,
     renderLiveBubble,
-    renderTrace
+    renderTrace,
+    appendTokenToBubble,
+    appendReasoningToken,
+    addToolCallToBubble,
+    finalizeStreamingBubble
   };
 }

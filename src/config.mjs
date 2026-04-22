@@ -23,7 +23,7 @@ function normalizeModelRef(provider, model) {
   const normalizedProvider = normalizeProviderId(provider);
   const raw = String(model || '').trim();
   if (!raw) return raw;
-  return raw.replace(/^(ollama-local|ollama-cloud|ollama|openrouter|nvidia|xiaomimimo|generic|openai)\//, `${normalizedProvider}/`);
+  return raw.replace(/^(ollama-local|ollama-cloud|ollama|openrouter|nvidia|xiaomimimo|generic|openai|llama-cpp-local)\//, `${normalizedProvider}/`);
 }
 
 function normalizeOllamaLocalModelRef(modelRef) {
@@ -94,7 +94,9 @@ export function normalizeModelConfig(model = {}) {
     openaiBaseUrl: model.openaiBaseUrl || model.genericBaseUrl || 'https://api.openai.com/v1',
     openaiApiKey: model.openaiApiKey || model.genericApiKey || '',
     ollamaCloudBaseUrl: model.ollamaCloudBaseUrl || model.ollamaBaseUrl || 'http://127.0.0.1:11434',
-    ollamaLocalBaseUrl: model.ollamaLocalBaseUrl || model.ollamaBaseUrl || 'http://127.0.0.1:11434'
+    ollamaLocalBaseUrl: model.ollamaLocalBaseUrl || model.ollamaBaseUrl || 'http://127.0.0.1:11434',
+    llamaCppLocalBaseUrl: model.llamaCppLocalBaseUrl || process.env.LLAMA_CPP_LOCAL_BASE_URL || 'http://127.0.0.1:18084',
+    imageGenBaseUrl: model.imageGenBaseUrl || process.env.IMAGE_GEN_BASE_URL || 'http://127.0.0.1:18085'
   };
 }
 
@@ -281,14 +283,16 @@ export function defaultConfig() {
         openrouter: 'openrouter/openai/gpt-4o-mini',
         nvidia: 'nvidia/qwen/qwen3-coder-480b-a35b-instruct',
         xiaomimimo: 'xiaomimimo/gpt-4o-mini',
-        openai: 'openai/gpt-4o-mini'
+        openai: 'openai/gpt-4o-mini',
+        'llama-cpp-local': 'llama-cpp-local/supergemma4-Q5_K_M.gguf'
       },
       contextHints: {
         'ollama-cloud/qwen3.5:397b-cloud': 262144,
         'ollama-local/gemma4:cpu': 32768,
         'ollama-local/nomic-embed-text:latest': 8192,
         'openrouter/openai/gpt-4o-mini': 128000,
-        'openai/gpt-4o-mini': 128000
+        'openai/gpt-4o-mini': 128000,
+        'llama-cpp-local/supergemma4-Q5_K_M.gguf': 16384
       },
       routing: {
         fallbackEnabled: true,
@@ -308,7 +312,9 @@ export function defaultConfig() {
       nvidiaApiKey: '',
       xiaomimimoApiKey: '',
       openaiApiKey: '',
-      genericApiKey: ''
+      genericApiKey: '',
+      llamaCppLocalBaseUrl: process.env.LLAMA_CPP_LOCAL_BASE_URL || 'http://127.0.0.1:18084',
+      imageGenBaseUrl: process.env.IMAGE_GEN_BASE_URL || 'http://127.0.0.1:18085'
     },
     channels: {
       telegram: { botToken: '', enabled: false }

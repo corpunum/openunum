@@ -2,12 +2,13 @@ import fs from 'node:fs';
 import { getEffectiveOpenAICodexOAuthStatus, scanLocalAuthSources } from '../secrets/store.mjs';
 
 export const MODEL_CATALOG_CONTRACT_VERSION = '2026-04-01.model-catalog.v1';
-export const PROVIDER_ORDER = ['ollama-local', 'ollama-cloud', 'nvidia', 'openrouter', 'xiaomimimo', 'openai'];
+export const PROVIDER_ORDER = ['ollama-local', 'llama-cpp-local', 'ollama-cloud', 'nvidia', 'openrouter', 'xiaomimimo', 'openai'];
 export const MODEL_CATALOG_SUMMARY_LIMIT = 16;
 
 
 const PROVIDER_LABELS = {
   'ollama-local': 'Ollama Local',
+  'llama-cpp-local': 'Llama.cpp Local',
   'ollama-cloud': 'Ollama Cloud',
   nvidia: 'Nvidia',
   openrouter: 'OpenRouter',
@@ -36,6 +37,9 @@ const MODEL_SEEDS = {
     seedModel('ollama-local', 'nomic-embed-text:latest', 'Nomic Embed Text', 8192, 72, 'low', 'low', false, false, false),
     seedModel('ollama-local', 'mxbai-embed-large:latest', 'MXBAI Embed Large', 8192, 71, 'low', 'low', false, false, false),
     seedModel('ollama-local', 'all-minilm:latest', 'All MiniLM Embeddings', 8192, 68, 'low', 'low', false, false, false)
+  ],
+  'llama-cpp-local': [
+    seedModel('llama-cpp-local', 'supergemma4-Q5_K_M.gguf', 'SuperGemma 4 Q5_K_M (llama.cpp)', 16384, 78, 'low', 'low', true, false, true)
   ],
   nvidia: [
     seedModel('nvidia', 'meta/llama-3.1-405b-instruct', 'Llama 3.1 405B Instruct', 131072, 96, 'high', 'high', true, false, true),

@@ -49,7 +49,7 @@ export function createProviderVaultRenderers({
       const authField = getProviderSecretField()[provider.provider];
       const advancedOpen = Boolean(providerAdvancedOpen[provider.provider]);
       const isDisabled = Boolean(provider.disabled);
-      const authPlaceholder = String(provider.provider || '').startsWith('ollama-')
+      const authPlaceholder = String(provider.provider || '').startsWith('ollama-') || provider.provider === 'llama-cpp-local'
         ? 'local/no key'
         : provider.provider === 'nvidia'
           ? 'nvapi-...'

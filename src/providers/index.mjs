@@ -51,6 +51,10 @@ export function buildProviderForModel(config, { provider, model, timeoutMs } = {
     const baseUrl = config.model.ollamaLocalBaseUrl || config.model.ollamaBaseUrl || 'http://127.0.0.1:11434';
     return new OllamaProvider({ baseUrl, model: selectedModel, timeoutMs: effectiveTimeout });
   }
+  if (selectedProvider === 'llama-cpp-local') {
+    const baseUrl = config.model.llamaCppLocalBaseUrl || 'http://127.0.0.1:18084';
+    return new OpenAICompatibleProvider({ baseUrl, model: selectedModel, timeoutMs: effectiveTimeout });
+  }
   if (selectedProvider === 'openrouter') {
     return new OpenAICompatibleProvider({
       baseUrl: config.model.openrouterBaseUrl,

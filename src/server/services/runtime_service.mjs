@@ -395,6 +395,16 @@ export function createRuntimeService({
     });
   }
 
+  function renderReasoningHtml(text) {
+    if (!text || !text.trim()) return '';
+    const raw = marked.parse(text);
+    return sanitizeHtml(raw, {
+      allowedTags: sanitizeHtml.defaults.allowedTags.concat(['pre', 'code']),
+      allowedAttributes: { a: ['href', 'name', 'target'] },
+      allowedSchemes: ['http', 'https', 'mailto']
+    });
+  }
+
   return {
     buildCapabilitiesPayload,
     buildRuntimeOverview,
@@ -404,6 +414,7 @@ export function createRuntimeService({
     buildRuntimeStateAttachment,
     buildMissionTimeline,
     applyAutonomyMode,
-    renderReplyHtml
+    renderReplyHtml,
+    renderReasoningHtml
   };
 }

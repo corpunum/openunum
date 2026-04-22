@@ -93,6 +93,13 @@ export function summarizeToolResult(toolName, result, maxChars = DEFAULT_MAX_CHA
       );
       break;
 
+    case 'image_generate':
+      summary.ok = true;
+      summary.imageCount = Array.isArray(result.images) ? result.images.length : 0;
+      summary.parameters = result.parameters;
+      summary.info = truncateMiddle(result.info || '', 200);
+      break;
+
     default:
       // Generic: just truncate the whole thing
       summary.data = truncateMiddle(raw, maxChars);
@@ -116,6 +123,7 @@ function truncateMiddle(text, maxLen) {
  */
 export function shouldSummarize(toolName, result, threshold = 2000) {
   if (!result) return false;
+  if (toolName === 'image_generate') return true;
   const raw = JSON.stringify(result);
   return raw.length > threshold;
 }

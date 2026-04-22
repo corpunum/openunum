@@ -967,6 +967,88 @@ export class ToolRuntime {
         text: parsedJson ? '' : rawText
       };
     }
+    if (name === 'image_generate') {
+      const budgetError = ensureBudget();
+      if (budgetError) return budgetError;
+      const prompt = String(args?.prompt || '').trim();
+      if (!prompt) {
+        return { ok: false, error: 'missing_prompt', message: 'image_generate requires a prompt.' };
+      }
+      const width = Math.max(256, Math.min(960, Number(args?.width) || 768));
+      const height = Math.max(256, Math.min(960, Number(args?.height) || 768));
+      const steps = Math.max(1, Math.min(8, Number(args?.steps) || 4));
+      const baseUrl = String(this.config.model?.imageGenBaseUrl || 'http://127.0.0.1:18085').replace(/\/+$/, '');
+      const payload = { prompt, width, height, steps, cfg_scale: 1 };
+      const sdBin = '/home/corp-unum/.local/sd-cpp/build-vulkan/bin/sd-server';
+      const sdModelDir = '/home/corp-unum/models/flux-schnell';
+      let startedServer = false;
+      try {
+        // Check if sd-server is already running
+        let serverUp = false;
+        try {
+          const probe = await fetch(`${baseUrl}/sdapi/v1/sd-models`, { signal: AbortSignal.timeout(3000) });
+          serverUp = probe.ok;
+        } catch { serverUp = false; }
+
+        // Start sd-server on-demand if not running
+        if (!serverUp) {
+          if (!this.config.runtime?.shellEnabled) {
+            return { ok: false, error: 'shell_disabled', message: 'image_generate requires shell to start image server.' };
+          }
+          const startCmd = [
+            'LD_LIBRARY_PATH=/usr/lib/x86_64-linux-gnu',
+            'VK_ICD_FILENAMES=/usr/share/vulkan/icd.d/radeon_icd.json',
+            sdBin,
+            `--diffusion-model ${sdModelDir}/flux1-schnell-Q3_K_M.gguf`,
+            `--vae ${sdModelDir}/ae.safetensors`,
+            `--clip_l ${sdModelDir}/clip_l.safetensors`,
+            `--t5xxl ${sdModelDir}/t5xxl_fp16.safetensors`,
+            '--listen-ip 127.0.0.1 --listen-port 18085',
+            '--clip-on-cpu -v'
+          ].join(' ');
+          await this.executor.runShell(`nohup ${startCmd} > /tmp/sd-server-ondemand.log 2>&1 &`, shellTimeout(10000), { cwd: this.workspaceRoot, deadlineAt });
+          startedServer = true;
+          // Wait for server to become ready (model loading takes ~15-20s)
+          for (let attempt = 0; attempt < 60; attempt += 1) {
+            await new Promise((r) => setTimeout(r, 2000));
+            try {
+              const probe = await fetch(`${baseUrl}/sdapi/v1/sd-models`, { signal: AbortSignal.timeout(3000) });
+              if (probe.ok) { serverUp = true; break; }
+            } catch { /* still starting */ }
+          }
+          if (!serverUp) {
+            return { ok: false, error: 'server_start_timeout', message: 'Image generation server failed to start within 120s.' };
+          }
+        }
+
+        // Generate the image
+        const response = await fetch(`${baseUrl}/sdapi/v1/txt2img`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+          signal: AbortSignal.timeout(shellTimeout(420000))
+        });
+        const rawText = await response.text();
+        let parsedJson = null;
+        try { parsedJson = JSON.parse(rawText); } catch { parsedJson = null; }
+        if (!response.ok) {
+          return { ok: false, status: response.status, error: parsedJson?.error || response.statusText, message: rawText.slice(0, 500) };
+        }
+        if (parsedJson?.images && Array.isArray(parsedJson.images) && parsedJson.images.length > 0) {
+          return { ok: true, images: parsedJson.images, parameters: parsedJson.parameters || {}, info: parsedJson.info || '' };
+        }
+        return { ok: false, error: 'no_image_returned', message: 'Server returned success but no images.', raw: rawText.slice(0, 500) };
+      } catch (err) {
+        return { ok: false, error: String(err?.name || err?.code || 'fetch_error'), message: String(err?.message || err).slice(0, 500) };
+      } finally {
+        // Stop sd-server if we started it, to free VRAM
+        if (startedServer) {
+          try {
+            await this.executor.runShell('pkill -f "sd-server.*18085"', shellTimeout(5000), { cwd: this.workspaceRoot, deadlineAt });
+          } catch { /* best effort */ }
+        }
+      }
+    }
     if (name === 'desktop_open') {
       const budgetError = ensureBudget();
       if (budgetError) return budgetError;

@@ -1,6 +1,7 @@
 import crypto from 'node:crypto';
 import { getTaskOrchestrator } from '../../core/autonomy-registry.mjs';
 import { ensureObjectPayload, validateChatRequest } from '../contracts/request-contracts.mjs';
+import { onAgentEvent, AGENT_EVENTS } from '../../core/agent-events.mjs';
 
 function isPlainObject(value) {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
@@ -128,7 +129,7 @@ export async function handleChatToolsRoute({ req, res, url, ctx }) {
       ctx.pendingChats.set(sessionId, { sessionId, message, startedAt, turnId, promise });
       try {
         const out = await ctx.withTimeout(promise, 20 * 1000, 'chat_timeout');
-        ctx.sendJson(res, 200, { ...out, replyHtml: ctx.renderReplyHtml(out.reply) });
+        ctx.sendJson(res, 200, { ...out, replyHtml: ctx.renderReplyHtml(out.reply), rawReply: out.rawReply || out.reply, reasoningHtml: out.reasoning ? ctx.renderReasoningHtml(out.reasoning) : null });
         return true;
       } catch (error) {
         if (String(error.message || error) === 'chat_timeout') {
@@ -154,7 +155,7 @@ export async function handleChatToolsRoute({ req, res, url, ctx }) {
     try {
       const out = await ctx.withTimeout(entry.promise, 20 * 1000, 'chat_timeout');
       // PHASE 3: Include intervention trace in response
-      const response = { ...out, replyHtml: ctx.renderReplyHtml(out.reply) };
+      const response = { ...out, replyHtml: ctx.renderReplyHtml(out.reply), rawReply: out.rawReply || out.reply, reasoningHtml: out.reasoning ? ctx.renderReasoningHtml(out.reasoning) : null };
       if (out.trace?.intervention_trace) {
         response._meta = response._meta || {};
         response._meta.interventions = {
@@ -200,7 +201,9 @@ export async function handleChatToolsRoute({ req, res, url, ctx }) {
           sessionId,
           completed: true,
           ...completed,
-          replyHtml: completed?.reply ? ctx.renderReplyHtml(completed.reply) : null
+          replyHtml: completed?.reply ? ctx.renderReplyHtml(completed.reply) : null,
+          rawReply: completed?.rawReply || completed?.reply || null,
+          reasoningHtml: completed?.reasoning ? ctx.renderReasoningHtml(completed.reasoning) : null
         });
         return true;
       }
@@ -249,24 +252,51 @@ export async function handleChatToolsRoute({ req, res, url, ctx }) {
     });
 
     let closed = false;
-    const writeEvent = (payload) => {
+    const writeEvent = (eventType, payload) => {
       if (closed) return;
       try {
-        res.write(`data: ${JSON.stringify(payload)}\n\n`);
+        if (eventType) {
+          res.write(`event: ${eventType}\ndata: ${JSON.stringify(payload)}\n\n`);
+        } else {
+          res.write(`data: ${JSON.stringify(payload)}\n\n`);
+        }
       } catch {
         closed = true;
       }
     };
 
     let timer = null;
+    const unsubscribers = [];
     const finalize = () => {
       if (closed) return;
       closed = true;
       if (timer) {
         try { clearInterval(timer); } catch {}
       }
+      for (const unsub of unsubscribers) {
+        try { unsub(); } catch {}
+      }
       try { res.end(); } catch {}
     };
+
+    // Subscribe to agent events for this session and forward as typed SSE events
+    const agentEventMap = {
+      [AGENT_EVENTS.CONTENT_DELTA]: 'content_delta',
+      [AGENT_EVENTS.REASONING_START]: 'reasoning_start',
+      [AGENT_EVENTS.REASONING_DELTA]: 'reasoning_delta',
+      [AGENT_EVENTS.REASONING_END]: 'reasoning_end',
+      [AGENT_EVENTS.TOOL_CALL_STARTED]: 'tool_call_started',
+      [AGENT_EVENTS.TOOL_CALL_COMPLETED]: 'tool_call_completed',
+      [AGENT_EVENTS.TOOL_CALL_FAILED]: 'tool_call_failed',
+      [AGENT_EVENTS.TURN_END]: 'turn_end'
+    };
+    for (const [agentEvent, sseType] of Object.entries(agentEventMap)) {
+      const unsub = onAgentEvent(agentEvent, (data) => {
+        if (data.sessionId !== sessionId) return;
+        writeEvent(sseType, data);
+      });
+      unsubscribers.push(unsub);
+    }
 
     const readSnapshot = () => {
       const pending = ctx.pendingChats.get(sessionId);
@@ -278,7 +308,7 @@ export async function handleChatToolsRoute({ req, res, url, ctx }) {
         ? ctx.memory.getToolRunsSince(sessionId, since, 80)
         : [];
       const messages = typeof ctx.memory.getMessagesSince === 'function'
-        ? ctx.memory.getMessagesSince(sessionId, since, 80).map((m) => ({
+        ? ctx.memory.getMessagesSince(sessionId, since, 80).map(({ raw_reply, ...m }) => ({
           ...m,
           html: m.role === 'assistant' ? ctx.renderReplyHtml(m.content || '') : null
         }))
@@ -297,7 +327,10 @@ export async function handleChatToolsRoute({ req, res, url, ctx }) {
         completed: matchingTurnCompleted
           ? {
             ...completed,
-            replyHtml: completed?.reply ? ctx.renderReplyHtml(completed.reply) : null
+            replyHtml: completed?.reply ? ctx.renderReplyHtml(completed.reply) : null,
+            rawReply: completed?.rawReply || completed?.reply || null,
+            reasoning: completed?.reasoning || null,
+            reasoningHtml: completed?.reasoning ? ctx.renderReasoningHtml(completed.reasoning) : null
           }
           : null,
         done,
@@ -307,7 +340,7 @@ export async function handleChatToolsRoute({ req, res, url, ctx }) {
 
     const pushSnapshot = () => {
       const snapshot = readSnapshot();
-      writeEvent(snapshot);
+      writeEvent(null, snapshot);
       if (snapshot.done) finalize();
     };
 

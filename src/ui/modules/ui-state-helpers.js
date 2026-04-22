@@ -1,3 +1,5 @@
+import { createShowView } from './navigation.js';
+
 export function createUiStateHelpers({
   q,
   localStorage,
@@ -24,9 +26,8 @@ export function createUiStateHelpers({
     rememberDetailPanelStateWithStorage(getDetailPanelState(), key, patch, localStorage);
   }
 
-  function showView(viewId) {
-    showViewWithMeta(viewId, viewMeta);
-  }
+  const originalShowView = (viewId) => showViewWithMeta(viewId, viewMeta);
+  const showView = createShowView(originalShowView);
 
   return {
     isCurrentSessionPending,
@@ -35,4 +36,3 @@ export function createUiStateHelpers({
     showView
   };
 }
-

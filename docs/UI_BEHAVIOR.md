@@ -1,26 +1,34 @@
 # UI Behavior
 
-UI source: `src/ui/index.html`
+UI source: `src/ui/index.html`, `src/ui/app.js`, `src/ui/modules/*`, `src/ui/assets/openunum/*`
 
 ## 1. Structure
 
-- Left fixed menu with grouped categories and non-repeating labels:
+- **Chat-first shell**: `view-chat` is the full-time main center view
+- **Collapsible sidebar** with grouped categories and non-repeating labels; toggle/collapse buttons; state persisted in localStorage (`openunum_sidebar_collapsed`)
   - `Chat`
   - `Missions`
   - `Runtime`
   - `Settings`
-- Center dynamic panel switched by selected submenu
-- Chat is a dedicated center view
+- Center dynamic panel switched by selected submenu (chat always visible)
+- **Settings Hub**: Large `<dialog>` modal with left category rail + right content area, opened by the settings gear icon in the header
+  - 8 categories: General, Model Routing, Providers & Vault, Runtime & Autonomy, Tools & Skills, Browser/CDP, Channels, Developer
+  - All settings views moved into the modal; no inline settings views remain in the main layout
 
-Views:
-- Chat Terminal
+Views (main layout):
+- Chat Terminal (always-visible default)
 - Execution Trace
-- Model Routing
-- Provider Vault
-- Browser Ops
-- Telegram Bridge
 - Mission Runner
-- Control Plane API
+
+Views (settings hub categories):
+- General
+- Model Routing
+- Providers & Vault
+- Runtime & Autonomy
+- Tools & Skills
+- Browser/CDP
+- Channels
+- Developer
 
 ## 2. Dropdown-First Configuration
 
@@ -41,6 +49,10 @@ User-defined free text remains for:
 - user bubble
 - assistant bubble
 - animated typing bubble while request is in-flight
+- **Token-by-token streaming**: `chatStream()` delivers SSE tokens incrementally for real-time rendering
+- **Reasoning/thinking panel**: purple `<details class="reasoning">` collapsible shows model's thinking tokens; reasoning accumulates across all provider turns with `---` separator (renders as `<hr>` in markdown)
+- **Raw Response panel**: blue `<details class="raw-response">` collapsible shows raw model output before normalization
+- **Tool call cards**: status icons rendered inline during streaming view
 - expandable execution trace (`details/summary`)
 - duplicate-send guard while one request is active
 - pending-run polling: UI continues waiting and resolves from saved session messages
@@ -60,6 +72,10 @@ Trace panel includes:
 - per-step tool calls
 - tool args
 - tool result summary
+
+Agent event bus: `src/core/agent-events.mjs` emits real-time SSE events consumed by the streaming chat UI.
+
+DB persistence: `reasoning` and `raw_reply` columns on the `messages` table (schema v3).
 
 ## 4. Mission UI
 
@@ -91,6 +107,7 @@ Local browser storage keys:
 - `openunum_mission`
 - `openunum_auto_escalate`
 - `openunum_live_activity`
+- `openunum_sidebar_collapsed`
 
 Persistence behavior:
 - chat/session history is stored locally in SQLite on server side (`~/.openunum/openunum.db`)
@@ -98,14 +115,26 @@ Persistence behavior:
 
 ## 6. Initialization Sequence
 
-On load:
+Lazy bootstrap: 5 essential steps on page load, 10 deferred steps run when their settings category is first opened.
+
+Essential (on load):
 1. refresh model
 2. refresh runtime
 3. refresh provider config
-4. refresh browser config
-5. refresh telegram
-6. load session messages
-7. refresh mission state
+4. load session messages
+5. refresh mission state
+
+Deferred (on first category open):
+6. refresh browser config
+7. refresh telegram
+8. refresh tools/skills
+9. refresh channels
+10. refresh developer settings
+11. refresh model routing detail
+12. refresh provider vault detail
+13. refresh runtime/autonomy detail
+14. refresh browser/CDP detail
+15. refresh general settings detail
 
 ## 7. Mobile Behavior
 
@@ -123,3 +152,16 @@ pnpm smoke:ui:noauth
 This intentionally does not call:
 - `POST /api/service/connect`
 - `POST /api/auth/job/input`
+
+## 9. Static Assets & Branding
+
+Static asset serving extended to include: `.png`, `.gif`, `.webp`, `.svg`, `.ico`, `.woff2`, `.woff`, `.ttf`
+
+Brand assets in `src/ui/assets/openunum/`:
+- `icon.png` — favicon and brand icon
+- `loading.gif` — loading animation
+- `processing.gif` — processing animation
+- `downloading.gif` — download progress animation
+- `working.gif` — working/active animation
+
+Favicon is set to the brand icon.

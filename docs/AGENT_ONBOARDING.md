@@ -173,3 +173,24 @@ Five synthesis failure modes fixed in `src/core/turn-recovery-summary.mjs` and `
 5. **`enforceVisibleReplyContract` extension** (`agent.mjs`): the leaked-internal-format guard now also catches `Best next steps from current evidence:` patterns. The last-resort recovery chain tries: re-synthesize via recovery model → shell stdout → generic retry message.
 
 **Finality scope fix**: plain `shell_run` removed from `finalityTrackedTools` in `src/tools/runtime.mjs`. Read-only inspection commands (`ollama list`, `df -h`, etc.) no longer trigger the 3-success finality gate. Unsafe-metacharacter shell (`;`, `&`, `|`, backtick) is still tracked.
+
+## Streaming UI + Reasoning + Settings Hub (2026-04-22)
+
+### Streaming & Reasoning
+
+- **Token-by-token streaming** via `chatStream()` on providers delivers real-time SSE tokens to the chat UI
+- **Reasoning panel**: purple `<details class="reasoning">` shows model thinking tokens; reasoning accumulates across provider turns with `---` separator (renders as `<hr>` in markdown)
+- **Raw Response panel**: blue `<details class="raw-response">` shows raw model output before normalization
+- **Tool call cards**: inline status icons during streaming
+- **Agent event bus**: `src/core/agent-events.mjs` emits real-time SSE events consumed by the streaming UI
+- **DB persistence**: `reasoning` and `raw_reply` columns on `messages` table (schema v3 in `src/memory/store.mjs`)
+- **Bug fixes**: TDZ on `reasoning` variable, `rawContentParts`/`generatedImages`/`provider` scope errors in `chat()`, streaming timeout leak (moved `clearTimeout` to `finally` block), reasoning overwrite changed to append with separator
+
+### Settings Hub + UI Restructure
+
+- **Chat-first shell**: `view-chat` is the always-visible main view; all settings moved to a large `<dialog>` modal
+- **Settings hub modal**: left category rail + right content area, 8 categories (General, Model Routing, Providers & Vault, Runtime & Autonomy, Tools & Skills, Browser/CDP, Channels, Developer)
+- **Collapsible sidebar**: toggle/collapse buttons, state persisted in localStorage (`openunum_sidebar_collapsed`)
+- **Lazy bootstrap**: 5 essential steps on page load, 10 deferred steps run when their settings category is first opened (`src/ui/modules/ui-bootstrap.js`)
+- **Brand assets**: `src/ui/assets/openunum/` (icon.png, loading.gif, processing.gif, downloading.gif, working.gif); favicon set to brand icon
+- **Static asset serving**: extended to `.png`, `.gif`, `.webp`, `.svg`, `.ico`, `.woff2`, `.woff`, `.ttf`

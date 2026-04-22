@@ -15,14 +15,14 @@ try {
   const caps = await jget('/api/capabilities');
   assert.equal(caps.status, 200);
   assert.deepEqual(caps.json.menu, ['chat', 'missions', 'trace', 'runtime', 'settings']);
-  assert.deepEqual(caps.json.provider_order, ['ollama-local', 'ollama-cloud', 'nvidia', 'openrouter', 'xiaomimimo', 'openai']);
+  assert.deepEqual(caps.json.provider_order, ['ollama-local', 'llama-cpp-local', 'ollama-cloud', 'nvidia', 'openrouter', 'xiaomimimo', 'openai']);
 
   const catalog = await jget('/api/model-catalog');
   assert.equal(catalog.status, 200);
   assert.equal(catalog.json.contract_version, '2026-04-01.model-catalog.v1');
-  assert.deepEqual(catalog.json.provider_order, ['ollama-local', 'ollama-cloud', 'nvidia', 'openrouter', 'xiaomimimo', 'openai']);
+  assert.deepEqual(catalog.json.provider_order, ['ollama-local', 'llama-cpp-local', 'ollama-cloud', 'nvidia', 'openrouter', 'xiaomimimo', 'openai']);
   assert.equal(Array.isArray(catalog.json.providers), true);
-  assert.equal(catalog.json.providers.length, 6);
+  assert.equal(catalog.json.providers.length, 7);
   assert.equal(Boolean(catalog.json.selected?.canonical_key), true);
   assert.equal(Boolean(catalog.json.fallback?.canonical_key), true);
 
@@ -49,7 +49,7 @@ try {
   const authCatalog = await jget('/api/auth/catalog');
   assert.equal(authCatalog.status, 200);
   assert.equal(authCatalog.json.contract_version, '2026-04-01.auth-catalog.v1');
-  assert.deepEqual(authCatalog.json.provider_order, ['ollama-local', 'ollama-cloud', 'nvidia', 'openrouter', 'xiaomimimo', 'openai']);
+  assert.deepEqual(authCatalog.json.provider_order, ['ollama-local', 'llama-cpp-local', 'ollama-cloud', 'nvidia', 'openrouter', 'xiaomimimo', 'openai']);
   assert.equal(Array.isArray(authCatalog.json.providers), true);
   assert.equal(Array.isArray(authCatalog.json.auth_methods), true);
   assert.equal(Boolean(authCatalog.json.secret_store_path), true);

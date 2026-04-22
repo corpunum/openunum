@@ -90,6 +90,7 @@ export function inferTier(provider, modelId) {
     hasWordToken(id, 'nano') ||
     hasWordToken(id, 'mini') ||
     hasWordToken(id, 'small') ||
+    hasWordToken(id, 'supergemma') ||
     hasSizedToken(id, 7) ||
     hasSizedToken(id, 8) ||
     hasSizedToken(id, 9) ||

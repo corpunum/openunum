@@ -235,6 +235,7 @@ const buildRuntimeStateAttachment = runtimeService.buildRuntimeStateAttachment;
 const buildMissionTimeline = runtimeService.buildMissionTimeline;
 const applyAutonomyMode = runtimeService.applyAutonomyMode;
 const renderReplyHtml = runtimeService.renderReplyHtml;
+const renderReasoningHtml = runtimeService.renderReasoningHtml;
 const localModelService = createLocalModelService({ config });
 
 function sendApiError(res, status, code, message, details = {}) {
@@ -511,7 +512,8 @@ server = http.createServer(async (req, res) => {
         getOrStartChat,
         chatRuntime,
         withTimeout,
-        renderReplyHtml
+        renderReplyHtml,
+        renderReasoningHtml
       }
     })) return;
 
@@ -561,6 +563,7 @@ server = http.createServer(async (req, res) => {
         prunePendingChats,
         estimateMessagesTokens,
         renderReplyHtml,
+        renderReasoningHtml,
         buildRuntimeStateAttachment
       }
     })) return;

@@ -198,6 +198,100 @@ export class OllamaProvider {
     }));
     return {
       content: json?.message?.content || '',
+      reasoning: json?.message?.thinking || '',
+      toolCalls
+    };
+  }
+
+  async chatStream({ messages, tools = [], timeoutMs, onContentDelta, onReasoningDelta }) {
+    const effectiveTimeout = Number.isFinite(timeoutMs)
+      ? Math.max(1000, Number(timeoutMs))
+      : this.timeoutMs;
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(new Error('provider_timeout')), effectiveTimeout);
+    const rawModel = String(this.model || '').trim();
+    const modelPrefixMatch = rawModel.match(/^([a-z0-9-]+)\//i);
+    const modelPrefix = modelPrefixMatch ? String(modelPrefixMatch[1] || '').toLowerCase() : '';
+    const requestedModel = OllamaProvider.normalizeModelRef(rawModel);
+    const forceCpu = modelPrefix === 'ollama-local' || /:cpu$/i.test(requestedModel);
+    const requestBody = {
+      model: requestedModel,
+      messages: OllamaProvider.normalizeMessages(messages),
+      stream: true,
+      tools: tools.length > 0 ? tools : undefined,
+      options: forceCpu ? { num_gpu: 0 } : undefined
+    };
+    let res;
+    try {
+      res = await fetch(`${this.baseUrl}/api/chat`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(requestBody),
+        signal: controller.signal
+      });
+    } catch (error) {
+      clearTimeout(timer);
+      if (error?.name === 'AbortError') {
+        throw new Error(`Ollama provider timeout after ${effectiveTimeout}ms`);
+      }
+      throw error;
+    }
+    if (!res.ok) {
+      clearTimeout(timer);
+      const text = await res.text();
+      throw new Error(`Ollama provider stream failed: ${res.status} ${text}`);
+    }
+
+    clearTimeout(timer);
+
+    const contentParts = [];
+    const reasoningParts = [];
+    const toolCalls = [];
+    const decoder = new TextDecoder();
+    const reader = res.body.getReader();
+    let buffer = '';
+
+    try {
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n');
+        buffer = lines.pop() || '';
+        for (const line of lines) {
+          const trimmed = line.trim();
+          if (!trimmed) continue;
+          let chunk;
+          try { chunk = JSON.parse(trimmed); } catch { continue; }
+          if (chunk.done) continue;
+
+          if (chunk.message?.thinking) {
+            reasoningParts.push(chunk.message.thinking);
+            if (onReasoningDelta) onReasoningDelta(chunk.message.thinking);
+          }
+          if (chunk.message?.content) {
+            contentParts.push(chunk.message.content);
+            if (onContentDelta) onContentDelta(chunk.message.content);
+          }
+          if (Array.isArray(chunk.message?.tool_calls)) {
+            for (const tc of chunk.message.tool_calls) {
+              const idx = toolCalls.length;
+              toolCalls.push({
+                id: tc.id || `ollama-${idx}`,
+                name: tc.function?.name,
+                arguments: JSON.stringify(OllamaProvider.normalizeToolArguments(tc.function?.arguments))
+              });
+            }
+          }
+        }
+      }
+    } finally {
+      reader.cancel().catch(() => {});
+    }
+
+    return {
+      content: contentParts.join(''),
+      reasoning: reasoningParts.join(''),
       toolCalls
     };
   }

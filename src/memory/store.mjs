@@ -101,16 +101,16 @@ export class MemoryStore {
     const since = String(sinceIso || '').trim();
     return (since
       ? this.db
-        .prepare('SELECT id, role, content, created_at FROM messages WHERE session_id = ? AND created_at >= ? ORDER BY id ASC LIMIT ?')
+        .prepare('SELECT id, role, content, reasoning, raw_reply, created_at FROM messages WHERE session_id = ? AND created_at >= ? ORDER BY id ASC LIMIT ?')
         .all(sessionId, since, limit)
       : this.db
-        .prepare('SELECT id, role, content, created_at FROM messages WHERE session_id = ? ORDER BY id ASC LIMIT ?')
+        .prepare('SELECT id, role, content, reasoning, raw_reply, created_at FROM messages WHERE session_id = ? ORDER BY id ASC LIMIT ?')
         .all(sessionId, limit));
   }
 
   getAllMessagesForSession(sessionId) {
     return this.db
-      .prepare('SELECT id, role, content, created_at FROM messages WHERE session_id = ? ORDER BY id ASC')
+      .prepare('SELECT id, role, content, reasoning, raw_reply, created_at FROM messages WHERE session_id = ? ORDER BY id ASC')
       .all(sessionId);
   }
 

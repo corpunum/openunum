@@ -27,7 +27,7 @@ export function createTelegramRuntimeService({ config, agent, logError }) {
     const persistedOffset = store.getChannelState('telegram', 'offset', 0);
     
     const tg = new TelegramChannel(config.channels.telegram, async (text, sessionId) => {
-      const timeoutMs = Number(config?.runtime?.telegramReplyTimeoutMs || 70000);
+      const timeoutMs = Number(config?.runtime?.telegramReplyTimeoutMs || 300000);
       const timeoutPromise = new Promise((_, reject) => {
         setTimeout(() => reject(new Error('telegram_chat_timeout')), timeoutMs);
       });
@@ -37,17 +37,17 @@ export function createTelegramRuntimeService({ config, agent, logError }) {
           timeoutPromise
         ]);
         const reply = String(out?.reply || '').trim();
-        if (reply) return reply;
-        return 'I received your message but produced an empty reply. Please retry.';
+        const images = out?.images;
+        return { reply, images };
       } catch (error) {
         logError('telegram_chat_failed', {
           sessionId,
           error: String(error?.message || error)
         });
         if (String(error?.message || error) === 'telegram_chat_timeout') {
-          return 'I hit a response timeout while processing your message. Please retry with a shorter prompt.';
+          return { reply: 'I hit a response timeout while processing your message. Please retry with a shorter prompt.' };
         }
-        return 'I hit a runtime error while processing your message. Please retry.';
+        return { reply: 'I hit a runtime error while processing your message. Please retry.' };
       }
     }, persistedOffset);
 

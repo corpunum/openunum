@@ -88,7 +88,14 @@ export function createSessionController({
     if (token !== getSessionLoadToken() || sid !== getSessionId()) return;
     chat.innerHTML = '';
     for (const m of out.messages || []) {
-      pushMsg(m.role === 'assistant' ? 'assistant' : 'user', m.content, m.role === 'assistant' ? m.html : '');
+      if (m.role === 'assistant') {
+        const reasoningHtml = m.reasoningHtml ? `<details class="reasoning" data-persist-key="reasoning"><summary>Thinking</summary><div class="reasoning-content">${m.reasoningHtml}</div></details>` : '';
+        const rawSection = m.rawReply ? `<details class="raw-response" data-persist-key="raw-response"><summary>Raw Response</summary><div class="raw-response-content">${escapeHtml(m.rawReply)}</div></details>` : '';
+        const combinedHtml = reasoningHtml + rawSection + (m.html || `<pre>${escapeHtml(m.content)}</pre>`);
+        pushMsg('assistant', m.content, combinedHtml);
+      } else {
+        pushMsg(m.role, m.content, '');
+      }
     }
     await resumePendingSessionIfNeeded(sid);
   }

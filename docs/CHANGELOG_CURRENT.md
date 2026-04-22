@@ -1,5 +1,44 @@
 # Changelog (Current Consolidated)
 
+Date: 2026-04-22
+
+## Streaming UI + Reasoning + Settings Hub (2026-04-22)
+
+**Status:** Implemented, stabilized
+
+### Streaming UI Features (stabilized from previous session)
+
+- Token-by-token streaming chat rendering via `chatStream()` on providers
+- Reasoning/thinking collapsible panel (purple `<details class="reasoning">`) showing model's thinking tokens
+- Raw Response collapsible section (blue `<details class="raw-response">`) showing raw model output before normalization
+- Tool call cards with status icons in streaming view
+- Agent event bus (`src/core/agent-events.mjs`) for real-time SSE events
+- DB persistence: `reasoning` and `raw_reply` columns added to `messages` table (schema v3)
+- Reasoning accumulates across all provider turns with `---` separator (renders as `<hr>` in markdown)
+
+### Bug Fixes (this session)
+
+1. **TDZ error in `chat()`**: `reasoning` variable used before `const` declaration — moved declaration above first usage
+2. **`rawContentParts is not defined`**: variable was local to `runOneProviderTurn()`, now returned as `rawReply` from that function
+3. **`generatedImages is not defined`**: moved to trace object instead of local scope
+4. **`provider is not defined`**: derived from `effectiveAttempts` instead of relying on a local that didn't exist in `chat()` scope
+5. **Streaming timeout leak**: `clearTimeout(timer)` moved from before the read loop to the `finally` block in `chatStream()`, ensuring the timer always cleans up even on early returns or errors
+6. **Reasoning overwrite**: `trace.reasoning = out.reasoning` changed to append with `---` separator instead of overwriting, so multi-turn reasoning accumulates correctly
+
+### UI Restructure (this session)
+
+- **Settings Hub**: Large `<dialog>` modal with left category rail + right content area; replaces inline settings views
+- **8 categories**: General, Model Routing, Providers & Vault, Runtime & Autonomy, Tools & Skills, Browser/CDP, Channels, Developer
+- **Chat-first shell**: only `view-chat` is the full-time main view; all settings moved to the modal
+- **Collapsible sidebar**: toggle/collapse buttons, state persisted in localStorage (`openunum_sidebar_collapsed`)
+- **Settings gear icon** in header opens the settings hub
+- **Lazy bootstrap**: 5 essential steps on page load, 10 deferred steps run when their settings category is first opened
+- **Static asset serving** extended: `.png`, `.gif`, `.webp`, `.svg`, `.ico`, `.woff2`, `.woff`, `.ttf`
+- **Brand assets** copied to `src/ui/assets/openunum/` (icon.png, loading.gif, processing.gif, downloading.gif, working.gif)
+- **Favicon** set to brand icon
+
+**Files:** `src/ui/index.html`, `src/ui/app.js`, `src/ui/modules/navigation.js`, `src/ui/modules/ui-bootstrap.js`, `src/ui/modules/ui-constants.js`, `src/core/agent-events.mjs`, `src/server/routes/ui.mjs`, `src/memory/store.mjs`, `src/providers/ollama.mjs`, `src/providers/openai-compatible.mjs`, `src/core/agent.mjs`
+
 Date: 2026-04-21
 
 ## Fast-Path Context Loss Fix (2026-04-21)

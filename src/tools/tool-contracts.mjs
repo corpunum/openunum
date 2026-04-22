@@ -245,6 +245,20 @@ export const CORE_TOOL_DEFINITIONS = [
     name: 'research_approve',
     description: 'Approve a researched proposal URL for controlled adoption',
     parameters: { type: 'object', properties: { url: { type: 'string' }, note: { type: 'string' } }, required: ['url'] }
+  },
+  {
+    name: 'image_generate',
+    description: 'Generate an image from a text prompt using the local FLUX.1-schnell model. Returns a base64-encoded PNG image.',
+    parameters: {
+      type: 'object',
+      properties: {
+        prompt: { type: 'string', description: 'Image generation prompt describing the desired image' },
+        width: { type: 'integer', description: 'Image width in pixels (default: 768, max: 960)' },
+        height: { type: 'integer', description: 'Image height in pixels (default: 768, max: 960)' },
+        steps: { type: 'integer', description: 'Number of diffusion steps (default: 4, range: 1-8)' }
+      },
+      required: ['prompt']
+    }
   }
 ];
 
