@@ -1001,7 +1001,7 @@ export class ToolRuntime {
             `--clip_l ${sdModelDir}/clip_l.safetensors`,
             `--t5xxl ${sdModelDir}/t5xxl_fp16.safetensors`,
             '--listen-ip 127.0.0.1 --listen-port 18085',
-            '--clip-on-cpu -v'
+            '--clip-on-cpu --vae-on-cpu -v'
           ].join(' ');
           // Env vars must precede nohup — nohup doesn't understand VAR=value prefix syntax
           const startCmd = `LD_LIBRARY_PATH=/usr/lib/x86_64-linux-gnu VK_ICD_FILENAMES=/usr/share/vulkan/icd.d/radeon_icd.json nohup ${sdBin} ${serverArgs} > /tmp/sd-server-ondemand.log 2>&1 &`;
