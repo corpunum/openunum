@@ -142,7 +142,10 @@ export function isChannelSupportQuestion({ message = '', sessionId = '', recentM
     /\/status\b|\/new\b|\/start\b|\/session\b/,
     /\bwhat (commands?|sessions?|slash commands?)\b/,
     /\bhow to (use|start|clear|reset) (the )?(telegram |unum |openunum )?(commands?|sessions?|chat)\b/,
-    /\b(start|new|clear|fresh) (a |the )?(sessions?|chats?)\b/
+    /\b(start|new|clear|fresh) (a |the )?(sessions?|chats?)\b/,
+    /\bi (chat|talk|message|speak|interact) with you through (the )?telegram\b/,
+    /\bdelivered to you through (a |the )?telegram bot\b/,
+    /\bthrough telegram\b.*\b(bot|chat|session)\b/
   ];
   if (directPatterns.some((pattern) => pattern.test(t))) return true;
   return isTelegramSession && isLooseSupportFollowUp(t) && recentChannelSupportTopic(recentMessages);

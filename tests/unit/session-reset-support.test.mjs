@@ -23,6 +23,11 @@ describe('session support helpers', () => {
       recentMessages: []
     })).toBe(true);
     expect(isChannelSupportQuestion({
+      message: 'But I chat with you through telegram so really maybe you are wrong ? This message specifically is been delivered to you through a telegram bot',
+      sessionId: 'telegram:7277166932',
+      recentMessages: []
+    })).toBe(true);
+    expect(isChannelSupportQuestion({
       message: 'So ... ?',
       sessionId: 'telegram:7277166932',
       recentMessages: [
