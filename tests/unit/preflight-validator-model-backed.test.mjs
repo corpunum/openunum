@@ -31,4 +31,21 @@ describe('preflight-validator model-backed', () => {
     const out = validateToolCall('embed_text', { text: 'OpenUnum retrieval test', dimensions: 32 });
     expect(out.valid).toBe(true);
   });
+
+  it('accepts image_generate with integer dimensions', () => {
+    const out = validateToolCall('image_generate', { prompt: 'test', width: 512, height: 512 });
+    expect(out.valid).toBe(true);
+  });
+
+  it('rejects image_generate with string dimensions', () => {
+    const out = validateToolCall('image_generate', { prompt: 'test', width: '512', height: '512' });
+    expect(out.valid).toBe(false);
+    expect(out.hint).toContain('integer');
+  });
+
+  it('rejects image_generate with float dimensions', () => {
+    const out = validateToolCall('image_generate', { prompt: 'test', width: 512.5 });
+    expect(out.valid).toBe(false);
+    expect(out.hint).toContain('integer');
+  });
 });

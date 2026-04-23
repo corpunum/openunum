@@ -54,6 +54,10 @@ function genericValidate(name, args, spec) {
       if (typeof args[field] !== 'number' || !Number.isFinite(args[field])) addTypeError(errors, field, 'number');
       continue;
     }
+    if (expected === 'integer') {
+      if (typeof args[field] !== 'number' || !Number.isInteger(args[field])) addTypeError(errors, field, 'integer');
+      continue;
+    }
     if (typeof args[field] !== expected) addTypeError(errors, field, expected);
   }
   if (name === 'shell_run' && typeof args.cmd === 'string') {
