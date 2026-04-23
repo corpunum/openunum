@@ -1010,7 +1010,7 @@ th {
 }
 .composer {
   display: grid;
-  grid-template-columns: 1fr auto;
+  grid-template-columns: auto 1fr auto;
   gap: 10px;
   align-items: end;
 }
@@ -1182,6 +1182,8 @@ th {
 
 /* File attachment in composer */
 .composer-input-area { grid-column: 2 / 3; display: flex; flex-direction: column; gap: 4px; }
+.composer > .attach-btn { grid-column: 1 / 2; }
+.composer > #send { grid-column: 3 / 4; }
 .file-chips { display: flex; flex-wrap: wrap; gap: 4px; }
 .file-chip {
   display: inline-flex;
