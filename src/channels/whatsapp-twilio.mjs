@@ -1,6 +1,8 @@
-export class WhatsAppTwilioChannel {
+import { ChannelBase } from './base.mjs';
+
+export class WhatsAppTwilioChannel extends ChannelBase {
   constructor(config, onMessage) {
-    this.config = config;
+    super(config);
     this.onMessage = onMessage;
   }
 

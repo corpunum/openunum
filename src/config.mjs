@@ -317,7 +317,7 @@ export function defaultConfig() {
       imageGenBaseUrl: process.env.IMAGE_GEN_BASE_URL || 'http://127.0.0.1:18085'
     },
     channels: {
-      telegram: { botToken: '', enabled: false }
+      telegram: { botToken: '', enabled: false, streaming: { enabled: true, editIntervalMs: 1500, placeholderText: 'Thinking...', showReasoning: true, showToolCalls: true } }
     },
     fastAwarenessRouter: {
       enabled: true,
