@@ -25,12 +25,42 @@ export function createChatComposerController({
   resolvePendingReply,
   runAutoMissionFromChat,
   refreshSessionList,
-  refreshTacticalLedger
+  refreshTacticalLedger,
+  renderImageAttachments
 }) {
+  let attachedFiles = [];
+
+  function renderFileChips() {
+    const container = q('fileChips');
+    if (!container) return;
+    if (attachedFiles.length === 0) {
+      container.innerHTML = '';
+      return;
+    }
+    container.innerHTML = attachedFiles.map((f, i) =>
+      `<span class="file-chip">${escapeHtml(f.name)}<span class="remove-file" data-file-index="${i}">&times;</span></span>`
+    ).join('');
+    container.querySelectorAll('.remove-file').forEach((btn) => {
+      btn.onclick = () => {
+        attachedFiles.splice(Number(btn.dataset.fileIndex), 1);
+        renderFileChips();
+      };
+    });
+  }
+
   async function handleSend() {
     if (isCurrentSessionPending()) return;
-    const message = q('message').value.trim();
-    if (!message) return;
+    let message = q('message').value.trim();
+    if (!message && attachedFiles.length === 0) return;
+
+    // Append attached file contents to message
+    if (attachedFiles.length > 0) {
+      for (const f of attachedFiles) {
+        message += `\n\n--- Attached file: ${f.name} ---\n${f.content}\n--- End of ${f.name} ---`;
+      }
+      attachedFiles = [];
+      renderFileChips();
+    }
 
     if (!isStatusCheckMessage(message) && !/^\/\w+/.test(message)) {
       setLastTaskPrompt(message);
@@ -79,7 +109,7 @@ export function createChatComposerController({
       const reasoningHtml = out?.reasoningHtml ? `<details class="reasoning" data-persist-key="reasoning"><summary>Thinking</summary><div class="reasoning-content">${out.reasoningHtml}</div></details>` : '';
       const rawModelOutput = out?.rawReply || out?.reply || '';
       const rawSection = rawModelOutput ? `<details class="raw-response" data-persist-key="raw-response"><summary>Raw Response</summary><div class="raw-response-content">${escapeHtml(rawModelOutput)}</div></details>` : '';
-      const assistantHtml = `${reasoningHtml}${rawSection}${out?.replyHtml || out?.reply || '(no reply)'}${traceHtml}`;
+      const assistantHtml = `${reasoningHtml}${rawSection}${out?.replyHtml || out?.reply || '(no reply)'}${traceHtml}${renderImageAttachments(out?.imageFiles)}`;
       typing.bubble.innerHTML = assistantHtml;
       void typing.bubble.offsetHeight;
 
@@ -110,6 +140,19 @@ export function createChatComposerController({
         q('send').click();
       }
     });
+    const attachBtn = q('attachFile');
+    const fileInput = q('fileAttachInput');
+    if (attachBtn && fileInput) {
+      attachBtn.onclick = () => fileInput.click();
+      fileInput.onchange = async () => {
+        for (const file of fileInput.files) {
+          const text = await file.text().catch(() => `[Could not read file: ${file.name}]`);
+          attachedFiles.push({ name: file.name, content: text, type: file.type || 'text/plain' });
+        }
+        renderFileChips();
+        fileInput.value = '';
+      };
+    }
   }
 
   return {

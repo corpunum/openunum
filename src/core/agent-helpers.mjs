@@ -798,6 +798,7 @@ export function compactToolResult(result) {
   if (Array.isArray(r.images)) {
     compact.images = `[${r.images.length} image(s) generated, ${r.images.reduce((s, img) => s + (typeof img === 'string' ? img.length : 0), 0)} bytes base64 total]`;
   }
+  if (Array.isArray(r.savedAs)) compact.savedAs = r.savedAs;
   if (r.parameters) compact.parameters = r.parameters;
   return compact;
 }

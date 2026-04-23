@@ -23,7 +23,8 @@ export function createChatPendingController({
   isRequestTokenCurrent,
   nextRequestToken,
   addPendingSession,
-  removePendingSession
+  removePendingSession,
+  renderImageAttachments
 }) {
   function handleTypedEvent(typing, eventType, data) {
     if (!typing || !typing.bubble) return;
@@ -125,7 +126,8 @@ export function createChatPendingController({
           const rawModelOutput = payload.completed.rawReply || typing.streamingTokens || payload.completed.reply || '';
           const rawSection = rawModelOutput ? `<details class="raw-response" data-persist-key="${escapeHtml(detailPanelKey(typing.persistScope || requestSessionId || 'pending', 'raw-response'))}"><summary>Raw Response</summary><div class="raw-response-content">${escapeHtml(rawModelOutput)}</div></details>` : '';
           const renderedReply = payload.completed.replyHtml || `<pre>${escapeHtml(payload.completed.reply)}</pre>`;
-          typing.bubble.innerHTML = reasoningSection + rawSection + renderedReply;
+          const imageAttachments = renderImageAttachments(payload.completed.imageFiles);
+          typing.bubble.innerHTML = reasoningSection + rawSection + renderedReply + imageAttachments;
           void refreshSessionList();
           cleanup(true);
           return;
@@ -273,7 +275,7 @@ export function createChatPendingController({
           const reasoningSection4 = effectiveReasoningHtml4 ? `<details class="reasoning" data-persist-key="${escapeHtml(detailPanelKey(typing.persistScope || requestSessionId || 'pending', 'reasoning'))}"><summary>Thinking</summary><div class="reasoning-content">${effectiveReasoningHtml4}</div></details>` : '';
           const rawModelOutput4 = pendingCheck.rawReply || typing.streamingTokens || pendingCheck.reply || '';
           const rawSection4 = rawModelOutput4 ? `<details class="raw-response" data-persist-key="${escapeHtml(detailPanelKey(typing.persistScope || requestSessionId || 'pending', 'raw-response'))}"><summary>Raw Response</summary><div class="raw-response-content">${escapeHtml(rawModelOutput4)}</div></details>` : '';
-          typing.bubble.innerHTML = reasoningSection4 + rawSection4 + (pendingCheck.replyHtml || `<pre>${escapeHtml(pendingCheck.reply)}</pre>`);
+          typing.bubble.innerHTML = reasoningSection4 + rawSection4 + (pendingCheck.replyHtml || `<pre>${escapeHtml(pendingCheck.reply)}</pre>`) + renderImageAttachments(pendingCheck.imageFiles);
           await refreshSessionList();
           return true;
         }
@@ -290,7 +292,7 @@ export function createChatPendingController({
           const reasoningSection5 = effectiveReasoningHtml5 ? `<details class="reasoning" data-persist-key="${escapeHtml(detailPanelKey(typing.persistScope || requestSessionId || 'pending', 'reasoning'))}"><summary>Thinking</summary><div class="reasoning-content">${effectiveReasoningHtml5}</div></details>` : '';
           const rawModelOutput5 = typing.streamingTokens || msg.content || '';
           const rawSection5 = rawModelOutput5 ? `<details class="raw-response" data-persist-key="${escapeHtml(detailPanelKey(typing.persistScope || requestSessionId || 'pending', 'raw-response'))}"><summary>Raw Response</summary><div class="raw-response-content">${escapeHtml(rawModelOutput5)}</div></details>` : '';
-          typing.bubble.innerHTML = reasoningSection5 + rawSection5 + (msg.html || `<pre>${escapeHtml(msg.content)}</pre>`);
+          typing.bubble.innerHTML = reasoningSection5 + rawSection5 + (msg.html || `<pre>${escapeHtml(msg.content)}</pre>`) + renderImageAttachments(msg.imageFiles);
           await refreshSessionList();
           return true;
         }

@@ -33,6 +33,7 @@ import { createRuntimePanelsController } from './modules/runtime-panels.js';
 import { createModelCatalogController } from './modules/model-catalog-controller.js';
 import { createSessionController } from './modules/session-controller.js';
 import { createChatPendingController } from './modules/chat-pending-controller.js';
+import { createAssetGalleryController } from './modules/asset-gallery.js';
 import { createAutoMissionRunner } from './modules/chat-auto-mission.js';
 import { runUiBootstrap, runDeferredStepsForCategory } from './modules/ui-bootstrap.js';
 import { initializeUiState } from './modules/ui-state-init.js';
@@ -160,6 +161,7 @@ const {
   addToolCallToBubble,
   finalizeStreamingBubble
 } = chatRenderer;
+const assetGallery = createAssetGalleryController({ jget, escapeHtml });
 const providerVaultHelpers = createProviderVaultHelpers({
   q,
   localStorage,
@@ -346,7 +348,9 @@ const sessionController = createSessionController({
   setSessionId: (value) => { sessionId = value; },
   getSessionLoadToken: () => sessionLoadToken,
   setSessionLoadToken: (value) => { sessionLoadToken = value; },
-  resumePendingSessionIfNeeded: (sid) => resumePendingSessionIfNeeded(sid)
+  resumePendingSessionIfNeeded: (sid) => resumePendingSessionIfNeeded(sid),
+  renderImageAttachments: chatRenderer.renderImageAttachments,
+  refreshGallery: assetGallery.refreshGallery
 });
 const {
   getSessionCache,
@@ -382,7 +386,8 @@ const chatPendingController = createChatPendingController({
   isRequestTokenCurrent: (token) => token === requestTokenSeq,
   nextRequestToken: () => ++requestTokenSeq,
   addPendingSession: (sid) => pendingSessions.add(sid),
-  removePendingSession: (sid) => pendingSessions.delete(sid)
+  removePendingSession: (sid) => pendingSessions.delete(sid),
+  renderImageAttachments: chatRenderer.renderImageAttachments
 });
 const { resolvePendingReply } = chatPendingController;
 resumePendingSessionIfNeeded = chatPendingController.resumePendingSessionIfNeeded;
@@ -489,7 +494,8 @@ const composed = composeAppControllers({
   isCurrentSessionPending,
   updateComposerPendingState,
   saveVaultModal,
-  testVaultModal
+  testVaultModal,
+  renderImageAttachments: chatRenderer.renderImageAttachments
 });
 ({
   refreshCapabilities,

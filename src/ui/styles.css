@@ -1017,25 +1017,77 @@ th {
 .composer textarea { min-height: 54px; max-height: 180px; resize: vertical; }
 .composer button { height: 54px; border-radius: 999px; min-width: 100px; }
 
-/* Loading/processing status indicators */
+/* Loading/processing status indicators using OpenUnum brand GIFs */
 .status-indicator {
   display: inline-block;
-  width: 20px;
-  height: 20px;
+  width: 24px;
+  height: 24px;
   vertical-align: middle;
   margin-right: 6px;
 }
 .status-indicator.loading {
-  background: url('/ui/assets/openunum/loading.gif') no-repeat center / contain;
+  background: url('/ui/icons/unum_loading.gif') no-repeat center / contain;
 }
 .status-indicator.processing {
-  background: url('/ui/assets/openunum/processing.gif') no-repeat center / contain;
+  background: url('/ui/icons/unum_processing.gif') no-repeat center / contain;
 }
 .status-indicator.working {
-  background: url('/ui/assets/openunum/working.gif') no-repeat center / contain;
+  background: url('/ui/icons/unum_working.gif') no-repeat center / contain;
 }
 .status-indicator.downloading {
-  background: url('/ui/assets/openunum/downloading.gif') no-repeat center / contain;
+  background: url('/ui/icons/unum_downloading.gif') no-repeat center / contain;
+}
+.typing-indicator-gif {
+  width: 36px;
+  height: 36px;
+  display: inline-block;
+  vertical-align: middle;
+  margin-right: 8px;
+}
+.image-download-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--accent);
+  font-size: 12px;
+  text-decoration: none;
+  padding: 4px 10px;
+  border-radius: 6px;
+  border: 1px solid rgba(79, 141, 252, .25);
+  transition: background .15s, border-color .15s;
+}
+.image-download-btn:hover {
+  background: rgba(79, 141, 252, .12);
+  border-color: var(--accent);
+  text-decoration: none;
+}
+.image-download-btn .dl-icon {
+  width: 14px;
+  height: 14px;
+  display: inline-block;
+  vertical-align: middle;
+}
+.gallery-download {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  color: var(--accent);
+  text-decoration: none;
+  font-size: 12px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  border: 1px solid rgba(79, 141, 252, .2);
+  transition: background .15s;
+}
+.gallery-download:hover {
+  background: rgba(79, 141, 252, .12);
+  text-decoration: none;
+}
+.gallery-download .dl-icon {
+  width: 12px;
+  height: 12px;
+  display: inline-block;
+  vertical-align: middle;
 }
 
 .menu-scroll::-webkit-scrollbar, .sessions-list::-webkit-scrollbar, .messages::-webkit-scrollbar {
@@ -1063,3 +1115,105 @@ th {
   .settings-rail-item { white-space: nowrap; padding: 6px 10px; border-radius: 999px; }
   .sidebar-toggle { display: block; }
 }
+
+/* Image attachments in chat bubbles */
+.image-attachment {
+  margin: 10px 0 4px;
+  border-radius: 8px;
+  overflow: hidden;
+  border: 1px solid rgba(69, 97, 134, .5);
+  background: rgba(10, 19, 34, .4);
+}
+.generated-image {
+  max-width: 100%;
+  height: auto;
+  display: block;
+  cursor: pointer;
+  transition: opacity .15s;
+  min-height: 80px;
+  background: url('/ui/icons/unum_loading.gif') no-repeat center / 36px 36px, rgba(10, 19, 34, .4);
+}
+.generated-image:hover { opacity: .9; }
+.image-attachment-actions {
+  display: flex;
+  justify-content: flex-end;
+  padding: 4px 10px;
+  background: rgba(10, 19, 34, .6);
+}
+/* (image-download-btn styles moved to status-indicator section with icon support) */
+
+/* Gallery panel in sidebar */
+.gallery-panel {
+  max-height: 400px;
+  overflow-y: auto;
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 6px;
+  padding: 4px;
+}
+.gallery-item {
+  border-radius: 6px;
+  overflow: hidden;
+  border: 1px solid rgba(69, 97, 134, .4);
+  transition: border-color .15s;
+}
+.gallery-item:hover { border-color: var(--accent); }
+.gallery-thumbnail {
+  width: 100%;
+  height: auto;
+  display: block;
+  cursor: pointer;
+  aspect-ratio: 1;
+  object-fit: cover;
+  min-height: 60px;
+  background: url('/ui/icons/unum_loading.gif') no-repeat center / 28px 28px, rgba(10, 19, 34, .6);
+}
+.gallery-item-meta {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 2px 6px;
+  font-size: 11px;
+  background: rgba(10, 19, 34, .6);
+  color: var(--muted);
+}
+/* (gallery-download styles moved to status-indicator section with icon support) */
+.gallery-item-date { font-size: 10px; color: var(--muted); }
+
+/* File attachment in composer */
+.composer-input-area { grid-column: 2 / 3; display: flex; flex-direction: column; gap: 4px; }
+.file-chips { display: flex; flex-wrap: wrap; gap: 4px; }
+.file-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border-radius: 12px;
+  font-size: 12px;
+  background: rgba(79, 141, 252, .15);
+  border: 1px solid rgba(79, 141, 252, .3);
+  color: var(--text);
+}
+.file-chip .remove-file {
+  cursor: pointer;
+  color: var(--bad);
+  font-weight: bold;
+  margin-left: 2px;
+}
+.attach-btn {
+  height: 54px;
+  width: 42px;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 20px;
+  cursor: pointer;
+  border: 1px solid var(--line);
+  background: linear-gradient(180deg, #25344d, #172238);
+  color: var(--muted);
+  transition: border-color .15s, color .15s;
+  grid-column: 1 / 2;
+  align-self: end;
+}
+.attach-btn:hover { color: var(--text); border-color: var(--accent); }

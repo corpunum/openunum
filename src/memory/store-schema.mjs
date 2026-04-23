@@ -1,4 +1,4 @@
-const MEMORY_STORE_SCHEMA_VERSION = 3;
+const MEMORY_STORE_SCHEMA_VERSION = 4;
 
 function getSchemaVersion(db) {
   try {
@@ -247,6 +247,9 @@ CREATE INDEX IF NOT EXISTS idx_session_compactions_session_id_id ON session_comp
   }
   if (!messageColumns.includes('raw_reply')) {
     db.exec('ALTER TABLE messages ADD COLUMN raw_reply TEXT DEFAULT NULL');
+  }
+  if (!messageColumns.includes('assets')) {
+    db.exec('ALTER TABLE messages ADD COLUMN assets TEXT DEFAULT NULL');
   }
 
   if (currentVersion < MEMORY_STORE_SCHEMA_VERSION) {

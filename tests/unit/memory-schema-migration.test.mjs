@@ -40,7 +40,7 @@ describe('memory schema migration', () => {
     `).all().map((row) => row.name);
     const version = Number(db.prepare('PRAGMA user_version').get().user_version || 0);
 
-    expect(version).toBe(3);
+    expect(version).toBe(4);
     expect(indexes).toContain('idx_messages_session_id_id');
     expect(indexes).toContain('idx_messages_session_role_id');
     expect(indexes).toContain('idx_session_compactions_session_id_id');

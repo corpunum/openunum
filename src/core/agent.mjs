@@ -839,6 +839,7 @@ export class OpenUnumAgent {
     let toolRuns = 0;
     const executedTools = [];
     const generatedImages = [];
+    const generatedImageFiles = [];
     const rawContentParts = [];
     let breakAfterToolLoop = false;
     // PHASE 3: Intervention trace array
@@ -1255,6 +1256,12 @@ export class OpenUnumAgent {
             }
           }
         }
+        // Collect saved image file references for web UI
+        if (tc.name === 'image_generate' && result?.ok && Array.isArray(result.savedAs)) {
+          for (const saved of result.savedAs) {
+            generatedImageFiles.push(saved);
+          }
+        }
 
         // Mark step as complete if tool succeeded
         if (result?.ok && this.completionChecklist.initialized) {
@@ -1566,6 +1573,7 @@ export class OpenUnumAgent {
 
     const rawReply = rawContentParts.join('\n') || undefined;
     if (generatedImages.length > 0) trace.images = generatedImages;
+    if (generatedImageFiles.length > 0) trace.imageFiles = generatedImageFiles;
     return { finalText, trace, rawReply };
   }
 
@@ -2261,7 +2269,7 @@ export class OpenUnumAgent {
     
     const persistenceStartedAt = Date.now();
     const reasoning = trace.reasoning || undefined;
-    this.memoryStore.addMessage(sessionId, 'assistant', finalText, { reasoning, rawReply: rawReply || undefined });
+    this.memoryStore.addMessage(sessionId, 'assistant', finalText, { reasoning, rawReply: rawReply || undefined, imageFiles: trace?.imageFiles || undefined });
     for (const fact of extractAutomaticFacts({
       message,
       reply: finalText,
@@ -2311,6 +2319,6 @@ export class OpenUnumAgent {
 
     const effectiveProvider = effectiveAttempts[0]?.provider || this.config.model.provider;
     emitAgentEvent(AGENT_EVENTS.TURN_END, { sessionId, provider: effectiveProvider, model: this.getCurrentModel() });
-    return { sessionId, reply: finalText, rawReply: rawReply || undefined, reasoning, model: this.getCurrentModel(), trace, images: trace?.images || undefined, context: { budget: triggerInfo, compaction: compactionMeta } };
+    return { sessionId, reply: finalText, rawReply: rawReply || undefined, reasoning, model: this.getCurrentModel(), trace, images: trace?.images || undefined, imageFiles: trace?.imageFiles || undefined, context: { budget: triggerInfo, compaction: compactionMeta } };
   }
 }

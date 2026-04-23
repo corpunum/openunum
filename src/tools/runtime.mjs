@@ -1036,7 +1036,23 @@ export class ToolRuntime {
               return { ok: false, status: response.status, error: parsedJson?.error || response.statusText, message: rawText.slice(0, 500) };
             }
             if (parsedJson?.images && Array.isArray(parsedJson.images) && parsedJson.images.length > 0) {
-              return { ok: true, images: parsedJson.images, parameters: parsedJson.parameters || {}, info: parsedJson.info || '' };
+              // Persist images to disk so they survive beyond the request
+              const { getHomeDir } = await import('../config.mjs');
+              const assetsDir = path.join(getHomeDir(), 'assets', 'generated');
+              const savedAs = [];
+              for (const base64Data of parsedJson.images) {
+                if (typeof base64Data === 'string' && base64Data.length > 100) {
+                  const hash = crypto.createHash('sha256').update(base64Data).digest('hex').slice(0, 8);
+                  const ts = new Date().toISOString().replace(/[:.]/g, '-');
+                  const filename = `img-${ts}-${hash}.png`;
+                  try {
+                    await fs.mkdir(assetsDir, { recursive: true });
+                    await fs.writeFile(path.join(assetsDir, filename), Buffer.from(base64Data, 'base64'));
+                    savedAs.push({ filename, width: payload.width, height: payload.height });
+                  } catch { /* best effort — disk save failure should not break generation */ }
+                }
+              }
+              return { ok: true, images: parsedJson.images, savedAs, parameters: parsedJson.parameters || {}, info: parsedJson.info || '' };
             }
             return { ok: false, error: 'no_image_returned', message: 'Server returned success but no images.', raw: rawText.slice(0, 500) };
           } catch (fetchErr) {

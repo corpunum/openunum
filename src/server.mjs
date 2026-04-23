@@ -49,6 +49,7 @@ import { handleBrowserRoute } from './server/routes/browser.mjs';
 import { handleTelegramRoute } from './server/routes/telegram.mjs';
 import { handleUiRoute } from './server/routes/ui.mjs';
 import { handleSessionsRoute } from './server/routes/sessions.mjs';
+import { handleAssetsRoute } from './server/routes/assets.mjs';
 import { handleMissionsRoute } from './server/routes/missions.mjs';
 import { handleModelRoute } from './server/routes/model.mjs';
 import { handleAuthRoute } from './server/routes/auth.mjs';
@@ -616,6 +617,13 @@ server = http.createServer(async (req, res) => {
         telegramLoopRunning,
         telegramLoopStopRequested
       }
+    })) return;
+
+    if (await handleAssetsRoute({
+      req,
+      res,
+      url,
+      ctx: { sendJson, sendApiError }
     })) return;
 
     if (await handleUiRoute({

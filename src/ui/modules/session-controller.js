@@ -19,7 +19,9 @@ export function createSessionController({
   setSessionId,
   getSessionLoadToken,
   setSessionLoadToken,
-  resumePendingSessionIfNeeded
+  resumePendingSessionIfNeeded,
+  renderImageAttachments,
+  refreshGallery
 }) {
   let sessionCache = [];
 
@@ -91,13 +93,14 @@ export function createSessionController({
       if (m.role === 'assistant') {
         const reasoningHtml = m.reasoningHtml ? `<details class="reasoning" data-persist-key="reasoning"><summary>Thinking</summary><div class="reasoning-content">${m.reasoningHtml}</div></details>` : '';
         const rawSection = m.rawReply ? `<details class="raw-response" data-persist-key="raw-response"><summary>Raw Response</summary><div class="raw-response-content">${escapeHtml(m.rawReply)}</div></details>` : '';
-        const combinedHtml = reasoningHtml + rawSection + (m.html || `<pre>${escapeHtml(m.content)}</pre>`);
+        const combinedHtml = reasoningHtml + rawSection + (m.html || `<pre>${escapeHtml(m.content)}</pre>`) + renderImageAttachments(m.imageFiles);
         pushMsg('assistant', m.content, combinedHtml);
       } else {
         pushMsg(m.role, m.content, '');
       }
     }
     await resumePendingSessionIfNeeded(sid);
+    if (typeof refreshGallery === 'function') refreshGallery();
   }
 
   async function resetSession() {

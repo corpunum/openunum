@@ -148,11 +148,12 @@ export async function handleSessionsRoute({ req, res, url, ctx }) {
       const pending = ctx.pendingChats.get(sessionId);
       const toolRuns = ctx.memory.getToolRunsSince(sessionId, since, 80);
       const messages = ctx.memory.getMessagesSince(sessionId, since, 80)
-        .map(({ raw_reply, ...m }) => ({
+        .map(({ raw_reply, assets, ...m }) => ({
           ...m,
           html: m.role === 'assistant' ? ctx.renderReplyHtml(m.content || '') : null,
           reasoningHtml: (m.role === 'assistant' && m.reasoning) ? ctx.renderReasoningHtml(m.reasoning) : null,
-          rawReply: m.role === 'assistant' ? (raw_reply || null) : null
+          rawReply: m.role === 'assistant' ? (raw_reply || null) : null,
+          imageFiles: (m.role === 'assistant' && assets) ? JSON.parse(assets) : null
         }));
       ctx.sendJson(res, 200, {
         sessionId,
@@ -248,11 +249,12 @@ export async function handleSessionsRoute({ req, res, url, ctx }) {
     const sessionId = decodeURIComponent(url.pathname.split('/').pop() || '');
     const skipHtml = url.searchParams.get('html') === 'false';
     const msgs = ctx.memory.getMessages(sessionId || '', 500)
-      .map(({ raw_reply, ...m }) => ({
+      .map(({ raw_reply, assets, ...m }) => ({
         ...m,
         html: (!skipHtml && m.role === 'assistant') ? ctx.renderReplyHtml(m.content || '') : null,
         reasoningHtml: (!skipHtml && m.role === 'assistant' && m.reasoning) ? ctx.renderReasoningHtml(m.reasoning) : null,
-        rawReply: m.role === 'assistant' ? (raw_reply || null) : null
+        rawReply: m.role === 'assistant' ? (raw_reply || null) : null,
+        imageFiles: (m.role === 'assistant' && assets) ? JSON.parse(assets) : null
       }));
     ctx.sendJson(res, 200, {
       sessionId,

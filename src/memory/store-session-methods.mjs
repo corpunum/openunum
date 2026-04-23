@@ -12,11 +12,11 @@ export class SessionStoreMethods {
     return this.getSessionSummary(sessionId);
   }
 
-  addMessage(sessionId, role, content, { reasoning, rawReply } = {}) {
+  addMessage(sessionId, role, content, { reasoning, rawReply, imageFiles } = {}) {
     this.ensureSession(sessionId);
     this.db
-      .prepare('INSERT INTO messages (session_id, role, content, reasoning, raw_reply, created_at) VALUES (?, ?, ?, ?, ?, ?)')
-      .run(sessionId, role, content, reasoning || null, rawReply || null, new Date().toISOString());
+      .prepare('INSERT INTO messages (session_id, role, content, reasoning, raw_reply, assets, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)')
+      .run(sessionId, role, content, reasoning || null, rawReply || null, imageFiles ? JSON.stringify(imageFiles) : null, new Date().toISOString());
   }
 
   importSession({ sessionId, messages = [] }) {

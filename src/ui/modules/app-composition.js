@@ -248,7 +248,8 @@ export function composeAppControllers(ctx) {
     resolvePendingReply,
     runAutoMissionFromChat,
     refreshSessionList,
-    refreshTacticalLedger
+    refreshTacticalLedger,
+    renderImageAttachments: ctx.renderImageAttachments
   });
   const { bindComposerActions } = chatComposerController;
 

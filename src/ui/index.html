@@ -33,6 +33,11 @@
           <div class="sessions-list" id="sessionList"></div>
         </details>
 
+        <details id="galleryDetails">
+          <summary>Gallery</summary>
+          <div class="gallery-panel" id="galleryPanel"></div>
+        </details>
+
         <details>
           <summary>Missions</summary>
           <div class="submenu">
@@ -75,7 +80,12 @@
             </div>
             <div class="messages" id="chat" data-testid="message-stream"></div>
             <div class="composer">
-              <textarea id="message" data-testid="composer-input" placeholder="Type a message. Enter sends, Shift+Enter adds a new line"></textarea>
+              <button class="attach-btn" id="attachFile" title="Attach file">&#128206;</button>
+              <input id="fileAttachInput" type="file" multiple accept=".txt,.csv,.json,.md,.py,.js,.mjs,.log,.xml,.html,.css,.yaml,.yml,.toml,.ini,.cfg,.sh,.bash,.zsh,.env,.conf" style="display:none;" />
+              <div class="composer-input-area">
+                <div class="file-chips" id="fileChips"></div>
+                <textarea id="message" data-testid="composer-input" placeholder="Type a message. Enter sends, Shift+Enter adds a new line"></textarea>
+              </div>
               <button class="primary" id="send" data-testid="send-message">Send</button>
             </div>
           </div>

@@ -37,6 +37,7 @@ export function createChatRenderer({
     node.addToolCallEvent = (event) => addToolCallToBubble(node, event);
     node.bubble.innerHTML = `<div class="typing" aria-label="Agent is working">
       <div class="typing-head">
+        <img src="/ui/icons/unum_working.gif" alt="" class="typing-indicator-gif" />
         <span class="typing-label">Agent Running</span>
         <span class="roman-runner" aria-hidden="true"><span>I</span><span>II</span><span>III</span><span>IV</span><span>V</span></span>
       </div>
@@ -202,6 +203,7 @@ export function createChatRenderer({
       .join('');
     typing.bubble.innerHTML = `<div class="typing">
       <div class="typing-head">
+        <img src="/ui/icons/unum_processing.gif" alt="" class="typing-indicator-gif" />
         <span class="typing-label">Agent Running</span>
         <span class="roman-runner" aria-hidden="true"><span>I</span><span>II</span><span>III</span><span>IV</span><span>V</span></span>
       </div>
@@ -356,6 +358,21 @@ export function createChatRenderer({
     return details.outerHTML;
   }
 
+  function renderImageAttachments(imageFiles) {
+    if (!Array.isArray(imageFiles) || imageFiles.length === 0) return '';
+    return imageFiles.map(({ filename, width, height }) => {
+      const url = `/api/assets/${encodeURIComponent(filename)}`;
+      return `<div class="image-attachment">
+        <a href="${url}" target="_blank" rel="noopener noreferrer">
+          <img src="${url}" alt="Generated image" class="generated-image" loading="lazy" onload="this.style.backgroundImage='none';this.style.minHeight='auto'" />
+        </a>
+        <div class="image-attachment-actions">
+          <a href="${url}" download="${escapeHtml(filename)}" class="image-download-btn" title="Download"><img src="/ui/icons/unum_downloading.gif" alt="" class="dl-icon" />Download</a>
+        </div>
+      </div>`;
+    }).join('');
+  }
+
   return {
     pushMsg,
     appendTypingBubble,
@@ -365,6 +382,7 @@ export function createChatRenderer({
     appendTokenToBubble,
     appendReasoningToken,
     addToolCallToBubble,
-    finalizeStreamingBubble
+    finalizeStreamingBubble,
+    renderImageAttachments
   };
 }
