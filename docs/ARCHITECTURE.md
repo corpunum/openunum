@@ -165,6 +165,9 @@ Response (With trace metadata + verification + finality info)
 OLLAMA_BASE_URL=http://127.0.0.1:11434
 OPENUNUM_PORT=18881
 OPENUNUM_WORKSPACE=$PWD
+IMAGE_GEN_BASE_URL=http://127.0.0.1:18085
+IMAGE_GEN_BIN_PATH=~/.local/sd-cpp/build-vulkan/bin/sd-server
+IMAGE_GEN_MODEL_DIR=~/models/flux-schnell
 ```
 
 ---

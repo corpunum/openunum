@@ -96,7 +96,9 @@ export function normalizeModelConfig(model = {}) {
     ollamaCloudBaseUrl: model.ollamaCloudBaseUrl || model.ollamaBaseUrl || 'http://127.0.0.1:11434',
     ollamaLocalBaseUrl: model.ollamaLocalBaseUrl || model.ollamaBaseUrl || 'http://127.0.0.1:11434',
     llamaCppLocalBaseUrl: model.llamaCppLocalBaseUrl || process.env.LLAMA_CPP_LOCAL_BASE_URL || 'http://127.0.0.1:18084',
-    imageGenBaseUrl: model.imageGenBaseUrl || process.env.IMAGE_GEN_BASE_URL || 'http://127.0.0.1:18085'
+    imageGenBaseUrl: model.imageGenBaseUrl || process.env.IMAGE_GEN_BASE_URL || 'http://127.0.0.1:18085',
+    imageGenBinPath: model.imageGenBinPath || process.env.IMAGE_GEN_BIN_PATH || path.join(os.homedir(), '.local/sd-cpp/build-vulkan/bin/sd-server'),
+    imageGenModelDir: model.imageGenModelDir || process.env.IMAGE_GEN_MODEL_DIR || path.join(os.homedir(), 'models/flux-schnell')
   };
 }
 

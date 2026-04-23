@@ -979,8 +979,8 @@ export class ToolRuntime {
       const steps = Math.max(1, Math.min(8, Number(args?.steps) || 4));
       const baseUrl = String(this.config.model?.imageGenBaseUrl || 'http://127.0.0.1:18085').replace(/\/+$/, '');
       const payload = { prompt, width, height, steps, cfg_scale: 1 };
-      const sdBin = '/home/corp-unum/.local/sd-cpp/build-vulkan/bin/sd-server';
-      const sdModelDir = '/home/corp-unum/models/flux-schnell';
+      const sdBin = String(this.config.model?.imageGenBinPath || path.join(os.homedir(), '.local/sd-cpp/build-vulkan/bin/sd-server'));
+      const sdModelDir = String(this.config.model?.imageGenModelDir || path.join(os.homedir(), 'models/flux-schnell'));
       const genTimeoutMs = shellTimeout(300000);
       try {
         // Check if sd-server is already running
