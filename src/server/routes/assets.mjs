@@ -4,7 +4,7 @@
 
 import { readFile, readdir, stat } from 'node:fs/promises';
 import { join, extname, basename } from 'node:path';
-import { getHomeDir } from '../config.mjs';
+import { getHomeDir } from '../../config.mjs';
 
 const ALLOWED_EXTENSIONS = new Set(['.png', '.jpg', '.jpeg', '.gif', '.webp', '.txt', '.csv', '.json', '.md']);
 const ALLOWED_PREFIXES = ['img-', 'file-'];
