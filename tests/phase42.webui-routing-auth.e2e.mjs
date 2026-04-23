@@ -38,9 +38,9 @@ try {
 
   await page.goto(BASE_URL, { waitUntil: 'networkidle' });
 
-  await page.locator('summary', { hasText: 'Settings' }).click();
-
-  await page.click('.menu-btn[data-view="model-routing"]');
+  await page.locator('#settingsGearBtn').click();
+  await page.waitForSelector('#settingsHub[open]', { timeout: 5000 });
+  await page.locator('.settings-rail-item', { hasText: 'Model Routing' }).click();
   await page.waitForSelector('#provider', { timeout: 15000 });
 
   await page.click('#loadModels');
@@ -69,7 +69,7 @@ try {
   await waitForCondition(() => configPosts > 0, 15000);
   assert.equal(configPosts > 0, true, 'save routing should POST /api/config');
 
-  await page.click('.menu-btn[data-view="provider-config"]');
+  await page.locator('.settings-rail-item', { hasText: 'Providers' }).click();
   await page.waitForSelector('.service-modal', { timeout: 15000 });
 
   const preferredServiceBtn = page.locator('.service-modal[data-service="github"]');

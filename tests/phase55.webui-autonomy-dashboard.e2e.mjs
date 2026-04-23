@@ -18,7 +18,9 @@ try {
   const page = await browser.newPage();
   await page.goto(BASE_URL, { waitUntil: 'networkidle' });
 
-  await page.click('.menu-btn[data-view="operator"]');
+  await page.locator('#settingsGearBtn').click();
+  await page.waitForSelector('#settingsHub[open]', { timeout: 5000 });
+  await page.locator('.settings-rail-item', { hasText: 'Runtime' }).click();
   await page.waitForSelector('#autonomySelfAwarenessValue', { timeout: 15000 });
 
   await page.click('#refreshAutonomyDashboardBtn');

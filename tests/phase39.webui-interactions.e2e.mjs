@@ -33,8 +33,9 @@ try {
     const page = await browser.newPage();
     await page.goto(BASE_URL, { waitUntil: 'networkidle' });
 
-    await page.locator('summary', { hasText: 'Settings' }).click();
-    await page.click('.menu-btn[data-view="provider-config"]');
+    await page.locator('#settingsGearBtn').click();
+    await page.waitForSelector('#settingsHub[open]', { timeout: 5000 });
+    await page.locator('.settings-rail-item', { hasText: 'Providers' }).click();
     await page.waitForSelector('#providerMatrixBody tr', { timeout: 15000 });
 
     const initialRows = await page.locator('#providerMatrixBody tr').count();
@@ -167,7 +168,9 @@ try {
     });
 
     await page.goto(BASE_URL, { waitUntil: 'networkidle' });
+    await page.locator('summary', { hasText: 'Missions' }).click();
     await page.click('.menu-btn[data-view="missions"]');
+    await page.waitForSelector('#settingsHub[open]', { timeout: 5000 });
     await page.waitForFunction(() => {
       const picker = document.querySelector('#missionPicker');
       return Boolean(picker && picker.querySelectorAll('option').length > 1);

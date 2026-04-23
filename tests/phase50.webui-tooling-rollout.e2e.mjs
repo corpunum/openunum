@@ -36,8 +36,9 @@ try {
   });
 
   await page.goto(BASE_URL, { waitUntil: 'networkidle' });
-  await page.locator('summary', { hasText: 'Settings' }).click();
-  await page.click('.menu-btn[data-view="settings-tooling"]');
+  await page.locator('#settingsGearBtn').click();
+  await page.waitForSelector('#settingsHub[open]', { timeout: 5000 });
+  await page.locator('.settings-rail-item', { hasText: 'Tools' }).click();
 
   await page.waitForSelector('#toolingToolsBody', { timeout: 15000 });
   await page.waitForSelector('#toolingSkillsBody', { timeout: 15000 });

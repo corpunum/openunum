@@ -32,10 +32,11 @@ try {
     assert.equal(html.includes(marker), true, `missing ${marker}`);
   }
 
-  assert.equal(html.includes('<summary>Chat</summary>'), true);
+  // Settings hub replaced accordion <summary> tags
+  assert.equal(html.includes('data-category="general"'), true);
   assert.equal(html.includes('<summary>Missions</summary>'), true);
-  assert.equal(html.includes('<summary>Runtime</summary>'), true);
-  assert.equal(html.includes('<summary>Settings</summary>'), true);
+  assert.equal(html.includes('data-category="runtime"'), true);
+  assert.equal(html.includes('id="settingsHub"'), true);
   assert.equal(html.includes('id="quickPrompts"'), true);
   assert.equal(html.includes('id="runtimeCards"'), true);
   assert.equal(html.includes('id="providerCards"'), true);

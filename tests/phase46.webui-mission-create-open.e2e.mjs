@@ -127,8 +127,9 @@ try {
   });
 
   await page.goto(BASE_URL, { waitUntil: 'networkidle' });
-  await page.locator('summary', { hasText: 'Settings' }).click();
-  await page.click('.menu-btn[data-view="missions"]');
+  await page.locator('#settingsGearBtn').click();
+  await page.waitForSelector('#settingsHub[open]', { timeout: 5000 });
+  await page.locator('.settings-rail-item', { hasText: 'Developer' }).click();
   await page.waitForSelector('#missionGoal', { timeout: 15000 });
 
   await page.fill('#missionGoal', mission.goal);
@@ -153,10 +154,13 @@ try {
     return chatMeta.includes(mission.sessionId);
   }, 10000);
 
-  await page.click('.menu-btn[data-view="missions"]');
+  // Close settings hub before reopening — dialog intercepts pointer events
+  await page.locator('#settingsHubClose').click();
+  await page.waitForFunction(() => !document.querySelector('#settingsHub')?.open, { timeout: 5000 });
+
+  await page.locator('#settingsGearBtn').click();
   await page.waitForSelector('#settingsHub[open]', { timeout: 15000 });
-  // Navigate to developer category which contains missions
-  await page.click('.settings-rail-item[data-category="developer"]');
+  await page.locator('.settings-rail-item', { hasText: 'Developer' }).click();
   await page.waitForSelector('#settings-developer.active', { timeout: 5000 });
   await page.waitForSelector('#stopMission', { state: 'visible', timeout: 15000 });
   await page.click('#stopMission');

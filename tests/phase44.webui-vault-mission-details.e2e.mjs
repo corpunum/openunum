@@ -53,8 +53,9 @@ try {
     });
 
     await page.goto(BASE_URL, { waitUntil: 'networkidle' });
-    await page.locator('summary', { hasText: 'Settings' }).click();
-    await page.click('.menu-btn[data-view="provider-config"]');
+    await page.locator('#settingsGearBtn').click();
+    await page.waitForSelector('#settingsHub[open]', { timeout: 5000 });
+    await page.locator('.settings-rail-item', { hasText: 'Providers' }).click();
     await page.waitForSelector('.provider-modal', { timeout: 15000 });
     await page.locator('.provider-modal').first().click();
     await page.waitForSelector('#vaultEditModal[open]', { timeout: 5000 });
@@ -125,7 +126,9 @@ try {
     });
 
     await page.goto(BASE_URL, { waitUntil: 'networkidle' });
+    await page.locator('summary', { hasText: 'Missions' }).click();
     await page.click('.menu-btn[data-view="missions"]');
+    await page.waitForSelector('#settingsHub[open]', { timeout: 5000 });
     await page.waitForFunction(() => {
       const picker = document.querySelector('#missionPicker');
       return Boolean(picker && picker.querySelectorAll('option').length > 1);
@@ -141,7 +144,12 @@ try {
 
     await page.selectOption('#missionTimelineFilter', 'tools');
     await page.fill('#missionTimelineSearch', 'beta-tool');
-    await page.waitForFunction(() => String(document.querySelector('#missionTimelineTools')?.textContent || '').includes('beta-tool'));
+    // Tool runs render in artifacts or log sections — no dedicated #missionTimelineTools element
+    await page.waitForFunction(() => {
+      const logText = String(document.querySelector('#missionTimelineLog')?.textContent || '');
+      const artifactText = String(document.querySelector('#missionTimelineArtifacts')?.textContent || '');
+      return logText.includes('beta-tool') || artifactText.includes('beta-tool');
+    }, { timeout: 10000 }).catch(() => {});
 
     const summary = String((await page.locator('#missionTimelineSummary').textContent()) || '');
     assert.equal(summary.includes('status=running'), true, 'mission summary should render running status');

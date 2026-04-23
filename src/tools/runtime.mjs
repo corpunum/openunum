@@ -995,10 +995,7 @@ export class ToolRuntime {
           if (!this.config.runtime?.shellEnabled) {
             return { ok: false, error: 'shell_disabled', message: 'image_generate requires shell to start image server.' };
           }
-          const startCmd = [
-            'LD_LIBRARY_PATH=/usr/lib/x86_64-linux-gnu',
-            'VK_ICD_FILENAMES=/usr/share/vulkan/icd.d/radeon_icd.json',
-            sdBin,
+          const serverArgs = [
             `--diffusion-model ${sdModelDir}/flux1-schnell-Q3_K_M.gguf`,
             `--vae ${sdModelDir}/ae.safetensors`,
             `--clip_l ${sdModelDir}/clip_l.safetensors`,
@@ -1006,9 +1003,11 @@ export class ToolRuntime {
             '--listen-ip 127.0.0.1 --listen-port 18085',
             '--clip-on-cpu -v'
           ].join(' ');
-          await this.executor.runShell(`nohup ${startCmd} > /tmp/sd-server-ondemand.log 2>&1 &`, shellTimeout(10000), { cwd: this.workspaceRoot, deadlineAt });
+          // Env vars must precede nohup — nohup doesn't understand VAR=value prefix syntax
+          const startCmd = `LD_LIBRARY_PATH=/usr/lib/x86_64-linux-gnu VK_ICD_FILENAMES=/usr/share/vulkan/icd.d/radeon_icd.json nohup ${sdBin} ${serverArgs} > /tmp/sd-server-ondemand.log 2>&1 &`;
+          await this.executor.runShell(startCmd, shellTimeout(10000), { cwd: this.workspaceRoot, deadlineAt });
           startedServer = true;
-          // Wait for server to become ready (model loading takes ~15-20s)
+          // Wait for server to become ready (model loading takes ~20-30s)
           for (let attempt = 0; attempt < 60; attempt += 1) {
             await new Promise((r) => setTimeout(r, 2000));
             try {
