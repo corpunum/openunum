@@ -1011,7 +1011,7 @@ const EXECUTION_PROFILES = [
   {
     match: ({ provider, model }) => (provider === 'ollama-cloud' || provider === 'ollama') && /kimi|minimax|cloud/.test(model),
     name: 'strict-shell-cloud',
-    turnBudgetMs: 180000,
+    turnBudgetMs: 300000,
     maxIters: 4,
     guidance: [
       'Use a rigid shell-first workflow with one concrete substep at a time.',
@@ -1032,7 +1032,7 @@ const EXECUTION_PROFILES = [
   {
     match: ({ provider, model }) => provider === 'ollama-local' || ((provider === 'ollama-cloud' || provider === 'ollama') && /qwen|llama|coder|8b|9b|14b/.test(model)),
     name: 'local-tool-runner',
-    turnBudgetMs: 180000,
+    turnBudgetMs: 300000,
     maxIters: 6,
     guidance: [
       'Prefer direct local inspection and execution over browsing.',
