@@ -981,7 +981,7 @@ export class ToolRuntime {
       const payload = { prompt, width, height, steps, cfg_scale: 1 };
       const sdBin = '/home/corp-unum/.local/sd-cpp/build-vulkan/bin/sd-server';
       const sdModelDir = '/home/corp-unum/models/flux-schnell';
-      let startedServer = false;
+      const genTimeoutMs = shellTimeout(300000);
       try {
         // Check if sd-server is already running
         let serverUp = false;
@@ -1006,7 +1006,6 @@ export class ToolRuntime {
           // Env vars must precede nohup — nohup doesn't understand VAR=value prefix syntax
           const startCmd = `LD_LIBRARY_PATH=/usr/lib/x86_64-linux-gnu VK_ICD_FILENAMES=/usr/share/vulkan/icd.d/radeon_icd.json nohup ${sdBin} ${serverArgs} > /tmp/sd-server-ondemand.log 2>&1 &`;
           await this.executor.runShell(startCmd, shellTimeout(10000), { cwd: this.workspaceRoot, deadlineAt });
-          startedServer = true;
           // Wait for server to become ready (model loading takes ~20-30s)
           for (let attempt = 0; attempt < 60; attempt += 1) {
             await new Promise((r) => setTimeout(r, 2000));
@@ -1020,32 +1019,38 @@ export class ToolRuntime {
           }
         }
 
-        // Generate the image
-        const response = await fetch(`${baseUrl}/sdapi/v1/txt2img`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload),
-          signal: AbortSignal.timeout(shellTimeout(420000))
-        });
-        const rawText = await response.text();
-        let parsedJson = null;
-        try { parsedJson = JSON.parse(rawText); } catch { parsedJson = null; }
-        if (!response.ok) {
-          return { ok: false, status: response.status, error: parsedJson?.error || response.statusText, message: rawText.slice(0, 500) };
+        // Generate the image with one retry on transient failures
+        let lastError = null;
+        for (let attempt = 0; attempt < 2; attempt += 1) {
+          try {
+            const response = await fetch(`${baseUrl}/sdapi/v1/txt2img`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(payload),
+              signal: AbortSignal.timeout(genTimeoutMs)
+            });
+            const rawText = await response.text();
+            let parsedJson = null;
+            try { parsedJson = JSON.parse(rawText); } catch { parsedJson = null; }
+            if (!response.ok) {
+              return { ok: false, status: response.status, error: parsedJson?.error || response.statusText, message: rawText.slice(0, 500) };
+            }
+            if (parsedJson?.images && Array.isArray(parsedJson.images) && parsedJson.images.length > 0) {
+              return { ok: true, images: parsedJson.images, parameters: parsedJson.parameters || {}, info: parsedJson.info || '' };
+            }
+            return { ok: false, error: 'no_image_returned', message: 'Server returned success but no images.', raw: rawText.slice(0, 500) };
+          } catch (fetchErr) {
+            lastError = fetchErr;
+            // Only retry on timeout or connection errors — not on logic errors
+            const errName = String(fetchErr?.name || '');
+            if (errName !== 'TimeoutError' && errName !== 'TypeError') break;
+            // Brief pause before retry
+            if (attempt === 0) await new Promise((r) => setTimeout(r, 2000));
+          }
         }
-        if (parsedJson?.images && Array.isArray(parsedJson.images) && parsedJson.images.length > 0) {
-          return { ok: true, images: parsedJson.images, parameters: parsedJson.parameters || {}, info: parsedJson.info || '' };
-        }
-        return { ok: false, error: 'no_image_returned', message: 'Server returned success but no images.', raw: rawText.slice(0, 500) };
+        return { ok: false, error: String(lastError?.name || lastError?.code || 'fetch_error'), message: String(lastError?.message || lastError).slice(0, 500) };
       } catch (err) {
         return { ok: false, error: String(err?.name || err?.code || 'fetch_error'), message: String(err?.message || err).slice(0, 500) };
-      } finally {
-        // Stop sd-server if we started it, to free VRAM
-        if (startedServer) {
-          try {
-            await this.executor.runShell('pkill -f "sd-server.*18085"', shellTimeout(5000), { cwd: this.workspaceRoot, deadlineAt });
-          } catch { /* best effort */ }
-        }
       }
     }
     if (name === 'desktop_open') {

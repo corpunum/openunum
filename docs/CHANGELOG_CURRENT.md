@@ -44,7 +44,14 @@ Date: 2026-04-23
 - `nohup LD_LIBRARY_PATH=... VK_ICD_FILENAMES=... sd-server` was wrong — `nohup` treats `LD_LIBRARY_PATH=...` as the command name
 - Fixed: env vars placed before `nohup`: `LD_LIBRARY_PATH=... VK_ICD_FILENAMES=... nohup sd-server ... &`
 
-**Files:** `src/channels/base.mjs` (new), `src/channels/telegram.mjs` (major rewrite), `src/channels/whatsapp-twilio.mjs` (extends ChannelBase), `src/server/services/telegram_runtime.mjs` (streaming wiring), `src/config.mjs` (streaming config), `src/tools/runtime.mjs` (sd-server fix), `tests/unit/channel-base.test.mjs` (new), `tests/unit/telegram-channel.test.mjs` (expanded)
+### Image generation reliability (2026-04-23)
+
+- Removed `finally` block that killed sd-server after each request — server stays warm so subsequent generations are instant (no 20-30s cold start)
+- Added one retry on transient `TimeoutError` or connection `TypeError` with 2s pause between attempts
+- Changed generation timeout from 420s to 300s (separate from turn budget consumption by server startup)
+- Tool listed in ARCHITECTURE.md Available Tools section
+
+**Files:** `src/channels/base.mjs` (new), `src/channels/telegram.mjs` (major rewrite), `src/channels/whatsapp-twilio.mjs` (extends ChannelBase), `src/server/services/telegram_runtime.mjs` (streaming wiring), `src/config.mjs` (streaming config), `src/tools/runtime.mjs` (sd-server fix + reliability), `tests/unit/channel-base.test.mjs` (new), `tests/unit/telegram-channel.test.mjs` (expanded)
 
 ---
 

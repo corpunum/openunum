@@ -125,6 +125,7 @@ Response (With trace metadata + verification + finality info)
 - `memory` — Store, recall, search
 - `exec` — Shell commands
 - `web_search` — DuckDuckGo
+- `image_generate` — FLUX.1-schnell via local sd-server (on-demand start, keeps server warm, one retry on transient timeout)
 - `model-backed logical tools` — phase-one read-only contracts (`summarize`, `classify`, `extract`)
 
 ### Tool Runtime
