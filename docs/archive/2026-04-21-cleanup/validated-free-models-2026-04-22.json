@@ -1,0 +1,35 @@
+{
+  "generated": "2026-04-22T07:18:35Z",
+  "validated": true,
+  "local": {
+    "provider": "ollama",
+    "endpoint": "http://localhost:11434",
+    "status": "active",
+    "models": [
+      {"id": "qwen2.5-coder:1.5b", "size": "986 MB", "status": "available"},
+      {"id": "gemma4-local:latest", "size": "9.6 GB", "status": "available"},
+      {"id": "nomic-embed-text:latest", "size": "274 MB", "status": "available"},
+      {"id": "deepseek-r1:1.5b", "size": "1.1 GB", "status": "available"}
+    ]
+  },
+  "cloud": {
+    "provider": "openrouter",
+    "endpoint": "https://openrouter.ai/api/v1",
+    "status": "active",
+    "freeModels": [
+      {"id": "google/gemma-4-26b-a4b-it:free", "status": "available"},
+      {"id": "google/gemma-4-31b-it:free", "status": "available"},
+      {"id": "meta-llama/llama-3.3-70b-instruct:free", "status": "available"},
+      {"id": "meta-llama/llama-3.2-3b-instruct:free", "status": "available"},
+      {"id": "nousresearch/hermes-3-llama-3.1-405b:free", "status": "available"},
+      {"id": "inclusionai/ling-2.6-flash:free", "status": "available"}
+    ]
+  },
+  "totalLocal": 4,
+  "totalCloudFree": 6,
+  "proof": {
+    "localApi": "HTTP 200 from localhost:11434/api/tags",
+    "localCli": "ollama list exit code 0",
+    "cloudApi": "HTTP 200 from openrouter.ai/api/v1/models"
+  }
+}

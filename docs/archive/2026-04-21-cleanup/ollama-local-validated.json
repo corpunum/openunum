@@ -1,0 +1,66 @@
+{
+  "provider": "ollama",
+  "count": 12,
+  "models": [
+    {
+      "id": "qwen2.5-coder:1.5b",
+      "provider": "ollama",
+      "status": "online"
+    },
+    {
+      "id": "nomic-embed-text:v1.5",
+      "provider": "ollama",
+      "status": "online"
+    },
+    {
+      "id": "functiongemma:270m",
+      "provider": "ollama",
+      "status": "online"
+    },
+    {
+      "id": "llama3.2:1b",
+      "provider": "ollama",
+      "status": "online"
+    },
+    {
+      "id": "granite3.3:2b",
+      "provider": "ollama",
+      "status": "online"
+    },
+    {
+      "id": "all-minilm:latest",
+      "provider": "ollama",
+      "status": "online"
+    },
+    {
+      "id": "mxbai-embed-large:latest",
+      "provider": "ollama",
+      "status": "online"
+    },
+    {
+      "id": "gemma4:latest",
+      "provider": "ollama",
+      "status": "online"
+    },
+    {
+      "id": "gemma4-stable:latest",
+      "provider": "ollama",
+      "status": "online"
+    },
+    {
+      "id": "gemma4:e4b",
+      "provider": "ollama",
+      "status": "online"
+    },
+    {
+      "id": "gemma4-local:latest",
+      "provider": "ollama",
+      "status": "online"
+    },
+    {
+      "id": "nomic-embed-text:latest",
+      "provider": "ollama",
+      "status": "online"
+    }
+  ]
+}

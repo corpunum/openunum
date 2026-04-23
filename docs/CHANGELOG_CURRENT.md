@@ -1,6 +1,52 @@
 # Changelog (Current Consolidated)
 
-Date: 2026-04-22
+Date: 2026-04-23
+
+## Telegram Streaming + Collapsible Sections + Rich Media (2026-04-23)
+
+**Status:** Implemented, tested, deployed
+
+### Streaming via editMessageText
+
+- `streamingReply()` sends placeholder "Thinking..." via `sendHtml`, subscribes to agent events (CONTENT_DELTA, REASONING_DELTA, TOOL_CALL_*, TURN_END), accumulates tokens, and edits the message progressively every 1.5 seconds
+- On completion, replaces with final formatted message using `<blockquote expandable>` for reasoning and tool call summaries
+- Fallback: if placeholder send fails, delivers non-streaming via `deliverFullResponse()`
+- Config: `channels.telegram.streaming.enabled` (default true), `editIntervalMs` (default 1500), `placeholderText`, `showReasoning`, `showToolCalls`
+
+### Collapsible sections (HTML parse_mode)
+
+- `markdownToTelegramHtml()` converts agent Markdown to Telegram HTML (code, bold, italic, links, headers, lists)
+- `formatFinalMessage()` builds final HTML with `<blockquote expandable>` for reasoning and tool calls
+- `formatStreamingMessage()` shows progressive content during generation (no blockquotes during streaming — too jumpy)
+- Messages exceeding 4096 chars are split: reply first, then reasoning/tools as follow-up
+
+### ChannelBase abstraction
+
+- New `src/channels/base.mjs` with capability flags (`supportsStreaming`, `supportsHtml`, `supportsPhotos`, etc.)
+- Shared utilities: `escapeHtml()`, `stripMarkdown()`, `chunkMessage()` moved up from TelegramChannel
+- Both TelegramChannel and WhatsAppTwilioChannel extend ChannelBase
+
+### Inbound media (user → agent)
+
+- `pollOnce()` now extracts photo/document/voice/audio from Telegram updates
+- `getFile()` and `downloadAttachment()` download files via Telegram's `/getFile` API
+- Media described in agent prompt: `[User sent photo: image.jpg] User's text message`
+- Third argument to `onMessage` callback: `{ attachments }` array
+
+### Outbound media (agent → user)
+
+- `sendDocument()`, `sendVoice()`, `sendAudio()` methods added
+- `deliverFullResponse()` handles images, documents, and rich HTML in proper order
+- Image generation (`image_generate` tool) delivers via `sendPhoto` with caption
+
+### Image generation startup fix
+
+- `nohup LD_LIBRARY_PATH=... VK_ICD_FILENAMES=... sd-server` was wrong — `nohup` treats `LD_LIBRARY_PATH=...` as the command name
+- Fixed: env vars placed before `nohup`: `LD_LIBRARY_PATH=... VK_ICD_FILENAMES=... nohup sd-server ... &`
+
+**Files:** `src/channels/base.mjs` (new), `src/channels/telegram.mjs` (major rewrite), `src/channels/whatsapp-twilio.mjs` (extends ChannelBase), `src/server/services/telegram_runtime.mjs` (streaming wiring), `src/config.mjs` (streaming config), `src/tools/runtime.mjs` (sd-server fix), `tests/unit/channel-base.test.mjs` (new), `tests/unit/telegram-channel.test.mjs` (expanded)
+
+---
 
 ## Streaming UI + Reasoning + Settings Hub (2026-04-22)
 

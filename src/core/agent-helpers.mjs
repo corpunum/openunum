@@ -134,10 +134,11 @@ export function isChannelSupportQuestion({ message = '', sessionId = '', recentM
   const sid = String(sessionId || '').trim();
   const isTelegramSession = sid.startsWith('telegram:');
   const directPatterns = [
-    /\btelegram\b.*\b(session|chat|bot|command|commands|start|clear|status|new)\b/,
+    /\bhow to\b.*\btelegram\b.*\b(session|chat|bot|command|start|clear|status|new)\b/,
+    /\bcan i\b.*\btelegram\b.*\b(session|chat|bot|command|start|clear|status|new)\b/,
+    /\bdoes telegram\b.*\b(have|support|use|allow)\b/,
     /\b(start|new|clear|reset|fresh)\b.*\btelegram\b.*\b(session|chat)\b/,
     /\b(is there|what is|which is|can we create|do we have)\b.*\b(openunum |unum )?\b(commands?|slash commands?|sessions?)\b/,
-    /\bthrough telegram\b/,
     /\/status\b|\/new\b|\/start\b|\/session\b/,
     /\bwhat (commands?|sessions?|slash commands?)\b/,
     /\bhow to (use|start|clear|reset) (the )?(telegram |unum |openunum )?(commands?|sessions?|chat)\b/,

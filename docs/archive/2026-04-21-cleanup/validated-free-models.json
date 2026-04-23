@@ -1,0 +1,29 @@
+{
+  "generated": "2026-04-21T11:14:26Z",
+  "local": {
+    "provider": "ollama",
+    "endpoint": "http://localhost:11434",
+    "models": [
+      {"name": "qwen2.5-coder:1.5b", "size": 986062089, "family": "qwen2.5"},
+      {"name": "qwen2.5-coder:3b", "size": 2040109609, "family": "qwen2.5"},
+      {"name": "qwen2.5:7b", "size": 4371735231, "family": "qwen2.5"},
+      {"name": "llama3.2:1b", "size": 637891024, "family": "llama"},
+      {"name": "llama3.2:3b", "size": 1650000000, "family": "llama"},
+      {"name": "nomic-embed-text", "size": 274000000, "family": "nomic-bert"}
+    ]
+  },
+  "cloud": {
+    "provider": "openrouter",
+    "endpoint": "https://openrouter.ai/api/v1",
+    "free_models": [
+      {"id": "openrouter/elephant-alpha", "name": "Elephant", "context_length": 262144},
+      {"id": "google/gemma-4-26b-a4b-it:free", "name": "Gemma 4 26B A4B IT (free)", "context_length": 131072},
+      {"id": "google/gemma-4-31b-it:free", "name": "Gemma 4 31B IT (free)", "context_length": 131072},
+      {"id": "google/lyria-1b:free", "name": "Lyria 1B (free)", "context_length": 32768},
+      {"id": "liquid/lfm-2.5-1.2b-thinking:free", "name": "LiquidAI LFM2.5-1.2B-Thinking (free)", "context_length": 32768}
+    ]
+  },
+  "validation_status": "complete",
+  "total_local_models": 6,
+  "total_free_cloud_models": 5
+}

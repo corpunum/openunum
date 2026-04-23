@@ -1,7 +1,7 @@
 # OpenUnum Architecture
 
-**Version:** 2.6.0
-**Last Updated:** 2026-04-17
+**Version:** 2.8.0
+**Last Updated:** 2026-04-23
 
 ---
 
@@ -50,7 +50,21 @@ Unified retrieval pipeline:
 - Canonical storage: `OPENUNUM_HOME/audit/audit-log.jsonl`
 - 3-tier HMAC secret resolution: env var > persisted random file (0600) > insecure fallback with CRITICAL warning
 
-### 6. Autonomy Master (`src/core/autonomy-master.mjs`)
+### 6. Channels (`src/channels/`)
+
+**ChannelBase** (`src/channels/base.mjs`) — Minimal base class with capability flags (`supportsStreaming`, `supportsHtml`, `supportsPhotos`, `supportsDocuments`, `supportsVoice`) and shared utilities (`escapeHtml`, `stripMarkdown`, `chunkMessage`).
+
+**TelegramChannel** (`src/channels/telegram.mjs`) — Full-featured Telegram bot:
+- **Streaming**: `streamingReply()` sends placeholder → progressive `editMessageText` edits every 1.5s → final message with `<blockquote expandable>` collapsible sections for reasoning and tool calls
+- **Collapsible sections**: `formatFinalMessage()` wraps reasoning in `<blockquote expandable>` and tool calls in `<blockquote expandable>` using Telegram HTML parse_mode (Bot API 7.3+)
+- **Inbound media**: `pollOnce()` extracts photo/document/voice/audio from Telegram updates; `downloadAttachment()` fetches via `/getFile` API
+- **Outbound media**: `sendPhoto()`, `sendDocument()`, `sendVoice()`, `sendAudio()` for rich media delivery
+- **HTML formatting**: `markdownToTelegramHtml()` converts agent Markdown to Telegram HTML; `sendHtml()` with parse error fallback
+- Config: `channels.telegram.streaming.enabled`, `editIntervalMs`, `placeholderText`
+
+**WhatsAppTwilioChannel** (`src/channels/whatsapp-twilio.mjs`) — Minimal Twilio-based text-only sender (extends ChannelBase).
+
+### 7. Autonomy Master (`src/core/autonomy-master.mjs`)
 - Central coordinator for 24/7 autonomous operations
 - **Heartbeat:** Periodic health checks and background maintenance
 - **Sleep Cycles:** Triggers `MemoryConsolidator` (Hippocampal Replay) during idle periods
@@ -172,6 +186,8 @@ Run: `npm test`
 
 | Version | Date | Changes |
 |---------|------|---------|
+| 2.8.0 | 2026-04-23 | Telegram streaming (editMessageText), collapsible sections (blockquote expandable), inbound/outbound media, ChannelBase abstraction, image generation startup fix, settings hub e2e test fixes |
+| 2.7.0 | 2026-04-22 | Streaming UI, reasoning/raw response panels, settings hub, collapsible sidebar, agent events, image_generate tool, schema v3 |
 | 2.6.0 | 2026-04-21 | Fast-path context preservation: wrap() stores real user messages, follow-up imperative 0-scoring, hasActiveTaskContext guard, lowIntentScore > 0 gate; eval pipeline memoryStore fix |
 | 2.5.0 | 2026-04-16 | Phase 4 hardening: autonomy auto-start, ODD enforcement, full verifier, freshness in retrieval, role-model escalation, finality gadget, death-spiral detection, audit HMAC 3-tier, consolidation triggers |
 | 2.4.0 | 2026-04-15 | Council validation, session sweep, UI decomposition |
