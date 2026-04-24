@@ -1031,7 +1031,7 @@ const EXECUTION_PROFILES = [
     ]
   },
   {
-    match: ({ provider, model }) => provider === 'ollama-local' || ((provider === 'ollama-cloud' || provider === 'ollama') && /qwen|llama|coder|8b|9b|14b/.test(model)),
+    match: ({ provider, model }) => provider === 'ollama-local' || provider === 'llama-cpp-local' || ((provider === 'ollama-cloud' || provider === 'ollama') && /qwen|llama|coder|8b|9b|14b/.test(model)),
     name: 'local-tool-runner',
     turnBudgetMs: 300000,
     maxIters: 6,

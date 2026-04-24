@@ -826,9 +826,9 @@ export class OpenUnumAgent {
     const normalizedProvider = String(provider || '').toLowerCase();
     const isCloudController = ['nvidia', 'openrouter', 'openai', 'ollama-cloud'].includes(normalizedProvider) ||
       (normalizedProvider === 'ollama' && /cloud/.test(String(model || '').toLowerCase()));
-    const turnBudgetMs = localRuntimeTask && !isCloudController
-      ? Math.max(baseTurnBudgetMs, 180000)
-      : baseTurnBudgetMs;
+    const hasImageGen = Array.isArray(toolsAllow) && toolsAllow.includes('image_generate');
+    const minTurnBudgetMs = hasImageGen ? 300000 : 180000;
+    const turnBudgetMs = Math.max(baseTurnBudgetMs, minTurnBudgetMs);
     const turnStartedAt = Date.now();
     const envelopeAllowlist = Array.isArray(executionEnvelope.toolAllowlist) ? executionEnvelope.toolAllowlist : null;
     const requestedAllowlist = Array.isArray(toolsAllow) ? toolsAllow.map((item) => String(item || '').trim()).filter(Boolean) : null;
