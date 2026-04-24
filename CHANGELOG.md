@@ -4,6 +4,13 @@ All notable changes to OpenUnum are documented in this file.
 
 ---
 
+## [Unreleased]
+
+### Fixed
+- `docs-completion-gate` now exempts docs-maintenance scripts (`scripts/docs-completion-gate.mjs`, `scripts/build-self-reading-index.mjs`, `scripts/docs-index-freshness-check.mjs`) from mandatory companion docs edits, so gate-maintenance commits do not fail CI.
+
+---
+
 ## [2.4.4] - 2026-04-17
 
 ### Fixed
