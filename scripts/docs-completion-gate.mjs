@@ -35,6 +35,19 @@ function isDocPath(file) {
   );
 }
 
+function requiresDocCompanion(file) {
+  if (file.startsWith('src/')) return true;
+  if (file.startsWith('tests/')) return false;
+  if (!file.startsWith('scripts/')) return false;
+
+  const docsMaintenanceScripts = new Set([
+    'scripts/docs-completion-gate.mjs',
+    'scripts/build-self-reading-index.mjs',
+    'scripts/docs-index-freshness-check.mjs'
+  ]);
+  return !docsMaintenanceScripts.has(file);
+}
+
 function main() {
   const baseRef = process.env.OPENUNUM_DOCS_GATE_BASE || 'HEAD~1';
   const headRef = process.env.OPENUNUM_DOCS_GATE_HEAD || 'HEAD';
@@ -42,11 +55,12 @@ function main() {
 
   const codeFiles = files.filter(isCodePath);
   const docFiles = files.filter(isDocPath);
-  const codeChanged = codeFiles.some((file) => file.startsWith('src/') || file.startsWith('scripts/'));
+  const docsRequiredBy = codeFiles.filter(requiresDocCompanion);
+  const codeChanged = docsRequiredBy.length > 0;
   const docsChanged = docFiles.length > 0;
 
   console.log(`[docs-gate] base=${baseRef} head=${headRef}`);
-  console.log(`[docs-gate] changed=${files.length} code=${codeFiles.length} docs=${docFiles.length}`);
+  console.log(`[docs-gate] changed=${files.length} code=${codeFiles.length} docs=${docFiles.length} docsRequired=${docsRequiredBy.length}`);
 
   if (codeChanged && !docsChanged) {
     console.error('[docs-gate] FAIL: code changed without documentation updates.');
