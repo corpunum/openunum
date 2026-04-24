@@ -12,11 +12,31 @@ export class SessionStoreMethods {
     return this.getSessionSummary(sessionId);
   }
 
-  addMessage(sessionId, role, content, { reasoning, rawReply, imageFiles } = {}) {
+  addMessage(sessionId, role, content, {
+    reasoning,
+    rawReply,
+    imageFiles,
+    lunumCode,
+    lunumSem,
+    lunumFp,
+    lunumMeta
+  } = {}) {
     this.ensureSession(sessionId);
     this.db
-      .prepare('INSERT INTO messages (session_id, role, content, reasoning, raw_reply, assets, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)')
-      .run(sessionId, role, content, reasoning || null, rawReply || null, imageFiles ? JSON.stringify(imageFiles) : null, new Date().toISOString());
+      .prepare('INSERT INTO messages (session_id, role, content, reasoning, raw_reply, assets, lunum_code, lunum_sem_json, lunum_fp, lunum_meta_json, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
+      .run(
+        sessionId,
+        role,
+        content,
+        reasoning || null,
+        rawReply || null,
+        imageFiles ? JSON.stringify(imageFiles) : null,
+        lunumCode || null,
+        lunumSem ? JSON.stringify(lunumSem) : null,
+        lunumFp || null,
+        lunumMeta ? JSON.stringify(lunumMeta) : null,
+        new Date().toISOString()
+      );
   }
 
   importSession({ sessionId, messages = [] }) {
@@ -134,6 +154,7 @@ export class SessionStoreMethods {
       const deletedCompactions = this.db.prepare('DELETE FROM session_compactions WHERE session_id = ?').run(sid);
       const deletedArtifacts = this.db.prepare('DELETE FROM memory_artifacts WHERE session_id = ?').run(sid);
       const deletedRoutes = this.db.prepare('DELETE FROM route_lessons WHERE session_id = ?').run(sid);
+      const deletedLunumShadowLogs = this.db.prepare('DELETE FROM lunum_shadow_logs WHERE session_id = ?').run(sid);
       const deletedSessions = this.db.prepare('DELETE FROM sessions WHERE id = ?').run(sid);
       return {
         deletedMessages: Number(deletedMessages?.changes || 0),
@@ -141,6 +162,7 @@ export class SessionStoreMethods {
         deletedCompactions: Number(deletedCompactions?.changes || 0),
         deletedArtifacts: Number(deletedArtifacts?.changes || 0),
         deletedRoutes: Number(deletedRoutes?.changes || 0),
+        deletedLunumShadowLogs: Number(deletedLunumShadowLogs?.changes || 0),
         deletedSessions: Number(deletedSessions?.changes || 0)
       };
     });
@@ -172,12 +194,14 @@ export class SessionStoreMethods {
       const deletedCompactions = this.db.prepare('DELETE FROM session_compactions WHERE session_id = ?').run(sid);
       const deletedArtifacts = this.db.prepare('DELETE FROM memory_artifacts WHERE session_id = ?').run(sid);
       const deletedRoutes = this.db.prepare('DELETE FROM route_lessons WHERE session_id = ?').run(sid);
+      const deletedLunumShadowLogs = this.db.prepare('DELETE FROM lunum_shadow_logs WHERE session_id = ?').run(sid);
       return {
         deletedMessages: Number(deletedMessages?.changes || 0),
         deletedToolRuns: Number(deletedToolRuns?.changes || 0),
         deletedCompactions: Number(deletedCompactions?.changes || 0),
         deletedArtifacts: Number(deletedArtifacts?.changes || 0),
-        deletedRoutes: Number(deletedRoutes?.changes || 0)
+        deletedRoutes: Number(deletedRoutes?.changes || 0),
+        deletedLunumShadowLogs: Number(deletedLunumShadowLogs?.changes || 0)
       };
     });
     return {
@@ -219,6 +243,9 @@ export class SessionStoreMethods {
       const deletedRoutes = keep
         ? this.db.prepare('DELETE FROM route_lessons WHERE session_id != ?').run(keep)
         : this.db.prepare('DELETE FROM route_lessons').run();
+      const deletedLunumShadowLogs = keep
+        ? this.db.prepare('DELETE FROM lunum_shadow_logs WHERE session_id != ?').run(keep)
+        : this.db.prepare('DELETE FROM lunum_shadow_logs').run();
       const deletedSessions = keep
         ? this.db.prepare('DELETE FROM sessions WHERE id != ?').run(keep)
         : this.db.prepare('DELETE FROM sessions').run();
@@ -228,6 +255,7 @@ export class SessionStoreMethods {
         deletedCompactions: Number(deletedCompactions?.changes || 0),
         deletedArtifacts: Number(deletedArtifacts?.changes || 0),
         deletedRoutes: Number(deletedRoutes?.changes || 0),
+        deletedLunumShadowLogs: Number(deletedLunumShadowLogs?.changes || 0),
         deletedSessions: Number(deletedSessions?.changes || 0)
       };
     });
@@ -341,9 +369,49 @@ export class SessionStoreMethods {
 
   getMessages(sessionId, limit = 50) {
     return this.db
-      .prepare('SELECT id, role, content, reasoning, raw_reply, created_at FROM messages WHERE session_id = ? ORDER BY id DESC LIMIT ?')
+      .prepare('SELECT id, role, content, reasoning, raw_reply, lunum_code, lunum_sem_json, lunum_fp, lunum_meta_json, created_at FROM messages WHERE session_id = ? ORDER BY id DESC LIMIT ?')
       .all(sessionId, limit)
       .reverse();
+  }
+
+  recordLunumShadowLog(sessionId, payload = {}) {
+    const sid = String(sessionId || '').trim();
+    if (!sid) return;
+    const modelLabel = String(payload.modelLabel || '');
+    this.db
+      .prepare(
+        'INSERT INTO lunum_shadow_logs (session_id, model_label, source_message_count, natural_tokens, mixed_tokens, ratio, summary_json, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
+      )
+      .run(
+        sid,
+        modelLabel,
+        Number(payload.sourceMessageCount || 0),
+        Number(payload.naturalTokens || 0),
+        Number(payload.mixedTokens || 0),
+        Number(payload.ratio || 1),
+        JSON.stringify(payload.summary || {}),
+        new Date().toISOString()
+      );
+  }
+
+  listLunumShadowLogs(sessionId, limit = 20) {
+    const sid = String(sessionId || '').trim();
+    if (!sid) return [];
+    const rows = this.db
+      .prepare(
+        'SELECT id, model_label, source_message_count, natural_tokens, mixed_tokens, ratio, summary_json, created_at FROM lunum_shadow_logs WHERE session_id = ? ORDER BY id DESC LIMIT ?'
+      )
+      .all(sid, Math.max(1, Math.min(500, Number(limit || 20))));
+    return rows.map((row) => ({
+      id: row.id,
+      modelLabel: row.model_label,
+      sourceMessageCount: Number(row.source_message_count || 0),
+      naturalTokens: Number(row.natural_tokens || 0),
+      mixedTokens: Number(row.mixed_tokens || 0),
+      ratio: Number(row.ratio || 1),
+      summary: JSON.parse(row.summary_json || '{}'),
+      createdAt: row.created_at
+    }));
   }
 
   getSession(sessionId) {

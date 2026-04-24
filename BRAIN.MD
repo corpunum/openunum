@@ -122,6 +122,7 @@ After every change, update:
 - **WebUI/backend wire validation**: after provider/model/skill/routing add-delete-edit actions, verify API wiring + runtime reflections before claiming success
 - **Provider split discipline**: treat `ollama-local` and `ollama-cloud` as separate lanes (local lane restricted to gemma4 + embeddings; cloud lane for cloud models)
 - **Profile honesty**: local-first remains the architecture target, but the active operational profile must be documented exactly; at the moment that means cloud-primary control on `ollama-cloud/qwen3.5:397b-cloud` until the local-first cutover is ready
+- **Lunum sidecar discipline**: keep natural chat text canonical in `messages.content`; persist Lunum translations as sidecar metadata (`lunum_*`) and use shadow logs for measurement before changing prompt/context behavior
 
 **Phase 1-3 Implemented Systems (Document These):**
 - **Verifier** (`src/core/verifier.mjs`) — Independent 5-check validation (tool appropriateness, output quality, goal alignment, safety compliance, context coherence)

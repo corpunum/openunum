@@ -183,7 +183,7 @@ Five synthesis failure modes fixed in `src/core/turn-recovery-summary.mjs` and `
 - **Raw Response panel**: blue `<details class="raw-response">` shows raw model output before normalization
 - **Tool call cards**: inline status icons during streaming
 - **Agent event bus**: `src/core/agent-events.mjs` emits real-time SSE events consumed by the streaming UI
-- **DB persistence**: `reasoning` and `raw_reply` columns on `messages` table (schema v3 in `src/memory/store.mjs`)
+- **DB persistence**: message sidecars on `messages` (schema v5 in `src/memory/store.mjs`) now include `reasoning`, `raw_reply`, `assets`, and Lunum shadow fields (`lunum_code`, `lunum_sem_json`, `lunum_fp`, `lunum_meta_json`) plus per-session `lunum_shadow_logs`
 - **Bug fixes**: TDZ on `reasoning` variable, `rawContentParts`/`generatedImages`/`provider` scope errors in `chat()`, streaming timeout leak (moved `clearTimeout` to `finally` block), reasoning overwrite changed to append with separator
 
 ### Settings Hub + UI Restructure

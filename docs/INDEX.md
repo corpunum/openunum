@@ -32,6 +32,8 @@ Canonical docs for current implementation and operations.
 - [ODD_DEFINITIONS.md](ODD_DEFINITIONS.md)
 - [UI_BEHAVIOR.md](UI_BEHAVIOR.md)
 
+Memory/compression runtime notes (including Lunum sidecar shadow mode) are tracked in `AUTONOMY_AND_MEMORY.md`, `CODEBASE_MAP.md`, and `AGENT_ONBOARDING.md`.
+
 ## Canonical Status Docs
 
 - [CHANGELOG_CURRENT.md](CHANGELOG_CURRENT.md)

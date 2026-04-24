@@ -138,6 +138,12 @@ export function defaultConfig() {
       contextHardFailPct: 0.9,
       contextProtectRecentTurns: 8,
       contextFallbackTokens: 16000,
+      lunumMemory: {
+        enabled: true,
+        shadowEnabled: true,
+        contextMode: 'natural',
+        maxShadowMessages: 120
+      },
       executorRetryAttempts: 3,
       executorRetryBackoffMs: 700,
       providerRequestTimeoutMs: 240000,
@@ -347,6 +353,10 @@ function withDefaults(config) {
     runtime: {
       ...d.runtime,
       ...(config.runtime || {}),
+      lunumMemory: {
+        ...d.runtime.lunumMemory,
+        ...(config.runtime?.lunumMemory || {})
+      },
       modelBackedTools: {
         ...d.runtime.modelBackedTools,
         ...(config.runtime?.modelBackedTools || {}),

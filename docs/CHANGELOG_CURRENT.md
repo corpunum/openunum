@@ -1,6 +1,55 @@
 # Changelog (Current Consolidated)
 
-Date: 2026-04-23
+Date: 2026-04-24
+
+## Lunum Sidecar Shadow Integration (2026-04-24)
+
+**Status:** Implemented, unit-tested, smoke-validated
+
+### What changed
+
+- Added `src/memory/lunum.mjs` with:
+  - `deriveLunumSidecar()` for tokenizer-friendly telegraph sidecar generation
+  - `compileLunumShadowContext()` for natural-vs-mixed context ratio scoring
+- Extended SQLite schema to v5:
+  - `messages` new nullable sidecar columns: `lunum_code`, `lunum_sem_json`, `lunum_fp`, `lunum_meta_json`
+  - new `lunum_shadow_logs` table + index `idx_lunum_shadow_logs_session_id_id`
+- Updated message/session persistence:
+  - `addMessage()` accepts Lunum sidecar payload
+  - `getMessages*()` surfaces Lunum fields
+  - `deleteSession` / `clearSessionMessages` / `clearSessions` now clean `lunum_shadow_logs`
+  - new methods: `recordLunumShadowLog()`, `listLunumShadowLogs()`
+- Agent chat runtime wiring:
+  - derives/stores Lunum sidecar for user and assistant messages
+  - writes per-turn shadow logs (`natural_tokens`, `mixed_tokens`, `ratio`) while keeping `messages.content` canonical
+- Runtime config defaults:
+  - `runtime.lunumMemory.enabled` (default `true`)
+  - `runtime.lunumMemory.shadowEnabled` (default `true`)
+  - `runtime.lunumMemory.contextMode` (default `natural`)
+  - `runtime.lunumMemory.maxShadowMessages` (default `120`)
+
+### Tests added/updated
+
+- `tests/unit/memory-schema-migration.test.mjs`
+- `tests/unit/lunum-memory.test.mjs` (new)
+- `tests/unit/session-store-reset.test.mjs`
+
+### Files
+
+- `src/memory/lunum.mjs`
+- `src/memory/store-schema.mjs`
+- `src/memory/store-session-methods.mjs`
+- `src/memory/store.mjs`
+- `src/core/agent.mjs`
+- `src/config.mjs`
+- `tests/unit/lunum-memory.test.mjs`
+- `tests/unit/memory-schema-migration.test.mjs`
+- `tests/unit/session-store-reset.test.mjs`
+- `docs/AUTONOMY_AND_MEMORY.md`
+- `docs/CODEBASE_MAP.md`
+- `docs/AGENT_ONBOARDING.md`
+- `docs/INDEX.md`
+- `BRAIN.MD`
 
 ## Telegram Streaming + Collapsible Sections + Rich Media (2026-04-23)
 

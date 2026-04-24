@@ -40,9 +40,18 @@ describe('memory schema migration', () => {
     `).all().map((row) => row.name);
     const version = Number(db.prepare('PRAGMA user_version').get().user_version || 0);
 
-    expect(version).toBe(4);
+    const messageColumns = db.prepare("PRAGMA table_info(messages)").all().map((row) => row.name);
+    const tables = db.prepare("SELECT name FROM sqlite_master WHERE type = 'table' ORDER BY name ASC").all().map((row) => row.name);
+
+    expect(version).toBe(5);
     expect(indexes).toContain('idx_messages_session_id_id');
     expect(indexes).toContain('idx_messages_session_role_id');
     expect(indexes).toContain('idx_session_compactions_session_id_id');
+    expect(indexes).toContain('idx_lunum_shadow_logs_session_id_id');
+    expect(messageColumns).toContain('lunum_code');
+    expect(messageColumns).toContain('lunum_sem_json');
+    expect(messageColumns).toContain('lunum_fp');
+    expect(messageColumns).toContain('lunum_meta_json');
+    expect(tables).toContain('lunum_shadow_logs');
   });
 });

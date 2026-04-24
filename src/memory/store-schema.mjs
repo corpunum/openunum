@@ -1,4 +1,4 @@
-const MEMORY_STORE_SCHEMA_VERSION = 4;
+const MEMORY_STORE_SCHEMA_VERSION = 5;
 
 function getSchemaVersion(db) {
   try {
@@ -92,6 +92,17 @@ CREATE TABLE IF NOT EXISTS operation_receipts (
   operation_kind TEXT NOT NULL,
   target_ref TEXT NOT NULL,
   result_json TEXT NOT NULL,
+  created_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS lunum_shadow_logs (
+  id INTEGER PRIMARY KEY,
+  session_id TEXT NOT NULL,
+  model_label TEXT NOT NULL,
+  source_message_count INTEGER NOT NULL,
+  natural_tokens INTEGER NOT NULL,
+  mixed_tokens INTEGER NOT NULL,
+  ratio REAL NOT NULL,
+  summary_json TEXT NOT NULL,
   created_at TEXT NOT NULL
 );
 CREATE TABLE IF NOT EXISTS mission_records (
@@ -251,6 +262,33 @@ CREATE INDEX IF NOT EXISTS idx_session_compactions_session_id_id ON session_comp
   if (!messageColumns.includes('assets')) {
     db.exec('ALTER TABLE messages ADD COLUMN assets TEXT DEFAULT NULL');
   }
+  if (!messageColumns.includes('lunum_code')) {
+    db.exec('ALTER TABLE messages ADD COLUMN lunum_code TEXT DEFAULT NULL');
+  }
+  if (!messageColumns.includes('lunum_sem_json')) {
+    db.exec('ALTER TABLE messages ADD COLUMN lunum_sem_json TEXT DEFAULT NULL');
+  }
+  if (!messageColumns.includes('lunum_fp')) {
+    db.exec('ALTER TABLE messages ADD COLUMN lunum_fp TEXT DEFAULT NULL');
+  }
+  if (!messageColumns.includes('lunum_meta_json')) {
+    db.exec('ALTER TABLE messages ADD COLUMN lunum_meta_json TEXT DEFAULT NULL');
+  }
+
+  db.exec(`
+CREATE TABLE IF NOT EXISTS lunum_shadow_logs (
+  id INTEGER PRIMARY KEY,
+  session_id TEXT NOT NULL,
+  model_label TEXT NOT NULL,
+  source_message_count INTEGER NOT NULL,
+  natural_tokens INTEGER NOT NULL,
+  mixed_tokens INTEGER NOT NULL,
+  ratio REAL NOT NULL,
+  summary_json TEXT NOT NULL,
+  created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_lunum_shadow_logs_session_id_id ON lunum_shadow_logs(session_id, id DESC);
+`);
 
   if (currentVersion < MEMORY_STORE_SCHEMA_VERSION) {
     db.exec(`PRAGMA user_version = ${MEMORY_STORE_SCHEMA_VERSION};`);

@@ -76,7 +76,16 @@ Active SQLite tables/operators should care about:
 - `route_lessons`
 - `memory_artifacts`
 - `session_compactions`
+- `lunum_shadow_logs`
 - `execution_state`
+
+`messages` now stores optional Lunum sidecar columns for safe shadow-mode compression analysis:
+- `lunum_code`
+- `lunum_sem_json`
+- `lunum_fp`
+- `lunum_meta_json`
+
+Natural language remains canonical; Lunum columns are sidecar metadata for shadow eval and future context-routing decisions.
 
 There is no single canonical `memories` table.
 

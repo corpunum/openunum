@@ -49,7 +49,8 @@ This map is implementation-accurate as of 2026-04-22.
 - `src/core/autonomy-master.mjs`: continuous autonomy coordinator (self-heal, self-test, self-improve, skill learning, death-spiral detection, memory consolidation triggers)
 - `src/core/context-budget.mjs`: model-aware context window estimation + token usage checks
 - `src/core/context-compact.mjs`: old-message compaction and artifact extraction
-- `src/memory/store.mjs`: SQLite persistence for sessions/messages/facts/tool runs/strategy outcomes plus mission/task durability **+ state roots**; schema v3 adds `reasoning` and `raw_reply` columns to `messages`
+- `src/memory/store.mjs`: SQLite persistence for sessions/messages/facts/tool runs/strategy outcomes plus mission/task durability **+ state roots**; schema v5 adds message sidecars (`reasoning`, `raw_reply`, `assets`, `lunum_code`, `lunum_sem_json`, `lunum_fp`, `lunum_meta_json`) and `lunum_shadow_logs`
+- `src/memory/lunum.mjs`: Lunum sidecar derivation (`deriveLunumSidecar`) + natural-vs-mixed shadow context scorer (`compileLunumShadowContext`)
 - `src/memory/recall.mjs`: **UPDATED** — Hybrid retrieval with BM25 + embeddings + freshness decay (30% weight) via `applyFreshnessAndReturn()`
 - `src/eval/trajectory-memory.mjs`: **NEW** — TrajectoryMemoryStore for case-based reasoning (SQLite CRUD with goal search, compatibility filtering, consolidation-gated writes)
 - `src/eval/trajectory-retriever.mjs`: **NEW** — TrajectoryRetriever for inference-time similar-case retrieval + extractTrajectoryMemory() for consolidation

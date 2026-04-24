@@ -88,6 +88,7 @@ import { WorkerOrchestrator } from './worker-orchestrator.mjs';
 import { DaemonManager } from './daemon-manager.mjs';
 import { runDeterministicRepoInspection } from './deterministic-repo-inspector.mjs';
 import { createHybridRetriever } from '../memory/recall.mjs';
+import { compileLunumShadowContext, deriveLunumSidecar } from '../memory/lunum.mjs';
 import { FastPathRouter } from './fast-path-router.mjs';
 import { SafetyCouncil } from './council/safety-council.mjs';
 import { ProofScorerCouncil } from './council/proof-scorer.mjs';
@@ -416,7 +417,15 @@ export class OpenUnumAgent {
     });
     if (!inspection?.reply) return null;
 
-    this.memoryStore.addMessage(sessionId, 'user', message);
+    const lunumUserSidecar = this.config?.runtime?.lunumMemory?.enabled !== false
+      ? deriveLunumSidecar({ role: 'user', content: message })
+      : null;
+    this.memoryStore.addMessage(sessionId, 'user', message, lunumUserSidecar ? {
+      lunumCode: lunumUserSidecar.lunumCode,
+      lunumSem: lunumUserSidecar.lunumSem,
+      lunumFp: lunumUserSidecar.lunumFp,
+      lunumMeta: lunumUserSidecar.lunumMeta
+    } : undefined);
     this.recordDetachedToolRuns(sessionId, inspection.executedTools);
     this.memoryStore.addMessage(sessionId, 'assistant', inspection.reply);
     for (const fact of extractAutomaticFacts({
@@ -1772,7 +1781,15 @@ export class OpenUnumAgent {
     );
     const historyLimit = Number.isFinite(sessionEnvelope.maxHistoryMessages) ? Number(sessionEnvelope.maxHistoryMessages) : 1200;
     const rawHistory = this.memoryStore.getMessagesForContext(sessionId, historyLimit)
-      .map((m) => ({ id: m.id, role: m.role, content: m.content }));
+      .map((m) => ({
+        id: m.id,
+        role: m.role,
+        content: m.content,
+        lunum_code: m.lunum_code,
+        lunum_sem_json: m.lunum_sem_json,
+        lunum_fp: m.lunum_fp,
+        lunum_meta_json: m.lunum_meta_json
+      }));
     const triggerInfo = buildContextBudgetInfo({
       config: this.config,
       provider: modelForBudget.activeProvider || modelForBudget.provider,
@@ -2269,7 +2286,20 @@ export class OpenUnumAgent {
     
     const persistenceStartedAt = Date.now();
     const reasoning = trace.reasoning || undefined;
-    this.memoryStore.addMessage(sessionId, 'assistant', finalText, { reasoning, rawReply: rawReply || undefined, imageFiles: trace?.imageFiles || undefined });
+    const lunumAssistantSidecar = this.config?.runtime?.lunumMemory?.enabled !== false
+      ? deriveLunumSidecar({ role: 'assistant', content: finalText })
+      : null;
+    this.memoryStore.addMessage(sessionId, 'assistant', finalText, {
+      reasoning,
+      rawReply: rawReply || undefined,
+      imageFiles: trace?.imageFiles || undefined,
+      ...(lunumAssistantSidecar ? {
+        lunumCode: lunumAssistantSidecar.lunumCode,
+        lunumSem: lunumAssistantSidecar.lunumSem,
+        lunumFp: lunumAssistantSidecar.lunumFp,
+        lunumMeta: lunumAssistantSidecar.lunumMeta
+      } : {})
+    });
     for (const fact of extractAutomaticFacts({
       message,
       reply: finalText,
@@ -2284,6 +2314,26 @@ export class OpenUnumAgent {
       const [key, ...rest] = payload.split(':');
       if (key && rest.length > 0) {
         this.memoryStore.rememberFact(key.trim(), rest.join(':').trim());
+      }
+    }
+
+    if (this.config?.runtime?.lunumMemory?.enabled !== false && this.config?.runtime?.lunumMemory?.shadowEnabled !== false && typeof this.memoryStore?.recordLunumShadowLog === 'function') {
+      try {
+        const maxShadowMessages = Math.max(20, Math.min(600, Number(this.config?.runtime?.lunumMemory?.maxShadowMessages || 120)));
+        const shadowRows = this.memoryStore.getMessagesForContext(sessionId, maxShadowMessages);
+        const shadow = compileLunumShadowContext(shadowRows);
+        const currentModel = this.getCurrentModel();
+        const modelLabel = `${currentModel.activeProvider || currentModel.provider}/${currentModel.activeModel || currentModel.model}`;
+        this.memoryStore.recordLunumShadowLog(sessionId, {
+          modelLabel,
+          sourceMessageCount: shadowRows.length,
+          naturalTokens: shadow.naturalTokens,
+          mixedTokens: shadow.mixedTokens,
+          ratio: shadow.ratio,
+          summary: shadow
+        });
+      } catch (error) {
+        logInfo('lunum_shadow_log_failed', { sessionId, error: String(error?.message || error) });
       }
     }
 
