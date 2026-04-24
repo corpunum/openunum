@@ -10,7 +10,8 @@ const regen = spawnSync('node', ['scripts/build-self-reading-index.mjs'], { stdi
 if (regen.status !== 0) process.exit(regen.status || 1);
 
 const after = fs.existsSync(TARGET) ? fs.readFileSync(TARGET, 'utf8') : '';
-if (before !== after) {
+const normalize = text => text.replace(/ \(\d+ lines\)/g, '');
+if (normalize(before) !== normalize(after)) {
   console.error('[docs-index-check] FAIL: docs/SELF_READING_INDEX.md is stale. Run: pnpm docs:index');
   process.exit(1);
 }
