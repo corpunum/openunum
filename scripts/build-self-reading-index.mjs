@@ -54,15 +54,6 @@ const SECTIONS = [
   }
 ];
 
-function fileLineCount(filePath) {
-  try {
-    const content = fs.readFileSync(path.join(ROOT, filePath), 'utf8');
-    return content.split('\n').length;
-  } catch {
-    return 0;
-  }
-}
-
 function build() {
   const lines = [];
   lines.push('# Self Reading Index');
@@ -76,8 +67,7 @@ function build() {
     for (const rel of section.paths) {
       const abs = path.join(ROOT, rel);
       const exists = fs.existsSync(abs);
-      const count = exists ? fileLineCount(rel) : 0;
-      lines.push(`- ${exists ? '✅' : '❌'} \`${rel}\` (${count} lines)`);
+      lines.push(`- ${exists ? '✅' : '❌'} \`${rel}\``);
     }
     lines.push('');
   }
