@@ -1,8 +1,10 @@
 import fs from 'node:fs';
+import fsp from 'node:fs/promises';
 import path from 'node:path';
 import os from 'node:os';
 import crypto from 'node:crypto';
 import { pathToFileURL } from 'node:url';
+import { logError } from '../logger.mjs';
 import { CDPBrowser } from '../browser/cdp.mjs';
 import { buildProvider } from '../providers/index.mjs';
 import { ExecutorDaemon } from './executor-daemon.mjs';
@@ -1046,10 +1048,12 @@ export class ToolRuntime {
                   const ts = new Date().toISOString().replace(/[:.]/g, '-');
                   const filename = `img-${ts}-${hash}.png`;
                   try {
-                    await fs.mkdir(assetsDir, { recursive: true });
-                    await fs.writeFile(path.join(assetsDir, filename), Buffer.from(base64Data, 'base64'));
+                    await fsp.mkdir(assetsDir, { recursive: true });
+                    await fsp.writeFile(path.join(assetsDir, filename), Buffer.from(base64Data, 'base64'));
                     savedAs.push({ filename, width: payload.width, height: payload.height });
-                  } catch { /* best effort — disk save failure should not break generation */ }
+                  } catch (writeErr) {
+                    logError('image_save_failed', { filename, error: String(writeErr.message || writeErr) });
+                  }
                 }
               }
               return { ok: true, images: parsedJson.images, savedAs, parameters: parsedJson.parameters || {}, info: parsedJson.info || '' };

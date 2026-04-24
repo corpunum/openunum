@@ -2319,6 +2319,8 @@ export class OpenUnumAgent {
 
     const effectiveProvider = effectiveAttempts[0]?.provider || this.config.model.provider;
     emitAgentEvent(AGENT_EVENTS.TURN_END, { sessionId, provider: effectiveProvider, model: this.getCurrentModel() });
-    return { sessionId, reply: finalText, rawReply: rawReply || undefined, reasoning, model: this.getCurrentModel(), trace, images: trace?.images || undefined, imageFiles: trace?.imageFiles || undefined, context: { budget: triggerInfo, compaction: compactionMeta } };
+    const returnImageFiles = trace?.imageFiles || undefined;
+    if (returnImageFiles && returnImageFiles.length > 0) logInfo('chat_return_image_files', { count: returnImageFiles.length, first: returnImageFiles[0]?.filename });
+    return { sessionId, reply: finalText, rawReply: rawReply || undefined, reasoning, model: this.getCurrentModel(), trace, images: trace?.images || undefined, imageFiles: returnImageFiles, context: { budget: triggerInfo, compaction: compactionMeta } };
   }
 }
